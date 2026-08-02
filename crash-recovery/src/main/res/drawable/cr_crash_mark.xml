@@ -1,10 +1,10 @@
 <!--
-  The crash mark -- a traced double-exclamation. Solid fill; tinted to the ink colour
+  The crash mark: a traced double-exclamation. Solid fill; tinted to the ink colour
   by the recovery screen at runtime. See cr_crash_mark_wire.xml for the glitch's
   outline variant. Relocated unchanged from Hyle-Design-System's crash-recovery module.
 
   The source paths live in a 10x, y-flipped space; the group maps them into the
-  306x425 viewport (translate 0,425 . scale 0.1,-0.1) -- the same transform the SVG used.
+  306x425 viewport (translate 0,425, scale 0.1,-0.1): the same transform the SVG used.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="132dp"
