@@ -1,0 +1,14 @@
+# -- Android / Gradle --
+*.iml
+.gradle/
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+build/
+
+# -- Logs & OS cruft --
+*.log
+.DS_Store
+.cache/
