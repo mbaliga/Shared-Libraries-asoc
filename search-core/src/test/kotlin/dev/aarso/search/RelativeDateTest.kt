@@ -3,6 +3,7 @@ package dev.aarso.search
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -96,6 +97,42 @@ class RelativeDateTest {
         assertNull(RelativeDate.resolveRange("not-a-date", 0L, ZoneId.of("UTC")))
         assertNull(RelativeDate.resolveRange("", 0L, ZoneId.of("UTC")))
         assertNull(RelativeDate.resolveRange("2026-13-99", 0L, ZoneId.of("UTC"))) // invalid calendar date
+    }
+
+    /**
+     * The offset pattern is `-(\d+)([dwm])`, and `\d+` is **unbounded** — so a held-down key
+     * produces a string that matches the pattern perfectly and is not a `Long`. `toLong()` threw
+     * `NumberFormatException` out of [QueryParser.parse], which contracts never to throw.
+     */
+    @Test fun `a digit run too long for a Long resolves to null rather than throwing`() {
+        val zone = ZoneId.of("UTC")
+        for (unit in listOf("d", "w", "m")) {
+            assertNull(RelativeDate.resolveRange("-99999999999999999999$unit", 0L, zone))
+            assertNull(RelativeDate.resolveRange("-" + "9".repeat(400) + unit, 0L, zone))
+        }
+    }
+
+    /**
+     * The other half: an offset that *is* a `Long` and still names no date. Each unit reaches the
+     * limit by its own route — `d` overruns `LocalDate.ofEpochDay` (a `DateTimeException`), `w`
+     * overflows `Math.multiplyExact` on the times-seven (an `ArithmeticException`), `m` fails
+     * `ChronoField.YEAR`'s range check — so all the guarded paths are covered, not just one.
+     */
+    @Test fun `an offset that fits a Long but runs off the calendar resolves to null`() {
+        val zone = ZoneId.of("UTC")
+        for (unit in listOf("d", "w", "m")) {
+            val raw = "-9223372036854775807$unit"
+            assertNull("expected '$raw' to resolve to null", RelativeDate.resolveRange(raw, 0L, zone))
+            assertNull(RelativeDate.resolvePoint(raw, 0L, zone))
+        }
+    }
+
+    @Test fun `an offset that is merely large but expressible still resolves`() {
+        // The guards must reject the inexpressible, not everything big: this one is a real date.
+        val zone = ZoneId.of("UTC")
+        val range = RelativeDate.resolveRange("-1000000d", 0L, zone)
+        assertNotNull("a 1,000,000-day offset is a valid calendar date and must still resolve", range)
+        assertTrue(range!!.startInclusiveMillis < 0L)
     }
 
     @Test fun `the EvalContext overload agrees with the millis overload`() {

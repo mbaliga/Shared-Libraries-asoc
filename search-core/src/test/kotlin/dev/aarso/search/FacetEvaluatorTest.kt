@@ -1,5 +1,6 @@
 package dev.aarso.search
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -85,6 +86,78 @@ class FacetEvaluatorTest {
         // turn a typo into "no filter at all".
         val alien = QueryNode.Facet("ext", Op.EQ, "pdf")
         assertFalse(FacetEvaluator.matches(subject(starred = true), alien, registry, ctx))
+    }
+
+    // ---- the unbacked short-circuit is signed, not absolute ----
+
+    /**
+     * **A defect fixed in the port, pinned here.** The unbacked short-circuit returned `false` for
+     * every operator. That is only sound for the positive ones: if nothing indexed carries `video`,
+     * then `has:video` is universally false and `has:!=video` is universally **true**. Returning
+     * `false` for both made two spellings of one predicate — `has:!=video` and `-has:video` —
+     * disagree with each other, one matching nothing and the other matching everything.
+     */
+    @Test fun `the two spellings of an unbacked exclusion agree, on every subject`() {
+        val subjects = listOf(
+            subject(),
+            subject(hasImage = true),
+            subject(hasCode = true),
+            subject(starred = true, archived = true, hasImage = true, hasCode = true),
+        )
+        for (s in subjects) {
+            assertTrue("`has:!=video` must match everything, since nothing carries `video`", matches("has:!=video", s))
+            assertEquals(
+                "the two spellings disagree for $s",
+                matches("-has:video", s),
+                matches("has:!=video", s),
+            )
+        }
+    }
+
+    @Test fun `a backed value under != is decided by the host, not short-circuited`() {
+        // `turns` is always backed, so the NE carve-out must not reach it: the host's comparison
+        // is still the thing that answers.
+        assertTrue(matches("turns:!=5", subject(turnCount = 6)))
+        assertFalse(matches("turns:!=5", subject(turnCount = 5)))
+    }
+
+    @Test fun `an unrecognized key stays false even under !=`() {
+        // The carve-out is about an unbacked *value*, never about an unknown *key*. A key this
+        // registry cannot resolve has no opinion to invert, and matching everything would still
+        // turn a typo into "no filter at all".
+        val alien = QueryNode.Facet("ext", Op.NE, "pdf")
+        assertFalse(FacetEvaluator.matches(subject(starred = true), alien, registry, ctx))
+    }
+
+    // ---- a host that breaks FacetField's no-throw contract degrades, it does not crash ----
+
+    @Test fun `a throwing isBacked is read as backed rather than propagating`() {
+        // `size`'s isBacked is `value.toInt()`, which throws on `10mb`. The guard reads that as
+        // "backed" and lets the host's own `matches` give the real answer — which is where the
+        // answer belonged, and is the same default QueryParser uses so the two cannot disagree.
+        val facet = QueryNode.Facet("size", Op.EQ, "10mb")
+        assertTrue(FacetEvaluator.matchesFacet(Conversation(), facet, HostileVocabulary.registry, ctx))
+    }
+
+    @Test fun `a throwing valueKind skips range decomposition instead of propagating`() {
+        // `kind`'s valueKind explodes, so the evaluator cannot know the field is ordered. The
+        // documented degrade is "no opinion": `1..5` reaches the host verbatim rather than being
+        // split into GTE 1 AND LTE 5, which is exactly what this field's `matches` reports.
+        val facet = QueryNode.Facet("kind", Op.EQ, "1..5")
+        assertTrue(FacetEvaluator.matchesFacet(Conversation(), facet, HostileVocabulary.registry, ctx))
+    }
+
+    @Test fun `both guards together still produce an answer for every operator`() {
+        for (op in Op.entries) {
+            val facet = QueryNode.Facet("hostile", op, "not-a-number")
+            assertTrue(
+                "expected the host's own matches() to decide for $op",
+                FacetEvaluator.matchesFacet(Conversation(starred = true), facet, HostileVocabulary.registry, ctx),
+            )
+            assertFalse(
+                FacetEvaluator.matchesFacet(Conversation(starred = false), facet, HostileVocabulary.registry, ctx),
+            )
+        }
     }
 
     // ---- project / model ----

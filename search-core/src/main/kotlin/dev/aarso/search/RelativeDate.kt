@@ -1,5 +1,6 @@
 package dev.aarso.search
 
+import java.time.DateTimeException
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -28,6 +29,15 @@ import java.time.format.DateTimeParseException
  * The [ZoneId] is a parameter for the same reason the clock is: "today" is a question about a
  * place, and a host that indexes documents stamped in UTC while its user reads them in Auckland
  * has to be able to say which one it means.
+ *
+ * ## And one it inherits
+ *
+ * **Totality.** [QueryParser.parse] calls into here to decide whether a date expression is
+ * well-formed, so every path that cannot produce a date must return `null` — never throw. That
+ * covers both shapes of bad input this file can be handed: a string that is not a date at all
+ * (`someday`, `2024-02-31`) and one that matches a pattern but names an instant the calendar
+ * cannot express (`-99999999999999999999d`, `-9223372036854775807d`). `null` becomes
+ * [Diagnostic.InvalidDate] beside the search box; an exception becomes a crash on a keystroke.
  */
 object RelativeDate {
 
@@ -70,14 +80,28 @@ object RelativeDate {
             }
             ISO_DATE.matches(raw) -> parseIsoDate(raw)?.let { dayRange(it, zone) }
             else -> RELATIVE_OFFSET.matchEntire(raw)?.let { m ->
-                val amount = m.groupValues[1].toLong()
-                val point = when (m.groupValues[2]) {
-                    "d" -> today.minusDays(amount)
-                    "w" -> today.minusWeeks(amount)
-                    "m" -> today.minusMonths(amount)
-                    else -> return null
+                // `\d+` is an *unbounded* digit run: `-99999999999999999999d` matches the pattern
+                // perfectly and is not a Long. `toLong()` here threw NumberFormatException straight
+                // out of QueryParser.parse, on a string a user can type by holding down a key.
+                val amount = m.groupValues[1].toLongOrNull() ?: return null
+                try {
+                    val point = when (m.groupValues[2]) {
+                        "d" -> today.minusDays(amount)
+                        "w" -> today.minusWeeks(amount)
+                        "m" -> today.minusMonths(amount)
+                        else -> return null
+                    }
+                    dayRange(point, zone)
+                } catch (_: DateTimeException) {
+                    // `-9223372036854775807d` parses as a Long and then runs off the end of the
+                    // proleptic calendar. Same class of input, same answer: not a date.
+                    null
+                } catch (_: ArithmeticException) {
+                    // The overflow checks inside LocalDate.plusDays / plusWeeks (Math.addExact,
+                    // Math.multiplyExact) and inside Instant.toEpochMilli raise this rather than
+                    // DateTimeException. Both are "that offset is not expressible", not a bug.
+                    null
                 }
-                dayRange(point, zone)
             }
         }
     }

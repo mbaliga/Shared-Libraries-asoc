@@ -166,6 +166,37 @@ class CoverageRecencyScorerTest {
         assertEquals(listOf("a", "b", "c"), search(docs, "alpha").map { it.doc.id.value })
     }
 
+    // ---- the tiebreak chain is exported, not private to rank ----
+
+    /**
+     * [RANKING_ORDER] exists because [Scorer] is an interface: a host implementing it gets a
+     * per-document [Scored] and no ordering at all, and the chain it invents will get the first key
+     * right and the other two wrong — invisibly, since results still come back ranked plausibly.
+     *
+     * These assert the two things a host must not have to rediscover: that the exported comparator
+     * *is* the one [rank] uses, and that timestamp outranks id (the rung most likely to be dropped,
+     * and the one whose absence only shows up on an exact score tie).
+     */
+    @Test fun `the exported comparator is the order rank actually produces`() {
+        val docs = listOf(
+            doc("c", body = "alpha", ageDays = 5),
+            doc("a", body = "alpha", ageDays = 5),
+            doc("b", body = "alpha", ageDays = 5),
+            doc("newest", title = "alpha", ageDays = 0),
+            doc("partial", body = "alpha beta", ageDays = 2),
+        )
+        val ranked = search(docs, "alpha")
+        assertEquals(ranked, ranked.shuffled(kotlin.random.Random(7)).sortedWith(RANKING_ORDER))
+    }
+
+    @Test fun `the exported comparator puts timestamp above id, as rank does`() {
+        val older = Scored(doc("a", body = "x", ageDays = 1), score = 1.0, matchedFields = emptySet())
+        val newer = Scored(doc("z", body = "x", ageDays = 0), score = 1.0, matchedFields = emptySet())
+        // Equal scores: id would say a-then-z, timestamp says z-then-a, and timestamp wins.
+        assertEquals(listOf(newer, older), listOf(older, newer).sortedWith(RANKING_ORDER))
+        assertEquals(listOf(newer, older), listOf(newer, older).sortedWith(RANKING_ORDER))
+    }
+
     @Test fun `multi-term query coverage orders results`() {
         val docs = listOf(
             doc("full", body = "alpha beta", ageDays = 0),

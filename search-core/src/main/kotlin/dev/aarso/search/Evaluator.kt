@@ -106,10 +106,15 @@ object FacetEvaluator {
      *    `foo:bar` to a literal term, so a `Facet` node with a key this registry does not know can
      *    only arrive from a tree built against a *different* registry, or built by hand. Matching
      *    everything in that case would turn a typo into "no filter at all".
-     *  - **An unbacked value is `false`.** [FacetField.isBacked] already told the parser that
-     *    nothing indexed can match, and the parser already emitted [Diagnostic.UnindexedFacet] so
-     *    the UI can say *why* nothing matched. Checked against the value exactly as the parser
-     *    checked it — untrimmed, operator already stripped — so the two answers cannot disagree.
+     *  - **An unbacked value is `false` — except under [Op.NE], where it is `true`.**
+     *    [FacetField.isBacked] already told the parser that nothing indexed can match, and the
+     *    parser already emitted [Diagnostic.UnindexedFacet] so the UI can say *why* nothing
+     *    matched. Checked against the value exactly as the parser checked it — untrimmed, operator
+     *    already stripped — so the two answers cannot disagree. The `!=` carve-out is not a special
+     *    case bolted on, it is the same fact read the right way round: "nothing carries this value"
+     *    makes `= value` universally false and `!= value` universally *true*. Short-circuiting both
+     *    to `false` made `has:!=video` match nothing while `-has:video` matched everything — one
+     *    predicate, two spellings, opposite answers.
      *  - **A range is decomposed,** see below.
      *
      * ### Ranges
@@ -137,10 +142,12 @@ object FacetEvaluator {
         ctx: EvalContext,
     ): Boolean {
         val field = registry[facet.key] ?: return false
-        if (!field.isBacked(facet.value)) return false
+        // `Op.NE` is the one operator for which "nothing indexed carries this value" is a universal
+        // YES rather than a universal no. See the KDoc above.
+        if (!facetIsBackedOrAssumed(field, facet.value)) return facet.op == Op.NE
 
         val bounds = facet.rangeBounds
-        if (bounds != null && field.valueKind.isOrdered()) {
+        if (bounds != null && facetValueKindOrNull(field)?.isOrdered() == true) {
             val (low, high) = bounds
             return field.matches(subject, Op.GTE, low.trim(), ctx) &&
                 field.matches(subject, Op.LTE, high.trim(), ctx)
@@ -204,3 +211,32 @@ object FacetEvaluator {
         else -> false
     }
 }
+
+// ============================== host-call guards ==============================
+//
+// [FacetField.isBacked] and [FacetField.valueKind] are host code that [FacetField]'s KDoc declares
+// total, and that both QueryParser and FacetEvaluator call. They live here, once, rather than
+// file-private in each caller: the whole point of the guard is that the parser's answer and the
+// evaluator's answer to "is this value backed" cannot diverge, and two copies of a default is
+// precisely how they would.
+
+/**
+ * [FacetField.isBacked], guarded so a host that breaks its no-throw contract cannot take the parse
+ * or the evaluation down with it.
+ *
+ * A throw reads as **backed**, deliberately. The alternative default would announce
+ * [Diagnostic.UnindexedFacet] — "no results, because nothing has that value" — about a field whose
+ * backing is in fact unknown, which is a confidently wrong answer rather than a missing one. Read
+ * as backed, the query simply proceeds to [FacetField.matches] and the host's real predicate
+ * decides, which is where the answer belonged anyway.
+ */
+internal fun facetIsBackedOrAssumed(field: FacetField<*>, value: String): Boolean =
+    runCatching { field.isBacked(value) }.getOrDefault(true)
+
+/**
+ * [FacetField.valueKind], guarded on the same contract. `null` is "no opinion": the parser skips
+ * its parse-time value check and the evaluator skips range decomposition, so `a..b` reaches
+ * [FacetField.matches] verbatim. Both are the no-op degrade, never a rejection.
+ */
+internal fun facetValueKindOrNull(field: FacetField<*>): FacetValueKind? =
+    runCatching { field.valueKind }.getOrNull()

@@ -225,6 +225,20 @@ class QueryParserTest {
         assertFalse(parse("is:unread").diagnostics.filterIsInstance<Diagnostic.UnindexedFacet>().isEmpty())
     }
 
+    /**
+     * The diagnostic half of the `!=` fix. [Diagnostic.UnindexedFacet] means "an honest zero — no
+     * results, because nothing has that value". Under [Op.NE] an unbacked value is the *opposite*
+     * of a zero: nothing carries it, so every subject satisfies "is not it" (see
+     * [FacetEvaluator.matchesFacet]). Announcing "no results" beside a filter that matches
+     * everything is worse than announcing nothing.
+     */
+    @Test fun `an unbacked value under != is not reported as an unindexed dead end`() {
+        assertFalse(parse("tool:bash").diagnostics.filterIsInstance<Diagnostic.UnindexedFacet>().isEmpty())
+        assertTrue(parse("tool:!=bash").diagnostics.filterIsInstance<Diagnostic.UnindexedFacet>().isEmpty())
+        // The node itself is unchanged — only the diagnostic is withheld.
+        assertEquals(QueryNode.Facet("tool", Op.NE, "bash"), parse("tool:!=bash").root)
+    }
+
     @Test fun `unterminated quote is treated as closed at end of input`() {
         val q = parse("\"build cache")
         assertEquals(QueryNode.Phrase("build cache"), q.root)
@@ -247,6 +261,95 @@ class QueryParserTest {
         assertTrue(parse("after:-7d").diagnostics.filterIsInstance<Diagnostic.InvalidDate>().isEmpty())
         assertTrue(parse("before:2026-01-01").diagnostics.filterIsInstance<Diagnostic.InvalidDate>().isEmpty())
         assertTrue(parse("during:last-week").diagnostics.filterIsInstance<Diagnostic.InvalidDate>().isEmpty())
+    }
+
+    /**
+     * `-(\d+)([dwm])` accepts an **unbounded** digit run, and every character of it is one a user
+     * can produce by leaning on a key. Feeding that to `toLong()` and to `LocalDate.minusDays`
+     * threw `NumberFormatException` / `DateTimeException` straight out of [QueryParser.parse] —
+     * from the one function in this module that contracts never to throw. It is a diagnostic now,
+     * like every other date that isn't one.
+     */
+    @Test fun `a relative offset too large to be a date is a diagnostic, not an exception`() {
+        for (value in listOf("-99999999999999999999d", "-9223372036854775807d", "-9223372036854775807w")) {
+            val q = parse("before:$value")
+            assertEquals(QueryNode.Facet("before", Op.EQ, value), q.root)
+            assertTrue("expected InvalidDate for '$value'", q.diagnostics.any { it is Diagnostic.InvalidDate })
+        }
+    }
+
+    // ---- host callbacks are on the parse path, and still may not throw ----
+
+    private fun parseHostile(text: String) =
+        QueryParser.parse(text, HostileVocabulary.registry, TestVocabulary.CTX, TestVocabulary.ZONE)
+
+    /**
+     * `Model.kt` uses `size:>10mb` as its own worked example of a facet term, and `value.toInt()`
+     * is the first thing anyone writes for a numeric [FacetField.isBacked]. Together they were a
+     * search box that threw on the way to a value that was going to be fine — a hazard the
+     * original could not have, because `isBacked` was module code over a closed enum there.
+     */
+    @Test fun `a FacetField whose isBacked throws does not throw out of parse`() {
+        val q = parseHostile("size:>10mb")
+        assertEquals(QueryNode.Facet("size", Op.GT, "10mb"), q.root)
+        // Degrades to *no* diagnostic, never to a wrong one: claiming "nothing has that value"
+        // about a field whose backing could not be established would be a confident lie, and
+        // FacetEvaluator reads a throw the same way, so the two answers cannot diverge.
+        assertTrue(q.diagnostics.filterIsInstance<Diagnostic.UnindexedFacet>().isEmpty())
+    }
+
+    @Test fun `a FacetField whose valueKind throws does not throw out of parse`() {
+        val q = parseHostile("kind:whatever")
+        assertEquals(QueryNode.Facet("kind", Op.EQ, "whatever"), q.root)
+        // No kind could be read, so no value-shape claim is made either — not InvalidDate, not
+        // InvalidNumber. A missing check, never an invented verdict.
+        assertTrue(q.diagnostics.isEmpty())
+    }
+
+    @Test fun `every facet shape against a throwing registry parses without throwing`() {
+        val shapes = listOf(
+            "size:1", "size:>10mb", "size:>=1.5s", "size:!=x", "size:1..5", "size:", "size:\"a b\"",
+            "kind:a", "kind:1..5", "kind:!=a", "-kind:a",
+            "hostile:x", "-hostile:x", "hostile:1..5",
+            "size:>10mb kind:a (hostile:x OR size:2)",
+        )
+        for (text in shapes) {
+            val result = try {
+                parseHostile(text)
+            } catch (t: Throwable) {
+                throw AssertionError("parse threw for '$text'", t)
+            }
+            assertNotNull(result)
+            // Compiling must be as total as parsing — a half-typed query reaches the compiler too.
+            QueryCompiler.compileFts(result.root)
+            result.root?.let(QueryCompiler::renderCanonical)
+        }
+    }
+
+    // ---- the facet-free entry point is reachable only by name ----
+
+    /**
+     * `registry` has no default. There is no runtime assertion for that — the property *is* that an
+     * unadapted `QueryParser.parse(text)` no longer compiles — so what this pins is the other half:
+     * that the facet-free behaviour still exists, under a name a call site cannot arrive at by
+     * forgetting something, and that it really is a different parse.
+     */
+    @Test fun `parsePlainText degrades every facet to literal text, and says so`() {
+        val plain = QueryParser.parsePlainText("model:opus gradle")
+        assertEquals(
+            QueryNode.And(listOf(QueryNode.Term("model:opus", false), QueryNode.Term("gradle", false))),
+            plain.root,
+        )
+        assertTrue(plain.facets.isEmpty())
+        assertEquals(listOf(ChipKind.TERM, ChipKind.TERM), plain.chips.map { it.kind })
+        assertEquals("model", plain.diagnostics.filterIsInstance<Diagnostic.UnknownField>().single().typed)
+
+        // The same text against a real registry is a different tree, different diagnostics and a
+        // different chip kind — the whole of what a defaulted `registry` used to hide.
+        val withFields = parse("model:opus gradle")
+        assertEquals(ChipKind.FACET, withFields.chips.first().kind)
+        assertEquals(1, withFields.facets.size)
+        assertTrue(withFields.diagnostics.filterIsInstance<Diagnostic.UnknownField>().isEmpty())
     }
 
     /**
@@ -273,7 +376,7 @@ class QueryParserTest {
         }
     }
 
-    // ---- the 34-case malformed-input corpus: never throws ----
+    // ---- the 37-case malformed-input corpus: never throws ----
 
     @Test fun `malformed input corpus never throws and always returns a result`() {
         val malformed = listOf(
@@ -282,6 +385,11 @@ class QueryParserTest {
             "field:", ":value", "mdel:opus", "cost:>", "before:", "gradle OR",
             "OR gradle", "((gradle)", "gradle))", "is:", "has::image", "?????",
             "😀 emoji query", "a".repeat(5000),
+            // Three added in the port: `\d+` in RelativeDate's offset pattern is unbounded, so a
+            // held-down key produces a well-shaped date expression that is not a number, or is a
+            // number that runs off the end of the proleptic calendar.
+            "before:-99999999999999999999d", "after:-9223372036854775807w",
+            "during:-" + "9".repeat(400) + "m",
         )
         for (input in malformed) {
             val result = try {
@@ -346,6 +454,44 @@ class QueryParserTest {
                 second.chips,
             )
         }
+    }
+
+    /**
+     * The chip fixtures above all start from typed text, which can never *produce* a negated
+     * non-leaf other than `-(…)` — so the one shape that lost its round trip could not be reached
+     * from that side. This starts from the tree instead, which is the side a host builds from when
+     * it composes a saved search or inverts a chip programmatically.
+     *
+     * `-a b` reparses as "not a, AND b" — already handled. `--a` is worse and was not: `-` is a
+     * word character mid-run, so the tokenizer reads one word `--a`, the parser strips one dash,
+     * and `Not(Not(Term("a")))` comes back as `Not(Term("-a"))` — a search for the literal text
+     * `-a`, silently.
+     */
+    @Test fun `a negated non-leaf is parenthesised so the tree round-trips`() {
+        val a = QueryNode.Term("a", false)
+        val b = QueryNode.Term("b", false)
+        val fixtures = listOf(
+            QueryNode.Not(QueryNode.Not(a)),
+            QueryNode.Not(QueryNode.Not(QueryNode.Not(a))),
+            QueryNode.Not(QueryNode.And(listOf(a, b))),
+            QueryNode.Not(QueryNode.Or(listOf(a, b))),
+            QueryNode.Not(QueryNode.Not(QueryNode.Or(listOf(a, b)))),
+            QueryNode.Not(QueryNode.Not(QueryNode.And(listOf(a, b)))),
+            QueryNode.Not(QueryNode.Not(QueryNode.Facet("is", Op.EQ, "starred"))),
+            QueryNode.Not(QueryNode.Not(QueryNode.Phrase("build cache"))),
+        )
+        for (node in fixtures) {
+            val rendered = QueryCompiler.renderCanonical(node)
+            assertEquals("round trip lost, rendered as '$rendered'", node, parse(rendered).root)
+        }
+
+        // The exact shape that was wrong, spelled out so the regression stays legible.
+        assertEquals("-(-a)", QueryCompiler.renderCanonical(QueryNode.Not(QueryNode.Not(a))))
+        assertEquals(QueryNode.Not(QueryNode.Term("-a", false)), parse("--a").root)
+
+        // An Or renders its own parentheses, so it is not double-wrapped: a chip a user reads
+        // should not gain a layer of noise for a property it already had.
+        assertEquals("-(a OR b)", QueryCompiler.renderCanonical(QueryNode.Not(QueryNode.Or(listOf(a, b)))))
     }
 
     @Test fun `chips are removable and independent`() {

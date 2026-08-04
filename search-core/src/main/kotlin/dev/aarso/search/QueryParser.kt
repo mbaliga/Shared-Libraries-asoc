@@ -26,12 +26,28 @@ import java.time.ZoneId
  * shape of value), [FacetField.isBacked] (could anything match this value), and
  * [FieldRegistry.suggest] (did you mean). No enum, no `when`, no exhaustiveness to break when a
  * host adds a field.
+ *
+ * ## What that costs the never-throws rule, and how it is paid
+ *
+ * Two of those four are now **host code called with the raw, half-typed value**:
+ * [FacetField.isBacked] and [FacetField.valueKind]. In the original they were module-owned totals
+ * over a closed enum and could not throw; here a host whose `isBacked` does the obvious thing
+ * (`value.toInt()`, `enumValueOf<Kind>(value)`) would throw out of `parse` on the way to a value
+ * that was going to be fine. Both are therefore called through the guards in `Evaluator.kt`
+ * ([facetIsBackedOrAssumed], [facetValueKindOrNull]), which degrade a misbehaving host to a
+ * missing diagnostic rather than a thrown search box. [FacetField]'s KDoc states the contract those
+ * guards are backstopping.
  */
 object QueryParser {
 
     /**
-     * @param registry the host's facet vocabulary. Defaults to [NO_FACET_FIELDS], under which
-     *   every `key:value` honestly degrades to literal text — right for a pure-text search box.
+     * @param registry the host's facet vocabulary. **Required, with no default**, and that is the
+     *   whole point of it: this parameter decides whether `ext:pdf` is a [QueryNode.Facet] or a
+     *   literal [QueryNode.Term], which diagnostics are emitted, and what kind of chip the UI
+     *   draws. A default here would let a call site that forgot to pass its registry keep
+     *   compiling while silently degrading *every* facet the user types into text plus a spurious
+     *   [Diagnostic.UnknownField] — a behaviour change with no compile error to catch it. A host
+     *   whose search box genuinely has no facets wants [parsePlainText], which says so in its name.
      * @param ctx supplies the clock that relative dates resolve against. It defaults to epoch,
      *   which is *not* a bug: the parser only uses the resolution to decide whether a date
      *   expression is well-formed at all, and well-formedness does not depend on the date. A
@@ -42,7 +58,7 @@ object QueryParser {
      */
     fun parse(
         rawText: String,
-        registry: FieldRegistry<*> = NO_FACET_FIELDS,
+        registry: FieldRegistry<*>,
         ctx: EvalContext = EvalContext(nowMillis = 0L),
         zone: ZoneId = ZoneId.of("UTC"),
     ): ParsedQuery {
@@ -58,6 +74,20 @@ object QueryParser {
             chips = ChipBuilder.build(root),
         )
     }
+
+    /**
+     * [parse] for a search box that has **no facet vocabulary at all** — every `key:value` the user
+     * types is literal text, because the host declares no fields for it to be anything else.
+     *
+     * A distinctly named entry point rather than a default on [parse]'s `registry`: the two parses
+     * differ in node kind, diagnostics and chip kind for every facet in the query, so the choice
+     * has to be one a reader can see at the call site and one a forgetful call site cannot make by
+     * accident. Reaching this behaviour must take typing `parsePlainText`.
+     *
+     * No clock and no zone, because neither is reachable: date validation happens per field, and
+     * [NO_FACET_FIELDS] has none.
+     */
+    fun parsePlainText(rawText: String): ParsedQuery = parse(rawText, NO_FACET_FIELDS)
 
     /** Every facet anywhere in the tree, flattened — see [ParsedQuery.facets] for the caveat. */
     private fun collectFacets(node: QueryNode?): List<QueryNode.Facet> {
@@ -371,8 +401,15 @@ private class Parser(
 
         // An unbacked value is an honest zero, announced rather than silently returning nothing.
         // Checked against the operator-stripped value, so `size:>10mb` asks the host about
-        // `10mb`, not about `>10mb`.
-        if (!field.isBacked(value)) {
+        // `10mb`, not about `>10mb`. Guarded because `isBacked` is host code and this is the parse
+        // path — see facetIsBackedOrAssumed in Evaluator.kt, which is also what the evaluator
+        // consults, so the diagnostic and the evaluation cannot disagree.
+        //
+        // Never for Op.NE. There an unbacked value is not a dead end at all: nothing carries the
+        // value, so every subject satisfies "is not it" (FacetEvaluator.matchesFacet returns true).
+        // Reporting "no results because nothing has that value" beside a filter that matches
+        // *everything* is worse than reporting nothing.
+        if (op != Op.NE && !facetIsBackedOrAssumed(field, value)) {
             diagnostics.add(Diagnostic.UnindexedFacet(keyRaw, value))
         }
         return QueryNode.Facet(keyRaw, op, value)
@@ -389,10 +426,15 @@ private class Parser(
      *
      * A failed check is a diagnostic, never a rejection: the node is still built, because the host
      * may recognise a value shape this module doesn't (a locale date format, a unit suffix).
+     *
+     * A host that throws from [FacetField.valueKind] — against its contract, but this is the parse
+     * path — gets no parse-time check rather than a thrown search box. The diagnostic is the thing
+     * worth losing here; the parse never is.
      */
     private fun validateValueKind(field: FacetField<*>, key: String, op: Op, value: String) {
+        val kind = facetValueKindOrNull(field) ?: return
         val parts = if (op == Op.EQ) value.split(QueryNode.Facet.RANGE_SEPARATOR, limit = 2) else listOf(value)
-        when (field.valueKind) {
+        when (kind) {
             FacetValueKind.DATE ->
                 if (parts.any { RelativeDate.resolveRange(it, ctx, zone) == null }) {
                     diagnostics.add(Diagnostic.InvalidDate(key, value))

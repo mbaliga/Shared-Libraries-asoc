@@ -1,5 +1,6 @@
 package dev.aarso.search
 
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,6 +48,57 @@ class NormalizerTest {
         // by the second pass.
         val once = Normalizer.normalize("  Café  ＲÉSUMÉ  ﬁle ")
         assertEquals(once, Normalizer.normalize(once))
+    }
+
+    // ---- case folding is Locale.ROOT everywhere, and is not a knob ----
+
+    /**
+     * **The hazard this file's fold exists to prevent, checked end to end.**
+     *
+     * The port briefly threaded a case-folding locale through `EvalContext` that the original never
+     * had, while [Segmenter] — the *indexing* path — went on folding with [Locale.ROOT]. A host that
+     * set it to `tr` therefore folded its index one way and its queries the other, and the two could
+     * never match: the Turkish dotless-i hazard, re-entered through a different door.
+     *
+     * There is no folding locale to set now, on either side, which is what makes the two sides
+     * agree structurally rather than by everyone remembering. The assertions below are written so
+     * that reintroducing a folding locale — on either side — fails one of them.
+     */
+    @Test fun `index-time and query-time folding agree for a Turkish dotless-i string`() {
+        val turkish = Locale.forLanguageTag("tr")
+        val raw = "IŞIK Istanbul"
+
+        // Turkish case rules really do differ here — this is not a hypothetical divergence.
+        assertEquals("ışık ıstanbul", raw.lowercase(turkish))
+
+        // Index side: Segmenter given a `tr` *break* locale. Query side: tokenizeQuery. Same fold.
+        val indexed = Segmenter.tokenizeForIndex(raw, turkish, Segmenter.JavaTextBoundarySource)
+        assertEquals("işik istanbul", indexed)
+        assertEquals("işik istanbul", Normalizer.normalize(raw))
+
+        // The property that actually matters: every query term is findable in the indexed text.
+        val queryTerms = Normalizer.tokenizeQuery(raw)
+        assertEquals(listOf("işik", "istanbul"), queryTerms)
+        for (term in queryTerms) {
+            assertTrue("query term '$term' is not findable in indexed text '$indexed'", indexed.contains(term))
+        }
+        // And findMatches, the third folding path, locates it in the original coordinates too.
+        assertTrue(Normalizer.findMatches(raw, listOf("istanbul")).isNotEmpty())
+    }
+
+    @Test fun `the default locale in force cannot change what normalize produces`() {
+        // A host does not have to *pass* a locale to have one: `String.lowercase()` with no
+        // argument reads Locale.getDefault(). Normalizer must not, so the fold is the same on a
+        // machine booted in Istanbul as anywhere else.
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr"))
+            assertEquals("index", Normalizer.normalize("INDEX"))
+            assertEquals(listOf("index"), Normalizer.tokenizeQuery("INDEX"))
+            assertEquals("index", Segmenter.tokenizeForIndex("INDEX", Locale.ROOT, Segmenter.JavaTextBoundarySource))
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 
     // ---- tokenizeQuery ----

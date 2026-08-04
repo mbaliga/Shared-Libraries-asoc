@@ -1,6 +1,28 @@
 package dev.aarso.search
 
 /**
+ * **The** order a list of [Scored] goes in: score descending, then [SearchDoc.timestampMillis]
+ * descending, then [SearchDoc.id] ascending — the original engine's exact tiebreak chain.
+ *
+ * Exported rather than left inline in [CoverageRecencyScorer.rank] because [Scorer] is an
+ * interface, and a host that implements it gets a per-document [Scored] and no ordering at all.
+ * Left to invent one, it will get the first key right and the other two wrong, and the failure is
+ * invisible: results still come back, ranked plausibly, just in a different order from every other
+ * host and from this module's own golden tests.
+ *
+ * The third key is what makes the order **total**, and it is not decoration. Without it two
+ * documents with the same score and the same timestamp come back in corpus order — a filesystem
+ * walk for one host, a database cursor for another, and unstable across runs for both. The second
+ * key must sit above it: full coverage on an older document can exactly cancel partial coverage on
+ * a newer one, and "the newer one" is the answer a user expects, not "the one whose id sorts
+ * first".
+ */
+val RANKING_ORDER: Comparator<Scored> =
+    compareByDescending<Scored> { it.score }
+        .thenByDescending { it.doc.timestampMillis }
+        .thenBy { it.doc.id }
+
+/**
  * The default ranking function: **term coverage, weighted by the best field that matched, plus a
  * recency boost.**
  *
@@ -76,14 +98,9 @@ class CoverageRecencyScorer(
     }
 
     /**
-     * Score every document in [docs], drop the non-hits, and return them ranked.
-     *
-     * The ordering is **score descending, then [SearchDoc.timestampMillis] descending, then
-     * [SearchDoc.id] ascending** — the original's exact tiebreak chain. The third key is what
-     * makes the order total: without it, two documents with the same score and the same timestamp
-     * would come back in corpus order, and "corpus order" is a filesystem walk for one host and a
-     * database cursor for another. Ties have to resolve identically on every host or a golden
-     * ranking test is not portable.
+     * Score every document in [docs], drop the non-hits, and return them ranked by
+     * [RANKING_ORDER] — score descending, then [SearchDoc.timestampMillis] descending, then
+     * [SearchDoc.id] ascending.
      *
      * [Scored.highlights] is populated for each returned hit, over the fields that actually
      * matched, in [SearchDoc.text] iteration order.
@@ -102,7 +119,7 @@ class CoverageRecencyScorer(
             val highlights = ArrayList<Highlight>()
             for ((field, raw) in doc.text) {
                 if (field !in parts.matchedFields) continue
-                for (range in Normalizer.findMatches(raw, terms, ctx.locale)) {
+                for (range in Normalizer.findMatches(raw, terms)) {
                     highlights.add(Highlight(field, range))
                 }
             }
@@ -117,11 +134,7 @@ class CoverageRecencyScorer(
             )
         }
 
-        return hits.sortedWith(
-            compareByDescending<Scored> { it.score }
-                .thenByDescending { it.doc.timestampMillis }
-                .thenBy { it.doc.id },
-        )
+        return hits.sortedWith(RANKING_ORDER)
     }
 
     // -------------------------------------------------------------------------------------
@@ -160,7 +173,7 @@ class CoverageRecencyScorer(
 
         // Normalize each field once, not once per term.
         val normalized = LinkedHashMap<FieldName, String>(doc.text.size)
-        for ((field, raw) in doc.text) normalized[field] = Normalizer.normalize(raw, ctx.locale)
+        for ((field, raw) in doc.text) normalized[field] = Normalizer.normalize(raw)
 
         var matchedTermCount = 0
         val matchedFields = LinkedHashSet<FieldName>()

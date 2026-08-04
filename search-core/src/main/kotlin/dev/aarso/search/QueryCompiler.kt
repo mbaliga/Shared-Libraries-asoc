@@ -1,7 +1,5 @@
 package dev.aarso.search
 
-import java.util.Locale
-
 /**
  * [QueryNode] → text, in three shapes that must not be confused with one another:
  *
@@ -111,8 +109,8 @@ object QueryCompiler {
      * That is deliberate and matches [Matcher]: a phrase is checked for contiguity by the *filter*,
      * while the scorer's job is coverage, and a three-word phrase legitimately counts for three.
      */
-    fun lexicalTerms(node: QueryNode?, locale: Locale = Locale.ROOT): List<String> =
-        Normalizer.tokenizeQuery(lexicalText(node), locale)
+    fun lexicalTerms(node: QueryNode?): List<String> =
+        Normalizer.tokenizeQuery(lexicalText(node))
 
     private fun collectLexical(node: QueryNode?, into: MutableList<String>) {
         when (node) {
@@ -139,8 +137,13 @@ object QueryCompiler {
      *  - A facet's operator and value are quoted **together** (`key:">=a b"`), because the parser
      *    strips quotes before it detects operators. Rendering `key:>"a b"` instead would reparse
      *    as the value `>"a` followed by a stray word.
-     *  - A negated [QueryNode.And] is re-parenthesised (`-(a b)`), because `-a b` reparses as
-     *    "not a, and b" — a different query, and one that quietly returns more rows.
+     *  - A negated **non-leaf** is re-parenthesised. `-(a b)`, because `-a b` reparses as "not a,
+     *    and b" — a different query, and one that quietly returns more rows. And `-(-a)`, because
+     *    `--a` does not tokenize as two negations at all: `-` is a word character mid-run, so the
+     *    tokenizer reads one word `--a` and the parser strips one dash, yielding
+     *    `Not(Term("-a"))` — a search for the literal text `-a`. An [QueryNode.Or] is the one
+     *    non-leaf that already renders its own parentheses, so wrapping it again would add a layer
+     *    of noise to a chip a user reads without buying anything.
      */
     fun renderCanonical(node: QueryNode): String = when (node) {
         is QueryNode.Term -> node.text + if (node.prefix) "*" else ""
@@ -162,8 +165,16 @@ object QueryCompiler {
             "${node.key}:" + if (needsQuoting(body)) "\"$body\"" else body
         }
         is QueryNode.Not -> "-" + node.child.let { child ->
-            // An Or already renders parenthesised; an And does not, and must be here.
-            if (child is QueryNode.And) "(" + renderCanonical(child) + ")" else renderCanonical(child)
+            // Every leaf kind survives a bare `-` prefix, because the tokenizer has a rule for
+            // each: `-word`/`-key:value` are read whole by scanWordOrFacet, and `-"`, `-/`, `-?`
+            // each emit a standalone NOT token. The non-leaves do not, and need the parens: an And
+            // because `-a b` binds the `-` to `a` alone, a Not because `--a` is one word. An Or
+            // already renders parenthesised, so it is left as it is rather than double-wrapped.
+            if (child is QueryNode.And || child is QueryNode.Not) {
+                "(" + renderCanonical(child) + ")"
+            } else {
+                renderCanonical(child)
+            }
         }
         is QueryNode.And -> node.children.joinToString(" ") { renderCanonical(it) }
         is QueryNode.Or -> "(" + node.children.joinToString(" OR ") { renderCanonical(it) } + ")"

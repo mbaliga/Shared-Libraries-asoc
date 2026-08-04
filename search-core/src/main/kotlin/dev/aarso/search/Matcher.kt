@@ -1,6 +1,5 @@
 package dev.aarso.search
 
-import java.util.Locale
 import java.util.regex.PatternSyntaxException
 
 /**
@@ -95,10 +94,10 @@ class Matcher<S>(
         // First, unconditionally, and out of reach of anything the user typed. See the class KDoc.
         if (!baseFilter(subject)) return false
         val root = parsed.root ?: return true
-        val prep = prepared(root, ctx.locale)
+        val prep = prepared(root)
         // Allocated only when the query actually has text in it: a pure-facet query
         // (`label:cat`, the common case in a filter UI) never normalizes a single field.
-        val fields = if (prep.hasText) NormalizedFields(doc.text, ctx.locale) else NormalizedFields.NONE
+        val fields = if (prep.hasText) NormalizedFields(doc.text) else NormalizedFields.NONE
         return eval(root, subject, doc, prep, fields, ctx)
     }
 
@@ -114,7 +113,13 @@ class Matcher<S>(
      * own ([SearchDoc.timestampMillis] is the usual one); do not read the zero as "poor match".
      *
      * Terms handed to the scorer come from [QueryCompiler.lexicalTerms] — facet and regex syntax
-     * stripped, negated terms excluded — normalized the way the scorer expects.
+     * stripped, negated terms excluded — normalized the way the scorer expects. They are derived
+     * from the query, not from the subject, so they are computed **once** into [Prepared] and read
+     * from there; see that class for why anything query-derived must not be recomputed here.
+     *
+     * This ranks one subject. Ordering the results is the caller's, and there is one right order:
+     * [RANKING_ORDER]. Sort with it rather than inventing a chain, or ties resolve differently here
+     * than they do in [CoverageRecencyScorer.rank] and in this module's golden tests.
      *
      * [Scored.highlights] is whatever the scorer chose to populate; [CoverageRecencyScorer.score]
      * leaves it empty on purpose. Call [Normalizer.findMatches] over the handful of results you
@@ -122,7 +127,9 @@ class Matcher<S>(
      */
     fun score(subject: S, doc: SearchDoc, parsed: ParsedQuery, ctx: EvalContext): Scored? {
         if (!matches(subject, doc, parsed, ctx)) return null
-        val terms = QueryCompiler.lexicalTerms(parsed.root, ctx.locale)
+        // `matches` has just prepared this exact root, so this is a cache hit, not a second walk.
+        val root = parsed.root ?: return unranked(doc)
+        val terms = prepared(root).terms
         if (terms.isEmpty()) return unranked(doc)
         return scorer.score(doc, terms, ctx) ?: unranked(doc)
     }
@@ -185,23 +192,30 @@ class Matcher<S>(
 
     /**
      * Everything derived from the *query* rather than from the subject: the normalized form of each
-     * text leaf, and the compiled form of each regex leaf.
+     * text leaf, the compiled form of each regex leaf, and the scorer-ready term list.
      *
-     * Both are per-query constants, and computing them inside the per-subject walk is the obvious
-     * way to make this class quietly quadratic — a keystroke over a 50k-item library would
-     * normalize the same needle 50k times and recompile the same regex 50k times. [Regex] in
+     * All three are per-query constants, and computing any of them inside the per-subject walk is
+     * the obvious way to make this class quietly quadratic — a keystroke over a 50k-item library
+     * would normalize the same needle 50k times and recompile the same regex 50k times. [Regex] in
      * particular is expensive enough that compiling it per item is the difference between a
      * responsive filter and a dropped frame.
+     *
+     * [terms] is here for the same reason and not a lesser one, even though only [score] reads it:
+     * a ranked pass calls [score] once per subject, so recomputing it there walked the tree,
+     * rebuilt the joined text and re-ran [Normalizer.normalize] over the query on every single
+     * subject — the exact work this class exists to do once. If something else query-derived is
+     * ever needed per subject, it belongs on this object too, not at the call site.
      */
     private class Prepared(
         val root: QueryNode,
-        val locale: Locale,
         /** Normalized needle per [QueryNode.Term]/[QueryNode.Phrase]/[QueryNode.Semantic] node. */
         val needles: Map<QueryNode, String>,
         /** Compiled pattern per [QueryNode.Regex] node; `null` value = did not compile. */
         val patterns: Map<QueryNode, Regex?>,
         /** Whether any text leaf exists, so a pure-facet query can skip normalizing fields. */
         val hasText: Boolean,
+        /** [QueryCompiler.lexicalTerms] of [root] — the shape [Scorer.score] documents. */
+        val terms: List<String>,
     )
 
     /**
@@ -219,31 +233,35 @@ class Matcher<S>(
     @Volatile
     private var cache: Prepared? = null
 
-    private fun prepared(root: QueryNode, locale: Locale): Prepared {
+    private fun prepared(root: QueryNode): Prepared {
         val hit = cache
         // Identity first: a re-parse of unchanged text is a different tree, but a single filter
         // pass reuses one tree, which is the case worth making free.
-        if (hit != null && hit.locale == locale && (hit.root === root || hit.root == root)) return hit
+        if (hit != null && (hit.root === root || hit.root == root)) return hit
         val needles = HashMap<QueryNode, String>()
         val patterns = HashMap<QueryNode, Regex?>()
-        collect(root, locale, needles, patterns)
-        return Prepared(root, locale, needles, patterns, hasText = needles.isNotEmpty())
-            .also { cache = it }
+        collect(root, needles, patterns)
+        return Prepared(
+            root = root,
+            needles = needles,
+            patterns = patterns,
+            hasText = needles.isNotEmpty(),
+            terms = QueryCompiler.lexicalTerms(root),
+        ).also { cache = it }
     }
 
     private fun collect(
         node: QueryNode,
-        locale: Locale,
         needles: MutableMap<QueryNode, String>,
         patterns: MutableMap<QueryNode, Regex?>,
     ) {
         when (node) {
-            is QueryNode.And -> node.children.forEach { collect(it, locale, needles, patterns) }
-            is QueryNode.Or -> node.children.forEach { collect(it, locale, needles, patterns) }
-            is QueryNode.Not -> collect(node.child, locale, needles, patterns)
-            is QueryNode.Term -> needles[node] = Normalizer.normalize(node.text, locale)
-            is QueryNode.Phrase -> needles[node] = Normalizer.normalize(node.text, locale)
-            is QueryNode.Semantic -> needles[node] = Normalizer.normalize(node.text, locale)
+            is QueryNode.And -> node.children.forEach { collect(it, needles, patterns) }
+            is QueryNode.Or -> node.children.forEach { collect(it, needles, patterns) }
+            is QueryNode.Not -> collect(node.child, needles, patterns)
+            is QueryNode.Term -> needles[node] = Normalizer.normalize(node.text)
+            is QueryNode.Phrase -> needles[node] = Normalizer.normalize(node.text)
+            is QueryNode.Semantic -> needles[node] = Normalizer.normalize(node.text)
             is QueryNode.Regex -> patterns[node] = compile(node)
             is QueryNode.Facet -> Unit
         }
@@ -266,7 +284,6 @@ class Matcher<S>(
      */
     private class NormalizedFields(
         private val raw: Map<FieldName, String>,
-        private val locale: Locale,
     ) {
         private var folded: Array<String>? = null
 
@@ -277,7 +294,7 @@ class Matcher<S>(
             if (needle.isNullOrEmpty()) return true
             val fields = folded ?: Array(raw.size) { "" }.also { array ->
                 var i = 0
-                for (text in raw.values) array[i++] = Normalizer.normalize(text, locale)
+                for (text in raw.values) array[i++] = Normalizer.normalize(text)
                 folded = array
             }
             for (i in fields.indices) if (fields[i].contains(needle)) return true
@@ -286,7 +303,7 @@ class Matcher<S>(
 
         companion object {
             /** Used when the query has no text leaves, so nothing will ever ask it anything. */
-            val NONE = NormalizedFields(emptyMap(), Locale.ROOT)
+            val NONE = NormalizedFields(emptyMap())
         }
     }
 }

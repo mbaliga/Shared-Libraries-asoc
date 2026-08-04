@@ -84,14 +84,26 @@ enum class Op { EQ, NE, LT, LTE, GT, GTE }
 enum class FacetValueKind { ENUM, TEXT, NUMBER, DATE, BOOL }
 
 /**
- * Ambient context for evaluating a query: the clock, and the locale used for normalization.
+ * Ambient context for evaluating a query: the clock, and deliberately nothing else.
  *
  * Passed explicitly rather than read from a global so that relative dates (`modified:today`)
  * and ranking are deterministic and testable — no test in this module reads a real clock.
+ *
+ * ## Why there is no case-folding locale here
+ *
+ * An earlier shape of this type carried one, threaded into [Normalizer]. It could not be made
+ * safe. [Segmenter] — the *indexing* path — folds with [java.util.Locale.ROOT] by construction, so
+ * a host that set a non-ROOT locale here folded its index one way and its queries the other, and
+ * the two could never match. That is exactly the Turkish dotless-i hazard [Normalizer] exists to
+ * prevent, re-entering through a different door: `INDEX` indexes as `index` and tokenizes as
+ * `ındex`, silently, for one locale's users only.
+ *
+ * Case folding is therefore locale-independent everywhere in this module, with no parameter left
+ * to get wrong. The locale [Segmenter.segment] takes is a different thing and stays: it selects
+ * BreakIterator *break rules*, not case folding.
  */
 data class EvalContext(
     val nowMillis: Long,
-    val locale: java.util.Locale = java.util.Locale.ROOT,
 )
 
 /**
@@ -106,6 +118,25 @@ data class EvalContext(
  * implementation is a field read (`subject.isFavorite`) with no allocation. Foto Xplorr
  * evaluates facets during Compose composition over a large library; boxing every attribute per
  * predicate per keystroke would be the wrong trade there.
+ *
+ * ## No member of this interface may throw
+ *
+ * [key], [valueKind], [isBacked] and [matches] are **total**. In the engine this was generalised
+ * from, the equivalents were module-owned functions over a closed enum and *could* not throw. Here
+ * they are host code, and two of them — [isBacked] and [valueKind] — are called by
+ * [QueryParser.parse] with the value **exactly as typed**, which in an as-you-type box means every
+ * half-finished keystroke of it. A host whose `isBacked` does the obvious thing (`value.toInt()`,
+ * `enumValueOf<Kind>(value)`) makes the search box throw on `size:>1` on the way to `size:>10mb`,
+ * and "parsing never throws" is this module's headline contract.
+ *
+ * The two parse-path members are therefore guarded defensively: [QueryParser] and [FacetEvaluator]
+ * both read a throwing [isBacked] as "backed" and a throwing [valueKind] as "no opinion", so a
+ * host that breaks this contract loses a diagnostic rather than crashing a search box. That is a
+ * safety net, not a licence — answer `false`, or return a kind, but do not throw.
+ *
+ * [matches] is deliberately **not** guarded. It runs once per subject in a filter loop, and
+ * swallowing its exception would convert a host bug into silently wrong results across a whole
+ * corpus, which is worse than the crash that finds it.
  */
 interface FacetField<in S> {
     /** The key as typed: the `ext` in `ext:pdf`. */

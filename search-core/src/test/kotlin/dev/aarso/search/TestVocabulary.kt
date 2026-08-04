@@ -195,3 +195,59 @@ object TestVocabulary {
             }
         } ?: false
 }
+
+/**
+ * A vocabulary whose host code **breaks [FacetField]'s no-throw contract**, for pinning what the
+ * module does about it.
+ *
+ * ## Why this fixture is not contrived
+ *
+ * Upstream, the parser's field knowledge came from a closed enum it owned; `isBacked` and the value
+ * kind were module code over a fixed key set and *could* not throw. Generalising the vocabulary
+ * into a host-supplied [FieldRegistry] moved both onto the far side of an interface boundary, and
+ * the parser calls them with the value **exactly as typed** — which in an as-you-type box means
+ * every prefix of it. `value.toInt()` is the first thing anyone writes for a numeric `isBacked`, it
+ * is total over the values the host has in mind, and it throws on `10m` on the way to `10mb`.
+ *
+ * So this is not a fixture built to defeat the parser; it is the obvious first implementation, and
+ * the module's headline contract is that it still must not throw. Everything here is deliberately
+ * the *plausible* mistake rather than an exotic one.
+ */
+object HostileVocabulary {
+
+    /** `isBacked` written the obvious way. Total over `"10"`, partial over everything else. */
+    private class NaiveNumberFacet : FacetField<Conversation> {
+        override val key: String = "size"
+        override val valueKind: FacetValueKind = FacetValueKind.NUMBER
+        override fun isBacked(value: String): Boolean = value.toInt() >= 0
+        override fun matches(subject: Conversation, op: Op, value: String, ctx: EvalContext) = true
+    }
+
+    /**
+     * A host whose `valueKind` is computed rather than stored, and computes badly — the shape a
+     * registry assembled from a config file or a lazily-loaded schema takes.
+     *
+     * `matches` answers true only for the **verbatim** `1..5`, so a test can tell "the evaluator
+     * gave up on knowing the kind and passed the value through" (the documented degrade) apart from
+     * "the evaluator decomposed the range anyway".
+     */
+    private class ExplodingKindFacet : FacetField<Conversation> {
+        override val key: String = "kind"
+        override val valueKind: FacetValueKind get() = error("valueKind is not available yet")
+        override fun isBacked(value: String): Boolean = true
+        override fun matches(subject: Conversation, op: Op, value: String, ctx: EvalContext) =
+            value == "1..5"
+    }
+
+    /** Both parse-path members broken at once, so neither guard can be relied on by the other. */
+    private class DoublyHostileFacet : FacetField<Conversation> {
+        override val key: String = "hostile"
+        override val valueKind: FacetValueKind get() = error("valueKind is not available yet")
+        override fun isBacked(value: String): Boolean = value.toInt() >= 0
+        override fun matches(subject: Conversation, op: Op, value: String, ctx: EvalContext) =
+            subject.starred
+    }
+
+    val registry: FieldRegistry<Conversation> =
+        FieldRegistry(listOf(NaiveNumberFacet(), ExplodingKindFacet(), DoublyHostileFacet()))
+}

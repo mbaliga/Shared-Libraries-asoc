@@ -102,8 +102,9 @@ object Segmenter {
      * Segment [text] into words, dropping whitespace- and punctuation-only runs. Empty for blank
      * input.
      *
-     * @param locale selects the boundary rules only. Case folding stays [Locale.ROOT] — see the
-     *   note inside on why those two must not be the same locale.
+     * @param locale selects the boundary **rules** only, and is the one locale this module still
+     *   takes. Case folding is [Locale.ROOT] everywhere and is not a parameter anywhere — see the
+     *   note inside, and [Normalizer]'s KDoc, on why those two must not be the same locale.
      */
     fun segment(
         text: String,
@@ -118,10 +119,11 @@ object Segmenter {
             val end = bounds[i + 1]
             if (start >= end) continue
             val raw = text.substring(start, end)
-            // Normalized with the default Locale.ROOT, *not* with `locale`. The segmentation
-            // locale picks break rules; case folding has to be locale-independent, because an
-            // index built by a `tr` host would otherwise fold `I` to `ı` while a query tokenized
-            // anywhere else folds it to `i`, and the two would never match.
+            // Note `locale` is NOT passed on. The segmentation locale picks break rules; case
+            // folding has to be locale-independent, because an index built by a `tr` host would
+            // otherwise fold `I` to `ı` while a query tokenized anywhere else folds it to `i`, and
+            // the two would never match. [Normalizer] takes no folding locale at all, so this is
+            // now structural rather than a rule this call site has to remember.
             val normalized = Normalizer.normalize(raw)
             // Filter on the *normalized* form, not the raw one. Some word-like symbols (`①`, in
             // category No) are not letters or digits themselves but NFKC-fold to characters that

@@ -34,6 +34,17 @@ private typealias JdkNormalizerForm = java.text.Normalizer.Form
  * ligatures, full-width forms, half-width katakana, circled digits, Indic composition. This file
  * replaces the escape hatch with a real offset map (see [findMatches]), so the guarantee
  * [Highlight] documents is now actually true.
+ *
+ * ### Case folding is [Locale.ROOT], and is not a parameter
+ * Not a default a caller may override — there is no caller-facing locale here at all, and that is
+ * the point. "The index and the query agree" is a property of the *pair*, and the two sides are
+ * folded by different code at different times: [Segmenter] folds documents at index time,
+ * [tokenizeQuery] folds the search box at query time. Any knob that either side can set
+ * independently is a knob that can make them disagree, and the disagreement is silent — a `tr`
+ * host would index `INDEX` as `index` and tokenize the same query as `ındex`, and simply never
+ * match, for one locale's users only. Removing the parameter is what makes the agreement
+ * structural instead of a thing every call site has to remember. (The locale [Segmenter.segment]
+ * takes is unrelated and stays: it picks BreakIterator break *rules*.)
  */
 object Normalizer {
 
@@ -41,8 +52,8 @@ object Normalizer {
      * Unicode-aware normalization for matching. Steps, in order:
      *  1. **NFKC normalize** — canonical + compatibility folding, so composed/decomposed forms
      *     and full-width/half-width variants unify.
-     *  2. **Lowercase** with [locale] — [Locale.ROOT] by default, which is locale-independent
-     *     case folding with no Turkish-i surprises, and a no-op for caseless scripts.
+     *  2. **Lowercase** with [Locale.ROOT] — locale-independent case folding with no Turkish-i
+     *     surprises, and a no-op for caseless scripts. Not overridable; see the object's KDoc.
      *  3. **Collapse whitespace** — runs of ASCII whitespace become a single space, then the
      *     result is trimmed.
      *
@@ -52,14 +63,10 @@ object Normalizer {
      *
      * NFKC can change a string's length (`ﬁ` → `fi`, `①` → `1`), which is exactly why
      * [findMatches] cannot assume normalized indices are original indices.
-     *
-     * @param locale case-folding locale. Defaults to [Locale.ROOT] deliberately: the index and
-     *   the query must fold identically, and a host whose UI locale is `tr` would otherwise index
-     *   `I` as `ı` while tokenizing the query as `i`.
      */
-    fun normalize(s: String, locale: Locale = Locale.ROOT): String {
+    fun normalize(s: String): String {
         if (s.isEmpty()) return s
-        return collapseAndTrim(fold(s, locale), null, null)
+        return collapseAndTrim(fold(s), null, null)
     }
 
     /**
@@ -67,8 +74,8 @@ object Normalizer {
      * normalization leaves behind, and drop blanks. A blank or empty query yields an empty list,
      * which every caller treats as "no query" rather than "matches nothing".
      */
-    fun tokenizeQuery(q: String, locale: Locale = Locale.ROOT): List<String> =
-        normalize(q, locale).split(' ').filter { it.isNotBlank() }
+    fun tokenizeQuery(q: String): List<String> =
+        normalize(q).split(' ').filter { it.isNotBlank() }
 
     /**
      * Find the character ranges in [text] where any of [queryTerms] occurs, case- and
@@ -92,7 +99,7 @@ object Normalizer {
      * original character, and highlighting either one highlights the ligature. A collapsed run of
      * five spaces maps its one normalized space back onto all five.
      *
-     * If alignment cannot be established at all — a locale with context-sensitive casing rules
+     * If alignment cannot be established at all — a script with context-sensitive casing rules
      * this alignment does not model, for instance — the map degrades to "the whole original
      * string", which widens a highlight but never points it at the wrong text and never goes out
      * of bounds. It does not fall back to normalized coordinates; that failure mode is gone.
@@ -103,10 +110,9 @@ object Normalizer {
     fun findMatches(
         text: String,
         queryTerms: List<String>,
-        locale: Locale = Locale.ROOT,
     ): List<IntRange> {
         if (text.isEmpty() || queryTerms.isEmpty()) return emptyList()
-        val analyzed = analyze(text, locale)
+        val analyzed = analyze(text)
         val normalized = analyzed.text
         if (normalized.isEmpty()) return emptyList()
 
@@ -140,9 +146,10 @@ object Normalizer {
     // ---------------------------------------------------------------------------------------
 
     /** Steps 1 and 2 of [normalize]: NFKC then case fold. Split out because the offset map has to
-     *  run these two together and the whitespace pass separately. */
-    private fun fold(s: String, locale: Locale): String =
-        JdkNormalizer.normalize(s, JdkNormalizerForm.NFKC).lowercase(locale)
+     *  run these two together and the whitespace pass separately. [Locale.ROOT] is the single
+     *  folding locale for the whole module — see the object's KDoc for why it is not a parameter. */
+    private fun fold(s: String): String =
+        JdkNormalizer.normalize(s, JdkNormalizerForm.NFKC).lowercase(Locale.ROOT)
 
     /**
      * Kotlin's `Regex("\\s+")` is Java's `\s`, which — without `UNICODE_CHARACTER_CLASS` — is the
@@ -228,8 +235,8 @@ object Normalizer {
     private const val MAX_MERGE = 8
 
     /** [normalize], but retaining the map back to original coordinates. */
-    private fun analyze(text: String, locale: Locale): Analyzed {
-        val folded = fold(text, locale)
+    private fun analyze(text: String): Analyzed {
+        val folded = fold(text)
         val foldStart: IntArray
         val foldEnd: IntArray
 
@@ -242,7 +249,7 @@ object Normalizer {
             foldStart = IntArray(folded.length) { it }
             foldEnd = IntArray(folded.length) { it }
         } else {
-            val built = buildFoldMap(text, folded, locale)
+            val built = buildFoldMap(text, folded)
             if (built == null) {
                 // Alignment failed. Attribute every normalized character to the whole original
                 // string: a wide highlight, but an honest one in the right coordinate space.
@@ -285,7 +292,7 @@ object Normalizer {
      * the end of a word) while the character *count* is identical. Taking the length and reading
      * the actual characters from [folded] keeps matching correct and the map correct.
      */
-    private fun buildFoldMap(text: String, folded: String, locale: Locale): Pair<IntArray, IntArray>? {
+    private fun buildFoldMap(text: String, folded: String): Pair<IntArray, IntArray>? {
         val seams = ArrayList<Int>()
         seams.add(0)
         for (i in 1 until text.length) if (isSafeSplitBefore(text, i)) seams.add(i)
@@ -301,7 +308,7 @@ object Normalizer {
             var length = -1
             var span = 1
             while (span <= MAX_MERGE && s + span < seams.size) {
-                val f = fold(text.substring(from, seams[s + span]), locale)
+                val f = fold(text.substring(from, seams[s + span]))
                 if (folded.regionMatches(out, f, 0, f.length)) {
                     length = f.length
                     pieces = span
@@ -310,7 +317,7 @@ object Normalizer {
                 span++
             }
             if (length < 0) {
-                val f = fold(text.substring(from, seams[s + 1]), locale)
+                val f = fold(text.substring(from, seams[s + 1]))
                 if (out + f.length > folded.length) return null
                 length = f.length
                 pieces = 1
