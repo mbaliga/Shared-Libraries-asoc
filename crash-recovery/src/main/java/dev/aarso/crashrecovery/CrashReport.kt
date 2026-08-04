@@ -179,6 +179,43 @@ data class CrashReport(
         )
 
         /**
+         * A report for a process death the JVM handler never saw — a native crash or an ANR
+         * kill, read back from [android.app.ApplicationExitInfo] on the next launch (see
+         * `CrashRecovery.captureExitDeath`). There is no Java stack for these by definition;
+         * [description] is whatever the OS recorded (a signal like `SIGSEGV`, or the ANR
+         * subject line), so the "trace" section states honestly where the detail lives rather
+         * than pretending a synthetic frame list is one.
+         */
+        fun ofExitDeath(
+            appLabel: String,
+            reasonLabel: String,
+            description: String?,
+            whenMillis: Long,
+            device: DeviceInfo,
+        ): CrashReport = CrashReport(
+            appLabel = appLabel,
+            whenMillis = whenMillis,
+            threadName = "?",
+            excType = reasonLabel,
+            excMessage = description?.takeIf { it.isNotBlank() },
+            plainLanguage = when {
+                reasonLabel.startsWith("Native") ->
+                    "$appLabel was stopped by a crash inside one of its native components — " +
+                        "the kind Android records but apps cannot catch in the moment."
+                reasonLabel.startsWith("App not responding") ->
+                    "$appLabel stopped responding and Android closed it."
+                else -> "$appLabel was closed by a crash."
+            },
+            device = device,
+            trace = buildString {
+                append("No Java stack trace exists for this kind of death.\n")
+                append("Recorded by Android (ApplicationExitInfo):\n")
+                append("  reason: ").append(reasonLabel).append('\n')
+                append("  detail: ").append(description?.takeIf { it.isNotBlank() } ?: "(none recorded)")
+            },
+        )
+
+        /**
          * Decode [encode]'s v2 format into a display-ready [Decoded] with every structured
          * field. Best-effort: any text that doesn't match (an older/foreign writer) still
          * yields a usable pair — the whole text as [Decoded.fullReport] and its first line as

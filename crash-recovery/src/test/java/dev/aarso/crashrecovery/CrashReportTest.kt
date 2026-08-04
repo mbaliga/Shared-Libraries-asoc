@@ -192,4 +192,50 @@ class CrashReportTest {
         assertEquals("", preview.whenShort())
         assertNull(preview.versionLabel())
     }
+
+    // ---- ofExitDeath (ApplicationExitInfo-backed deaths: native crash / ANR) --------------
+
+    @Test
+    fun `exit-death report is honest about having no Java stack`() {
+        val report = CrashReport.ofExitDeath(
+            appLabel = "Foto Xplorr",
+            reasonLabel = "Native crash",
+            description = "SIGSEGV",
+            whenMillis = 1_722_800_000_000,
+            device = device,
+        )
+        assertTrue(report.trace.contains("No Java stack trace exists"))
+        assertTrue(report.trace.contains("SIGSEGV"))
+        assertEquals("Native crash: SIGSEGV", report.headline)
+        assertTrue(report.plainLanguage.contains("native"))
+    }
+
+    @Test
+    fun `exit-death report round-trips through encode-decode like any other report`() {
+        val report = CrashReport.ofExitDeath(
+            appLabel = "Fylz",
+            reasonLabel = "App not responding (ANR)",
+            description = "Input dispatching timed out",
+            whenMillis = 1_722_800_000_000,
+            device = device,
+        )
+        val decoded = CrashReport.decode(report.encode())
+        assertEquals("App not responding (ANR)", decoded.excType)
+        assertEquals("Input dispatching timed out", decoded.excMessage)
+        assertTrue(decoded.fullReport.contains("ApplicationExitInfo"))
+        assertEquals(1_722_800_000_000, decoded.whenMillis)
+    }
+
+    @Test
+    fun `exit-death report degrades gracefully when the OS recorded no description`() {
+        val report = CrashReport.ofExitDeath(
+            appLabel = "App",
+            reasonLabel = "Crash",
+            description = null,
+            whenMillis = 1_722_800_000_000,
+            device = device,
+        )
+        assertEquals("Crash", report.headline)
+        assertTrue(report.trace.contains("(none recorded)"))
+    }
 }

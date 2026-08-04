@@ -18,11 +18,13 @@ plugins {
 val crashRecoveryGroup = "dev.aarso"
 val crashRecoveryArtifact = "crash-recovery"
 
-// 1.2.0 — first release from the new home. Content is hyle-design-system@c586f8f (1.1.0) with
-// previewIntent/samplePreview merged forward from the never-merged 33b0faa branch, which
-// Android-IDE-core was pinned to and calls from SettingsRoom.kt. Those two histories had
-// diverged; neither was a superset. See MIGRATION.md.
-val crashRecoveryVersion = "1.2.0"
+// 1.3.0 — adds ApplicationExitInfo-backed detection (captureExitDeath): native crashes and
+// ANR kills, which the JVM handler can never see, now surface on the recovery screen too.
+// Found the hard way: a native crash during Foto Xplorr's launch produced an unbreakable
+// crash loop where the OS showed "keeps stopping" and our recovery screen never could.
+// (1.2.0 was the first release from this home: hyle-design-system@c586f8f + previewIntent
+// merged forward from the never-merged 33b0faa. See MIGRATION.md.)
+val crashRecoveryVersion = "1.3.0"
 
 // Project coordinate — required for Gradle composite-build (`includeBuild`) dependency
 // substitution, which is how every consumer resolves this module.

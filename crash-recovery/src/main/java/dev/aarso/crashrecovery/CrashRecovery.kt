@@ -34,6 +34,12 @@ object CrashRecovery {
     // across the Continue -> relaunch -> re-crash cycle. Only a genuinely later crash (outside
     // the window) or an explicit reset starts it over.
     private const val STREAK_FILE_NAME = "crash_recovery_streak.txt"
+    // Watermark for ApplicationExitInfo-derived reports (see pendingExitDeath): the timestamp of
+    // the newest historical exit we have already surfaced, so a native crash or ANR is reported
+    // exactly once and never re-shown on every subsequent launch.
+    private const val EXIT_SEEN_FILE_NAME = "crash_recovery_exit_seen.txt"
+    // A historical exit older than this is stale context, not news — don't resurface it.
+    private const val EXIT_MAX_AGE_MILLIS = 7L * 24 * 60 * 60 * 1000
 
     /** Installs the handler. Chains to any previously-installed handler so this composes. */
     fun install(app: Application, appLabel: String) {
@@ -152,6 +158,72 @@ object CrashRecovery {
         file(context).takeIf { it.exists() }?.readText()?.let(CrashReport::decode)
     }.getOrNull()
 
+    /**
+     * Deaths the JVM handler can never see — **native crashes** (a `SIGSEGV` inside a bundled
+     * `.so`; the uncaught-exception handler simply never runs, so no report file is written)
+     * and **ANR kills**. Before this existed, such a death produced the worst possible outcome:
+     * the OS shows its own "keeps stopping" dialog, our recovery screen never appears (there is
+     * no report to show), and a native crash *during launch* becomes an unbreakable crash loop
+     * the user can only escape by clearing app data blind.
+     *
+     * Android 11+ records every process death in [android.app.ApplicationExitInfo]; this reads
+     * that history and synthesizes a report for the newest death worth surfacing. Only
+     * crash-shaped reasons qualify — `REASON_CRASH_NATIVE`, `REASON_ANR`, and `REASON_CRASH`
+     * when no JVM report was written (handler died before persisting). Background low-memory
+     * kills are routine process churn, not crashes, and are deliberately ignored.
+     *
+     * A watermark file makes each death surface exactly once, and anything older than 7 days is
+     * treated as stale context rather than news. Below API 30 this returns null — the JVM-crash
+     * path is unchanged and still works everywhere.
+     */
+    fun captureExitDeath(context: Context, appLabel: String): Boolean = runCatching {
+        if (Build.VERSION.SDK_INT < 30) return false
+        // A pending JVM report is richer than anything the exit history can add — and writing
+        // over it would destroy a real stack trace. First come, first served.
+        if (pending(context) != null) return false
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val history = am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
+        val seenUpTo = runCatching { exitSeenFile(context).readText().trim().toLong() }.getOrDefault(0L)
+        val now = System.currentTimeMillis()
+        val death = history.firstOrNull { info ->
+            info.timestamp > seenUpTo &&
+                now - info.timestamp < EXIT_MAX_AGE_MILLIS &&
+                when (info.reason) {
+                    android.app.ApplicationExitInfo.REASON_CRASH_NATIVE,
+                    android.app.ApplicationExitInfo.REASON_ANR,
+                    // The handler died before persisting its own report (pending() was null
+                    // above) — the bare exit record is all that remains; better than silence.
+                    android.app.ApplicationExitInfo.REASON_CRASH,
+                    -> true
+                    else -> false
+                }
+        } ?: return false
+        // Advance the watermark BEFORE writing the report: even if the write fails, this death
+        // must never become its own recurring report on every subsequent launch.
+        runCatching { exitSeenFile(context).writeText(death.timestamp.toString()) }
+        val reasonLabel = when (death.reason) {
+            android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "Native crash"
+            android.app.ApplicationExitInfo.REASON_ANR -> "App not responding (ANR)"
+            else -> "Crash"
+        }
+        val report = CrashReport.ofExitDeath(
+            appLabel = appLabel,
+            reasonLabel = reasonLabel,
+            description = death.description,
+            whenMillis = death.timestamp,
+            device = deviceInfo(context),
+        )
+        // Persist through the SAME file as a JVM crash: CrashRecoveryActivity re-reads
+        // pending() itself, so routing through the one store means the whole recovery flow
+        // (show, share, copy, clear, streak-gated reset) works for these deaths unchanged.
+        file(context).writeText(report.encode())
+        bumpStreak(context, death.timestamp)
+        true
+    }.getOrDefault(false)
+
+    private fun exitSeenFile(context: Context): File =
+        File(context.applicationContext.filesDir, EXIT_SEEN_FILE_NAME)
+
     fun clear(context: Context) {
         runCatching { file(context).delete() }
     }
@@ -171,7 +243,13 @@ object CrashRecovery {
         style: CrashRecoveryStyle = CrashRecoveryStyle.Default,
         contactEmail: String? = null,
     ): Boolean {
-        if (pending(activity) == null) return false
+        if (pending(activity) == null) {
+            // No JVM report — check whether the OS recorded a death the handler couldn't see
+            // (native crash, ANR). If it did, this synthesizes and persists a report through
+            // the same store, and recovery proceeds identically.
+            if (!captureExitDeath(activity, appLabel)) return false
+            if (pending(activity) == null) return false
+        }
         activity.startActivity(CrashRecoveryActivity.intent(activity, appLabel, style, contactEmail))
         activity.finish()
         return true
