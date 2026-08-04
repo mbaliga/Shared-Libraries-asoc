@@ -1,0 +1,15 @@
+[versions]
+# Pinned to match mbaliga/Hyle-Design-System exactly. Both builds appear in the same composite
+# graph in every consumer, and Gradle rejects mismatched AGP versions across a composite (D-Q).
+# Do not bump either independently of Hyle.
+agp = "8.9.1"
+kotlin = "2.1.0"
+junit = "4.13.2"
+
+[libraries]
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+[plugins]
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

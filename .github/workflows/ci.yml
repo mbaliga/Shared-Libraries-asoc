@@ -1,0 +1,53 @@
+name: CI
+
+# Shared libraries for the constellation. :search-core and :search-testkit are pure JVM and
+# need no Android SDK; :crash-recovery is an Android library and does. Public repo, so
+# GitHub Actions minutes are free.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install platform + build-tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      # Pure-JVM modules first: they are the ones every consumer depends on, and they fail
+      # fast without needing any Android toolchain at all.
+      - name: Search core tests (:search-core:test)
+        run: ./gradlew --no-daemon :search-core:test
+
+      - name: Search testkit tests (:search-testkit:test)
+        run: ./gradlew --no-daemon :search-testkit:test
+
+      - name: Crash-recovery tests (:crash-recovery:test)
+        run: ./gradlew --no-daemon :crash-recovery:test
+
+      # Guards the composite-build contract every consumer relies on: the release variant
+      # must actually assemble, not just compile under test.
+      - name: Assemble crash-recovery release (:crash-recovery:assembleRelease)
+        run: ./gradlew --no-daemon :crash-recovery:assembleRelease
