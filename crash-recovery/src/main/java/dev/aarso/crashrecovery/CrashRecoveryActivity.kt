@@ -7,8 +7,12 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -18,6 +22,7 @@ import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.animation.PathInterpolator
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
@@ -115,7 +120,7 @@ class CrashRecoveryActivity : Activity() {
         root.addView(
             toast,
             FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-                bottomMargin = 26.dp
+                bottomMargin = Look.Space.XL.dp
             },
         )
 
@@ -170,16 +175,16 @@ class CrashRecoveryActivity : Activity() {
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(pal.paper)
-            setPadding(24.dp, 8.dp, 24.dp, 14.dp)
+            setPadding(Look.Space.GUTTER.dp, Look.Space.S.dp, Look.Space.GUTTER.dp, Look.Space.L.dp)
         }
 
         // Crash mark — centered, tappable to replay the glitch.
         val icon = ImageView(this).apply {
             setImageResource(R.drawable.cr_crash_mark)
             setColorFilter(pal.ink)
-            layoutParams = LinearLayout.LayoutParams(132.dp, 183.dp).apply {
-                topMargin = 18.dp
-                bottomMargin = 6.dp
+            layoutParams = LinearLayout.LayoutParams(Look.Mark.WIDTH.dp, Look.Mark.HEIGHT.dp).apply {
+                topMargin = Look.Space.L.dp
+                bottomMargin = Look.Space.M.dp
                 gravity = Gravity.CENTER_HORIZONTAL
             }
             isClickable = true
@@ -189,47 +194,84 @@ class CrashRecoveryActivity : Activity() {
         col.addView(icon)
         startGlitchLoop(icon)
 
-        col.addView(centered(text("Well, that happened.", 23f, pal.ink, bold = true)))
+        col.addView(centered(text("Well, that happened.", Look.Type.DISPLAY, pal.ink, bold = true)))
         col.addView(
             centered(
                 text(
                     "$appLabel hit a snag last time and had to close. Sorry about that — " +
                         "here's exactly what happened.",
-                    13f,
+                    Look.Type.SECONDARY,
                     pal.inkSoft,
-                ).apply { maxWidth = 300.dp },
-            ).apply { (getChildAt(0) as TextView).gravity = Gravity.CENTER },
+                ).apply {
+                    // A measure cap, not a width: long lines are the fastest way to make calm
+                    // copy read as a wall of text.
+                    maxWidth = 300.dp
+                    setLineSpacing(0f, Look.Type.LEADING_BODY)
+                },
+            ).apply { (getChildAt(0) as TextView).gravity = Gravity.CENTER }
+                .withTopMargin(Look.Space.XS),
         )
-        col.addView(spacer(10))
-        col.addView(privacyCard())
-        col.addView(spacer(8))
-        col.addView(whatCard())
+        col.addView(privacyCard().withTopMargin(Look.Space.XL))
+        col.addView(whatCard().withTopMargin(Look.Space.S))
 
         col.addView(
             pillButton("Continue to $appLabel", pal.accent, pal.onAccent, filled = true) { continueToApp() }
-                .withTopMargin(10),
+                .withTopMargin(Look.Space.XL),
         )
         col.addView(
             pillButton("View the full report", pal.ink, pal.paper, filled = false) { showDetails() }
-                .withTopMargin(7),
+                .withTopMargin(Look.Space.S),
         )
 
-        col.addView(shareRow(includeCopy = false).withTopMargin(7))
+        col.addView(shareRow(includeCopy = false).withTopMargin(Look.Space.S))
 
         col.addView(
-            text("Discard this report", 12f, pal.inkSoft).apply {
+            text("Discard this report", Look.Type.CAPTION, pal.inkSoft).apply {
                 gravity = Gravity.CENTER
                 paintFlags = paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
                 isClickable = true
-                setPadding(0, 10.dp, 0, 4.dp)
+                // A real touch target rather than a 12sp line of text: this is a destructive
+                // action and a mis-tap on it is not recoverable.
+                setPadding(0, Look.Space.L.dp, 0, Look.Space.S.dp)
+                background = pressable(null, pal.ink)
                 setOnClickListener { discard() }
-            },
+            }.withTopMargin(Look.Space.XS),
         )
+
+        staggerIn(col)
 
         return ScrollView(this).apply {
             setBackgroundColor(pal.paper)
             isFillViewport = true
             addView(col)
+        }
+    }
+
+    /**
+     * The main pane's rows fade and rise into place, one just behind the last.
+     *
+     * The screen appears at the moment an app has just died, and appearing *instantly and whole*
+     * makes it read as another abrupt event. A short staggered settle — the same eased curve
+     * everything else on this screen moves on — makes it read as a screen that arrived on
+     * purpose. It is skipped entirely when the user has animations turned off; someone who has
+     * asked for no motion is not asking less insistently on a crash screen.
+     */
+    private fun staggerIn(container: LinearLayout) {
+        if (reduceMotion) return
+        val rise = Look.Motion.ENTER_RISE_DP.dp.toFloat()
+        for (i in 0 until container.childCount) {
+            val child = container.getChildAt(i)
+            child.alpha = 0f
+            child.translationY = rise
+            child.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(Look.Motion.ENTER_MS)
+                .setStartDelay(
+                    minOf(i, Look.Motion.ENTER_MAX_STAGGERED) * Look.Motion.ENTER_STAGGER_MS,
+                )
+                .setInterpolator(settle)
+                .start()
         }
     }
 
@@ -242,16 +284,19 @@ class CrashRecoveryActivity : Activity() {
         )
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(11.dp, 9.dp, 11.dp, 9.dp)
-            background = outline(pal.line, 12)
-            addView(text("🔒", 13f, pal.ink).apply {
-                layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = 1.dp; rightMargin = 9.dp }
+            setPadding(Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp)
+            background = outline(pal.line, Look.Radius.CARD)
+            addView(text("🔒", Look.Type.SECONDARY, pal.ink).apply {
+                layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
+                    topMargin = Look.Space.HAIR.dp
+                    rightMargin = Look.Space.M.dp
+                }
             })
             addView(TextView(this@CrashRecoveryActivity).apply {
                 setText(body, TextView.BufferType.SPANNABLE)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, Look.Type.CAPTION)
                 setTextColor(pal.inkSoft)
-                setLineSpacing(0f, 1.15f)
+                setLineSpacing(0f, Look.Type.LEADING_BODY)
             })
         }
     }
@@ -259,17 +304,26 @@ class CrashRecoveryActivity : Activity() {
     private fun whatCard(): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(12.dp, 10.dp, 12.dp, 10.dp)
-            background = filled(pal.card, 12)
-            addView(text("WHAT HAPPENED", 10f, pal.inkSoft).apply { letterSpacing = 0.08f })
-            addView(spacer(3))
-            addView(text(report.plainLanguage, 13f, pal.ink).apply { setLineSpacing(0f, 1.15f) })
+            setPadding(Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp)
+            background = filled(pal.card, Look.Radius.CARD)
+            addView(eyebrow("What happened"))
+            addView(spacer(Look.Space.XS))
+            addView(
+                text(report.plainLanguage, Look.Type.BODY, pal.ink)
+                    .apply { setLineSpacing(0f, Look.Type.LEADING_BODY) },
+            )
             val meta = listOfNotNull(
                 report.whenShort().takeIf { it.isNotBlank() },
                 "$appLabel ${report.versionLabel() ?: ""}".trim(),
             ).joinToString("  ·  ")
-            addView(spacer(5))
-            addView(text(meta, 11f, pal.inkSoft))
+            addView(spacer(Look.Space.S))
+            addView(text(meta, Look.Type.CAPTION, pal.inkSoft))
+        }
+
+    /** An all-caps section eyebrow. One role, one look, wherever it appears. */
+    private fun eyebrow(title: String): TextView =
+        text(title.uppercase(), Look.Type.EYEBROW, pal.inkSoft, bold = true).apply {
+            letterSpacing = Look.Type.EYEBROW_TRACKING
         }
 
     // ---------------- details pane ----------------
@@ -285,10 +339,11 @@ class CrashRecoveryActivity : Activity() {
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(12.dp, 14.dp, 12.dp, 8.dp)
-                addView(text("‹  Back", 15f, pal.ink, bold = true).apply {
+                setPadding(Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp, Look.Space.S.dp)
+                addView(text("‹  Back", Look.Type.BODY, pal.ink, bold = true).apply {
                     isClickable = true
-                    setPadding(8.dp, 8.dp, 8.dp, 8.dp)
+                    setPadding(Look.Space.M.dp, Look.Space.S.dp, Look.Space.M.dp, Look.Space.S.dp)
+                    background = pressable(null, pal.ink)
                     setOnClickListener { showMain() }
                 })
             },
@@ -296,17 +351,17 @@ class CrashRecoveryActivity : Activity() {
 
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(24.dp, 0, 24.dp, 14.dp)
+            setPadding(Look.Space.GUTTER.dp, 0, Look.Space.GUTTER.dp, Look.Space.L.dp)
         }
-        col.addView(text("The full report", 21f, pal.ink, bold = true))
-        col.addView(spacer(6))
+        col.addView(text("The full report", Look.Type.TITLE, pal.ink, bold = true))
+        col.addView(spacer(Look.Space.S))
         col.addView(
             text(
                 "Everything below is the entire report — if you share it, this is all that " +
                     "leaves your phone, word for word.",
-                12.5f,
+                Look.Type.SECONDARY,
                 pal.inkSoft,
-            ).apply { setLineSpacing(0f, 1.2f) },
+            ).apply { setLineSpacing(0f, Look.Type.LEADING_BODY) },
         )
 
         col.addView(section("Error", listOf(
@@ -331,12 +386,12 @@ class CrashRecoveryActivity : Activity() {
         col.addView(sectionHeader("Stack trace"))
         col.addView(
             ScrollView(this).apply {
-                background = filled(pal.monoBg, 12)
+                background = filled(pal.monoBg, Look.Radius.FIELD)
                 layoutParams = LinearLayout.LayoutParams(MATCH, 220.dp)
                 addView(HorizontalScrollView(this@CrashRecoveryActivity).apply {
-                    addView(text(report.trace, 11f, pal.monoInk, monospace = true).apply {
-                        setPadding(14.dp, 12.dp, 14.dp, 12.dp)
-                        setLineSpacing(0f, 1.35f)
+                    addView(text(report.trace, Look.Type.MONO, pal.monoInk, monospace = true).apply {
+                        setPadding(Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp)
+                        setLineSpacing(0f, Look.Type.LEADING_BODY)
                     })
                 })
             },
@@ -352,11 +407,11 @@ class CrashRecoveryActivity : Activity() {
                         "names, no network activity. The report is plain text and you're looking at all of it.",
                 )
                 setText(sb, TextView.BufferType.SPANNABLE)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, Look.Type.SECONDARY)
                 setTextColor(pal.inkSoft)
-                setLineSpacing(0f, 1.25f)
-                setPadding(14.dp, 12.dp, 14.dp, 12.dp)
-                background = dashed(pal.line, 12)
+                setLineSpacing(0f, Look.Type.LEADING_BODY)
+                setPadding(Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp)
+                background = dashed(pal.line, Look.Radius.FIELD)
             },
         )
 
@@ -380,7 +435,9 @@ class CrashRecoveryActivity : Activity() {
                 addView(divider())
                 addView(LinearLayout(this@CrashRecoveryActivity).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(24.dp, 12.dp, 24.dp, 18.dp)
+                    setPadding(
+                        Look.Space.GUTTER.dp, Look.Space.M.dp, Look.Space.GUTTER.dp, Look.Space.L.dp,
+                    )
                     addView(shareRow(includeCopy = true))
                 })
             },
@@ -393,23 +450,23 @@ class CrashRecoveryActivity : Activity() {
     private fun resetSection(): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = 22.dp }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = Look.Space.XL.dp }
             addView(sectionHeader("Still happening?"))
             addView(
                 text(
                     "$appLabel has now crashed more than once in a row, so continuing may just " +
                         "hit the same problem. As a last resort you can reset its data — this wipes " +
                         "everything $appLabel has stored on this device and can't be undone.",
-                    12.5f,
+                    Look.Type.SECONDARY,
                     pal.inkSoft,
-                ).apply { setLineSpacing(0f, 1.25f) },
+                ).apply { setLineSpacing(0f, Look.Type.LEADING_BODY) },
             )
             addView(
                 // Danger-tinted outlined pill. The post-construction re-styling that used to
                 // live here was a workaround for pillButton painting outlined labels in the
                 // fill colour; the variant handles its own tint now.
                 pillButton("Reset $appLabel's data", pal.danger, pal.paper, filled = false) { confirmReset() }
-                    .withTopMargin(10),
+                    .withTopMargin(Look.Space.M),
             )
         }
 
@@ -448,7 +505,7 @@ class CrashRecoveryActivity : Activity() {
     private fun section(title: String, rows: List<Pair<String, String>>): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = 18.dp }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = Look.Space.L.dp }
             addView(sectionHeader(title))
             rows.forEachIndexed { i, (k, v) ->
                 addView(kvRow(k, v))
@@ -457,19 +514,21 @@ class CrashRecoveryActivity : Activity() {
         }
 
     private fun sectionHeader(title: String): View =
-        text(title.uppercase(), 10.5f, pal.inkSoft, bold = true).apply {
-            letterSpacing = 0.09f
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = 18.dp; bottomMargin = 8.dp }
+        eyebrow(title).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                topMargin = Look.Space.L.dp
+                bottomMargin = Look.Space.S.dp
+            }
         }
 
     private fun kvRow(key: String, value: String): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 7.dp, 0, 7.dp)
-            addView(text(key, 13f, pal.inkSoft).apply {
+            setPadding(0, Look.Space.M.dp, 0, Look.Space.M.dp)
+            addView(text(key, Look.Type.SECONDARY, pal.inkSoft).apply {
                 layoutParams = LinearLayout.LayoutParams(0, WRAP, 0.4f)
             })
-            addView(text(value, 13f, pal.ink).apply {
+            addView(text(value, Look.Type.SECONDARY, pal.ink).apply {
                 layoutParams = LinearLayout.LayoutParams(0, WRAP, 0.6f)
             })
         }
@@ -499,18 +558,18 @@ class CrashRecoveryActivity : Activity() {
         }
 
     private fun LinearLayout.addGap(child: View) {
-        (child.layoutParams as LinearLayout.LayoutParams).rightMargin = 8.dp
+        (child.layoutParams as LinearLayout.LayoutParams).rightMargin = Look.Space.S.dp
     }
 
     private fun shareTile(label: String, onClick: () -> Unit): Button =
         Button(this).apply {
+            bareButton()
             text = label
-            setAllCaps(false)
             setTextColor(pal.ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, Look.Type.CAPTION)
             typeface = Typeface.create(typeface, Typeface.BOLD)
-            background = filled(pal.card, 12)
-            setPadding(4.dp, 12.dp, 4.dp, 12.dp)
+            background = pressable(filled(pal.card, Look.Radius.FIELD), pal.ink, Look.Radius.FIELD)
+            setPadding(Look.Space.XS.dp, Look.Space.M.dp, Look.Space.XS.dp, Look.Space.M.dp)
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
             setOnClickListener { onClick() }
         }
@@ -630,16 +689,36 @@ class CrashRecoveryActivity : Activity() {
 
     // ---------------- pane transitions ----------------
 
+    /**
+     * The constellation's settle curve, as a framework interpolator.
+     *
+     * Every animation on this screen runs on it — the pane slide, the entry stagger, the toast —
+     * so the whole surface moves as one thing. See [Look.Motion] for why the numbers are
+     * restated here rather than shared with `:cell-shell`.
+     */
+    private val settle by lazy {
+        PathInterpolator(
+            Look.Motion.EASE_X1, Look.Motion.EASE_Y1, Look.Motion.EASE_X2, Look.Motion.EASE_Y2,
+        )
+    }
+
     private fun showDetails() {
         val w = root.width.toFloat()
-        paneMain.animate().translationX(-w * 0.28f).setDuration(320).start()
-        paneDetails.animate().translationX(0f).setDuration(320).start()
+        // The main pane does not simply leave: it slides a short way and stays behind the
+        // report, so the report reads as sitting on top of the screen you came from rather
+        // than as a different screen you were sent to.
+        paneMain.animate().translationX(-w * 0.28f)
+            .setDuration(Look.Motion.SETTLE_MS).setInterpolator(settle).start()
+        paneDetails.animate().translationX(0f)
+            .setDuration(Look.Motion.SETTLE_MS).setInterpolator(settle).start()
     }
 
     private fun showMain() {
         val w = root.width.toFloat()
-        paneMain.animate().translationX(0f).setDuration(320).start()
-        paneDetails.animate().translationX(w).setDuration(320).start()
+        paneMain.animate().translationX(0f)
+            .setDuration(Look.Motion.SETTLE_MS).setInterpolator(settle).start()
+        paneDetails.animate().translationX(w)
+            .setDuration(Look.Motion.SETTLE_MS).setInterpolator(settle).start()
     }
 
     override fun onBackPressed() {
@@ -695,11 +774,11 @@ class CrashRecoveryActivity : Activity() {
 
     private fun buildToast(): TextView =
         TextView(this).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, Look.Type.SECONDARY)
             setTextColor(pal.paper)
             typeface = Typeface.create(typeface, Typeface.BOLD)
-            setPadding(18.dp, 10.dp, 18.dp, 10.dp)
-            background = filled(pal.ink, 999)
+            setPadding(Look.Space.L.dp, Look.Space.M.dp, Look.Space.L.dp, Look.Space.M.dp)
+            background = filled(pal.ink, Look.Radius.PILL)
             alpha = 0f
         }
 
@@ -707,8 +786,10 @@ class CrashRecoveryActivity : Activity() {
         // Prefer the in-screen pill; fall back to a platform Toast if something's off.
         runCatching {
             toast.text = message
-            toast.animate().alpha(1f).setDuration(200).withEndAction {
-                toast.postDelayed({ toast.animate().alpha(0f).setDuration(250).start() }, 1600)
+            toast.animate().alpha(1f).setDuration(200).setInterpolator(settle).withEndAction {
+                toast.postDelayed({
+                    toast.animate().alpha(0f).setDuration(250).setInterpolator(settle).start()
+                }, 1600)
             }.start()
         }.onFailure { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
     }
@@ -745,27 +826,74 @@ class CrashRecoveryActivity : Activity() {
      */
     private fun pillButton(label: String, tint: Int, onTint: Int, filled: Boolean, onClick: () -> Unit): Button =
         Button(this).apply {
+            bareButton()
             text = label
-            setAllCaps(false)
-            setTextColor(if (filled) onTint else tint)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            val labelColor = PillColors.label(tint, onTint, filled)
+            setTextColor(labelColor)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, Look.Type.BODY)
             typeface = Typeface.create(typeface, Typeface.BOLD)
-            background = if (filled) {
-                filled(tint, 999)
-            } else {
-                GradientDrawable().apply {
-                    setColor(pal.paper)
-                    // Outlined buttons carry their own tint in the stroke, so the variant
-                    // reads as the same control in a quieter register rather than as a
-                    // different one.
-                    setStroke(2.dp, tint)
-                    cornerRadius = 999.dp.toFloat()
-                }
+            val shape = GradientDrawable().apply {
+                setColor(PillColors.fill(tint, pal.paper, filled))
+                // Outlined buttons carry their own tint in the stroke, so the variant reads as
+                // the same control in a quieter register rather than as a different one.
+                PillColors.stroke(tint, filled)?.let { setStroke(Look.Space.HAIR.dp, it) }
+                cornerRadius = Look.Radius.PILL.dp.toFloat()
             }
-            setPadding(16.dp, 12.dp, 16.dp, 12.dp)
+            background = pressable(shape, labelColor, Look.Radius.PILL)
+            setPadding(Look.Space.L.dp, Look.Space.L.dp, Look.Space.L.dp, Look.Space.L.dp)
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
             setOnClickListener { onClick() }
         }
+
+    /**
+     * Strip a platform [Button] back to something this screen can style.
+     *
+     * `Button` arrives with a themed background, a minimum width and height, a caps transform
+     * and — on most themes — a state-list animator that lifts it on press. Left in place those
+     * fight every decision made here: the elevation shadow lands on a flat paper surface, and
+     * the minimums mean the padding set at the call site is not the padding you get. Clearing
+     * them is what makes the buttons on this screen actually the size and shape they say.
+     */
+    private fun Button.bareButton() {
+        setAllCaps(false)
+        stateListAnimator = null
+        elevation = 0f
+        minWidth = 0
+        minimumWidth = 0
+        minHeight = 0
+        minimumHeight = 0
+    }
+
+    /**
+     * Wrap a shape so it answers a touch.
+     *
+     * Nothing on this screen used to respond to a press at all: the backgrounds were plain
+     * [GradientDrawable]s, so a tap on Continue gave no feedback until the app relaunched, which
+     * on a slow cold start reads as a button that did not work — on the one screen where the
+     * user is already primed to believe nothing works.
+     *
+     * [RippleDrawable] is `android.graphics.drawable`, so this stays inside the module's
+     * zero-dependency rule. The highlight is derived from the control's own colour at
+     * [Look.RIPPLE_ALPHA] rather than from a fixed grey, so it lands correctly on a filled
+     * accent pill and on a paper-backed outlined one alike, whatever accent the host passed.
+     *
+     * @param content the shape to draw under the ripple; null for a borderless target (a link,
+     *   the Back affordance) where a shape would invent a button that is not there.
+     * @param radiusDp the corner radius the ripple is clipped to. Must match [content]'s own
+     *   radius or the highlight will square off the corners of a pill. Null leaves the ripple
+     *   unbounded, which is what a borderless target wants. A separate mask drawable is built
+     *   rather than reusing [content]: a Drawable may have only one parent, and a
+     *   [RippleDrawable] holds both its layers.
+     */
+    private fun pressable(content: Drawable?, source: Int, radiusDp: Int? = null): Drawable {
+        val highlight = ColorStateList.valueOf(
+            Color.argb(
+                Look.RIPPLE_ALPHA, Color.red(source), Color.green(source), Color.blue(source),
+            ),
+        )
+        val mask = radiusDp?.let { filled(Color.WHITE, it) }
+        return RippleDrawable(highlight, content, mask)
+    }
 
     private fun View.withTopMargin(dp: Int): View = apply {
         val lp = (layoutParams as? LinearLayout.LayoutParams) ?: LinearLayout.LayoutParams(MATCH, WRAP)

@@ -18,13 +18,21 @@ plugins {
 val crashRecoveryGroup = "dev.aarso"
 val crashRecoveryArtifact = "crash-recovery"
 
+// 1.4.0 — the look-and-feel pass the owner asked for after device testing, plus the two
+// display bugs that pass turned up: an outlined pill that painted its label in the fill colour
+// (an empty-looking button, now pinned by PillColorsTest) and no window-inset handling at all
+// (the crash mark clipped by the status bar). The screen now works from one design scale
+// (CrashRecoveryLook.kt) instead of ad-hoc numbers, answers presses, and moves on the same
+// 320ms eased curve as the rest of the constellation. Still plain android.widget: the
+// zero-dependency guarantee is what makes this screen survivable, and it is not negotiable.
+//
 // 1.3.0 — adds ApplicationExitInfo-backed detection (captureExitDeath): native crashes and
 // ANR kills, which the JVM handler can never see, now surface on the recovery screen too.
 // Found the hard way: a native crash during Foto Xplorr's launch produced an unbreakable
 // crash loop where the OS showed "keeps stopping" and our recovery screen never could.
 // (1.2.0 was the first release from this home: hyle-design-system@c586f8f + previewIntent
 // merged forward from the never-merged 33b0faa. See MIGRATION.md.)
-val crashRecoveryVersion = "1.3.0"
+val crashRecoveryVersion = "1.4.0"
 
 // Project coordinate — required for Gradle composite-build (`includeBuild`) dependency
 // substitution, which is how every consumer resolves this module.
