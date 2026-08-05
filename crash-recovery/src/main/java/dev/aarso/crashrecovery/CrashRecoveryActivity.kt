@@ -105,6 +105,7 @@ class CrashRecoveryActivity : Activity() {
             setBackgroundColor(pal.paper)
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
         }
+        applySystemBarInsets(root)
         paneMain = buildMainPane()
         paneDetails = buildDetailsPane()
         toast = buildToast()
@@ -121,6 +122,46 @@ class CrashRecoveryActivity : Activity() {
         // Details starts off-screen to the right; corrected once we know the width.
         paneDetails.post { paneDetails.translationX = root.width.toFloat() }
         return root
+    }
+
+    /**
+     * Inset the whole screen out from under the system bars.
+     *
+     * This Activity draws on a bare `Theme.NoTitleBar` and previously handled insets
+     * nowhere at all — so on a modern device, where the window extends edge to edge, the
+     * status bar sat on top of the crash mark and clipped it. A recovery screen that looks
+     * broken undermines the one job it has: being the calm, trustworthy thing a user meets
+     * right after a crash.
+     *
+     * Deliberately the **framework** inset API, not `androidx.core`'s `ViewCompat`: this
+     * module has zero dependencies on purpose, so that nothing it needs can itself be the
+     * thing that is broken when it runs. One `@Suppress("DEPRECATION")` on the pre-30 path
+     * is a cheap price for keeping that guarantee.
+     *
+     * Padding goes on the root rather than each pane, so the details pane, the toast and
+     * anything added later inherit it for free; and it is applied on every dispatch, so a
+     * rotation or a switch to gesture navigation is followed rather than baked in once.
+     */
+    @Suppress("DEPRECATION")
+    private fun applySystemBarInsets(target: View) {
+        target.setOnApplyWindowInsetsListener { view, insets ->
+            if (Build.VERSION.SDK_INT >= 30) {
+                val bars = insets.getInsets(
+                    android.view.WindowInsets.Type.systemBars() or
+                        android.view.WindowInsets.Type.displayCutout(),
+                )
+                view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            } else {
+                view.setPadding(
+                    insets.systemWindowInsetLeft,
+                    insets.systemWindowInsetTop,
+                    insets.systemWindowInsetRight,
+                    insets.systemWindowInsetBottom,
+                )
+            }
+            insets
+        }
+        target.requestApplyInsets()
     }
 
     // ---------------- main pane ----------------
@@ -364,13 +405,11 @@ class CrashRecoveryActivity : Activity() {
                 ).apply { setLineSpacing(0f, 1.25f) },
             )
             addView(
+                // Danger-tinted outlined pill. The post-construction re-styling that used to
+                // live here was a workaround for pillButton painting outlined labels in the
+                // fill colour; the variant handles its own tint now.
                 pillButton("Reset $appLabel's data", pal.danger, pal.paper, filled = false) { confirmReset() }
-                    .withTopMargin(10).also {
-                        (it as Button).setTextColor(pal.danger)
-                        it.background = GradientDrawable().apply {
-                            setColor(pal.paper); setStroke(2.dp, pal.danger); cornerRadius = 999.dp.toFloat()
-                        }
-                    },
+                    .withTopMargin(10),
             )
         }
 
@@ -691,19 +730,35 @@ class CrashRecoveryActivity : Activity() {
             addView(child)
         }
 
-    private fun pillButton(label: String, bg: Int, fg: Int, filled: Boolean, onClick: () -> Unit): Button =
+    /**
+     * A pill button in one of two variants.
+     *
+     * [tint] is the button's ONE colour — the fill when [filled], the label and the stroke
+     * when outlined — and [onTint] is only ever the label colour of a filled button. Naming
+     * them for their role rather than "bg"/"fg" is the fix for a real defect: the previous
+     * signature took `(bg, fg)`, ignored `bg` entirely in the outlined branch, hardcoded the
+     * fill to [CrashRecoveryStyle.Palette.paper], and still painted the label `fg` — so
+     * `pillButton("View the full report", pal.ink, pal.paper, filled = false)` rendered
+     * paper-on-paper: an outlined pill with an invisible label, which is exactly the "empty
+     * button" seen on device. The Reset button had been silently working around it by
+     * re-setting its text colour after construction; that workaround is now gone too.
+     */
+    private fun pillButton(label: String, tint: Int, onTint: Int, filled: Boolean, onClick: () -> Unit): Button =
         Button(this).apply {
             text = label
             setAllCaps(false)
-            setTextColor(fg)
+            setTextColor(if (filled) onTint else tint)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.create(typeface, Typeface.BOLD)
             background = if (filled) {
-                filled(bg, 999)
+                filled(tint, 999)
             } else {
                 GradientDrawable().apply {
                     setColor(pal.paper)
-                    setStroke(2.dp, pal.line)
+                    // Outlined buttons carry their own tint in the stroke, so the variant
+                    // reads as the same control in a quieter register rather than as a
+                    // different one.
+                    setStroke(2.dp, tint)
                     cornerRadius = 999.dp.toFloat()
                 }
             }
