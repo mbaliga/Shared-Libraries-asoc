@@ -1,0 +1,31 @@
+[versions]
+# Pinned to match mbaliga/Hyle-Design-System exactly. Both builds appear in the same composite
+# graph in every consumer, and Gradle rejects mismatched AGP versions across a composite (D-Q).
+# Do not bump either independently of Hyle.
+agp = "8.9.1"
+kotlin = "2.1.0"
+junit = "4.13.2"
+# Compose for :cell-shell. The BOM keeps the UI artifacts mutually consistent; consumers
+# bring their own BOM too and Gradle resolves to the higher of the two, which is safe
+# because this module uses only long-stable foundation/animation APIs.
+composeBom = "2025.05.01"
+# Lifecycle, for :cell-shell's ShakeToRefresh — it must hold the accelerometer only while the
+# host is RESUMED, which needs a LifecycleOwner. Pinned to the version [composeBom] already
+# drags in transitively, so declaring it explicitly changes nothing about resolution here; it
+# just stops the module depending on somebody else's transitive graph for a type it names
+# directly. Consumers on a newer lifecycle resolve upward, which is fine.
+lifecycle = "2.8.7"
+
+[libraries]
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-animation = { group = "androidx.compose.animation", name = "animation" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
+
+[plugins]
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
