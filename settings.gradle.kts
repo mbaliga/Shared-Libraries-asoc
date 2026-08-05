@@ -40,6 +40,11 @@ rootProject.name = "AsocSharedLibraries"
 include(":search-core")
 include(":search-testkit")
 
+// The constellation's navigation + motion shell: the fonebrew spatial pattern, the
+// word-wheel rail and the edge scrubber, so every app moves the same way rather than each
+// re-deriving it (owner: "the navigation pattern of fonebrew ... followed everywhere").
+include(":cell-shell")
+
 // Reliability. Relocated from mbaliga/Hyle-Design-System, where D-O originally placed it, so
 // that apps forbidden from depending on Hyle (D-L: Animalcules, Clackpad) no longer have to
 // carry the entire Hyle submodule to get a utility that has zero Hyle dependency by design.
