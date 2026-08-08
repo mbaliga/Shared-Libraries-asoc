@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>:diagnostics — overlay spec · diag/2 · profile-aware</title>
+<style>
+  :root{
+    --violet:#8E7BFF; --cyan:#08FED5;
+    --ink:#E8E9F0; --ink-dim:#9A9DB0; --ink-faint:#63667A;
+    --panel:rgba(14,15,22,.92); --panel-solid:#0E0F16;
+    --stroke:rgba(232,233,240,.14); --stroke-strong:rgba(232,233,240,.26);
+    --warn:#FFC46B; --fail:#FF7A85;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{background:#08090D;color:var(--ink);font-family:var(--sans);
+    display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px 14px 60px;overflow-x:hidden}
+
+  header{max-width:440px;width:100%}
+  h1{font-size:15px;margin:0 0 4px;font-weight:600}
+  h1 span{font-family:var(--mono);color:var(--violet)}
+  header p{margin:0;font-size:12px;line-height:1.55;color:var(--ink-dim)}
+
+  .picker{max-width:440px;width:100%;display:flex;gap:5px;flex-wrap:wrap}
+  .picker button{font:600 10px/1 var(--sans);color:var(--ink-dim);background:transparent;
+    border:1px solid var(--stroke);border-radius:99px;padding:7px 11px;cursor:pointer;transition:.15s}
+  .picker button[aria-pressed="true"]{color:var(--panel-solid);background:var(--ink);border-color:var(--ink)}
+
+  .states{max-width:440px;width:100%;display:flex;gap:5px}
+  .states button{flex:1;font:500 10px/1 var(--sans);color:var(--ink-dim);background:transparent;
+    border:1px solid var(--stroke);border-radius:8px;padding:7px 6px;cursor:pointer}
+  .states button[aria-pressed="true"]{color:var(--ink);border-color:var(--stroke-strong);background:rgba(255,255,255,.04)}
+
+  .device{position:relative;width:min(380px,94vw);aspect-ratio:9/19.5;border-radius:34px;overflow:hidden;
+    border:1px solid var(--stroke-strong);background:#000;box-shadow:0 30px 80px -30px rgba(142,123,255,.35);touch-action:none}
+  #app{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .appchrome{position:absolute;inset:0;padding:52px 20px 26px;display:flex;flex-direction:column;
+    justify-content:space-between;pointer-events:none}
+  .appchrome .t{font:600 13px/1 var(--sans);color:rgba(255,255,255,.82);letter-spacing:.04em}
+  .appchrome .b{font:400 10px/1.6 var(--mono);color:rgba(255,255,255,.42)}
+
+  .bubble{position:absolute;left:14px;top:96px;z-index:30;display:flex;align-items:center;gap:8px;
+    padding:7px 12px 7px 8px;border-radius:99px;background:var(--panel);backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);border:1px solid var(--stroke);cursor:grab;
+    box-shadow:0 8px 24px -8px rgba(0,0,0,.8);font-family:var(--mono);transition:opacity .18s}
+  .bubble .dot{width:8px;height:8px;border-radius:50%;background:var(--violet);flex:none;
+    box-shadow:0 0 0 0 rgba(142,123,255,.5);animation:pulse 2s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 7px rgba(142,123,255,0)}100%{box-shadow:0 0 0 0 rgba(142,123,255,0)}}
+  .bubble .v{font-size:13px;font-weight:600;letter-spacing:-.02em;min-width:38px}
+  .bubble .sub{font-size:9px;color:var(--ink-dim);line-height:1.25}
+  .bubble .sub b{display:block;color:var(--ink);font-weight:600;font-size:10px}
+
+  .panel{position:absolute;left:10px;right:10px;top:84px;z-index:40;background:var(--panel);
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--stroke);
+    border-radius:14px;box-shadow:0 20px 50px -16px rgba(0,0,0,.9);display:flex;flex-direction:column;overflow:hidden}
+  .phead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--stroke)}
+  .phead .dot{width:7px;height:7px;border-radius:50%;background:var(--violet);flex:none;animation:pulse 2s infinite}
+  .phead .title{font:600 10px/1.3 var(--sans);letter-spacing:.05em;text-transform:uppercase}
+  .phead .pid{font:500 9px/1 var(--mono);color:var(--violet)}
+  .phead .x{margin-left:auto;width:22px;height:22px;border-radius:6px;border:1px solid var(--stroke);
+    background:transparent;color:var(--ink-dim);font:400 13px/1 var(--sans);cursor:pointer;display:grid;place-items:center}
+  .pbody{padding:11px;display:flex;flex-direction:column;gap:11px}
+  .lbl{font:600 9px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+
+  .spark{position:relative;height:62px;border:1px solid var(--stroke);border-radius:9px;overflow:hidden;background:rgba(255,255,255,.02)}
+  #spark{display:block;width:100%;height:100%}
+  .spark .budget{position:absolute;left:6px;font:500 8px/1 var(--mono);color:var(--ink-faint);
+    transform:translateY(-50%);background:var(--panel-solid);padding:1px 3px;border-radius:3px;white-space:nowrap}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .stat{border:1px solid var(--stroke);border-radius:9px;padding:8px;background:rgba(255,255,255,.02)}
+  .stat .k{font:600 8px/1.1 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px;min-height:18px}
+  .stat .v{font:600 14px/1 var(--mono);letter-spacing:-.03em}
+  .stat .u{font-size:9px;color:var(--ink-dim);font-weight:400;margin-left:2px}
+  .stat .d{font:400 8px/1.3 var(--mono);color:var(--ink-faint);margin-top:4px}
+
+  .phases{display:flex;flex-direction:column;gap:5px}
+  .prow{display:grid;grid-template-columns:64px 1fr 40px;align-items:center;gap:8px}
+  .prow .n{font:500 9px/1 var(--mono);color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis}
+  .prow .bar{height:6px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+  .prow .bar i{display:block;height:100%;border-radius:99px;background:var(--violet)}
+  .prow.hot .bar i{background:var(--cyan)}
+  .prow .ms{font:500 9px/1 var(--mono);text-align:right}
+
+  .inv{display:flex;flex-direction:column;gap:5px}
+  .ichip{display:flex;align-items:flex-start;gap:6px;padding:6px 8px;border-radius:8px;
+    border:1px solid var(--stroke);background:rgba(255,255,255,.02);font:500 9px/1.4 var(--sans)}
+  .ichip .g{font-family:var(--mono);font-size:10px;flex:none;line-height:1.3}
+  .ichip.pass{color:var(--cyan);border-color:rgba(8,254,213,.3)}
+  .ichip.warn{color:var(--warn);border-color:rgba(255,196,107,.32)}
+  .ichip.fail{color:var(--fail);border-color:rgba(255,122,133,.36)}
+  .ichip.na{color:var(--ink-faint)}
+
+  .acts{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:6px}
+  .btn{border:1px solid var(--stroke);background:rgba(255,255,255,.03);color:var(--ink);border-radius:9px;
+    padding:10px 6px;font:600 10px/1 var(--sans);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px}
+  .btn.primary{background:var(--ink);color:var(--panel-solid);border-color:var(--ink)}
+  .btn .g{font-family:var(--mono);font-size:11px}
+  .note{font:400 9px/1.5 var(--sans);color:var(--ink-faint);border-top:1px solid var(--stroke);padding-top:9px}
+  .note b{color:var(--ink-dim);font-weight:600}
+
+  .refused{position:absolute;left:10px;right:10px;top:84px;z-index:40;background:var(--panel);
+    backdrop-filter:blur(18px);border:1px solid rgba(255,196,107,.4);border-radius:14px;padding:14px}
+  .refused h3{margin:0 0 7px;font:600 11px/1.3 var(--sans);color:var(--warn)}
+  .refused p{margin:0 0 8px;font:400 10px/1.6 var(--sans);color:var(--ink-dim)}
+  .refused code{font-family:var(--mono);font-size:9px;color:var(--cyan);background:rgba(8,254,213,.08);
+    padding:2px 5px;border-radius:4px;display:block;margin-top:6px;word-break:break-all;line-height:1.7}
+
+  .scrim{position:absolute;inset:0;z-index:50;background:rgba(4,5,8,.62)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:60;background:var(--panel-solid);
+    border-top:1px solid var(--stroke);border-radius:20px 20px 0 0;padding:10px 14px 22px;
+    display:flex;flex-direction:column;gap:11px}
+  .grab{width:34px;height:4px;border-radius:99px;background:var(--stroke-strong);margin:2px auto 4px}
+  .sheet h2{font:600 13px/1 var(--sans);margin:0}
+  .file{border:1px solid var(--stroke);border-radius:10px;padding:10px;background:rgba(255,255,255,.02)}
+  .file .fname{font:500 10px/1.4 var(--mono);word-break:break-all}
+  .file .fmeta{font:400 9px/1.5 var(--mono);color:var(--ink-faint);margin-top:4px}
+  .sheet .row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .sheet .full{grid-column:1/-1}
+  .privacy{font:400 9px/1.5 var(--sans);color:var(--ink-faint);margin:0}
+  .privacy b{color:var(--cyan);font-weight:600}
+
+  .anno{max-width:440px;width:100%;display:flex;flex-direction:column;gap:8px}
+  .anno .a{border:1px solid var(--stroke);border-left:2px solid var(--violet);border-radius:0 9px 9px 0;
+    padding:9px 11px;font:400 11px/1.55 var(--sans);color:var(--ink-dim);background:rgba(255,255,255,.015)}
+  .anno .a b{color:var(--ink);font-weight:600;display:block;margin-bottom:3px;font-size:10px;
+    letter-spacing:.05em;text-transform:uppercase}
+  .anno .a code{font-family:var(--mono);font-size:10px;color:var(--cyan)}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>:diagnostics</span> — overlay spec · <span>diag/2</span></h1>
+  <p>Authoritative visual and interaction spec. The overlay is <strong>profile-aware</strong>: the headline number, the budget line, the phase rows and the invariants all come from the active app-type profile. Switch profiles below to see the same panel become a different instrument. Drag the bubble; tap to expand.</p>
+</header>
+
+<div class="picker" id="picker" role="group" aria-label="Profile"></div>
+
+<div class="states" role="group" aria-label="State">
+  <button data-state="bubble" aria-pressed="true">Bubble</button>
+  <button data-state="panel" aria-pressed="false">Panel</button>
+  <button data-state="sheet" aria-pressed="false">Export</button>
+</div>
+
+<div class="device" id="device">
+  <canvas id="app"></canvas>
+  <div class="appchrome">
+    <div class="t" id="appTitle">Animalcules — Pond</div>
+    <div class="b" id="appSub">host app</div>
+  </div>
+
+  <div class="bubble" id="bubble">
+    <span class="dot"></span>
+    <span class="v" id="bVal">—</span>
+    <span class="sub">ms<b id="bMem">412 MB</b></span>
+  </div>
+
+  <div class="panel hidden" id="panel">
+    <div class="phead">
+      <span class="dot"></span>
+      <span class="title" id="pTitle">Recording<br><span class="pid" id="pId">ui</span></span>
+      <button class="x" id="collapse" aria-label="Collapse">−</button>
+    </div>
+    <div class="pbody">
+      <div>
+        <div class="lbl" style="margin-bottom:6px" id="seriesLbl">Series</div>
+        <div class="spark"><canvas id="spark"></canvas><span class="budget" id="budgetLbl"></span></div>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div>
+        <div class="lbl" style="margin-bottom:7px" id="phaseLbl">Phase breakdown</div>
+        <div class="phases" id="phases"></div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:6px">Invariants</div>
+        <div class="inv" id="invariants"></div>
+      </div>
+      <div class="acts">
+        <button class="btn" id="markBtn"><span class="g">◆</span>Mark</button>
+        <button class="btn" id="snapBtn"><span class="g">▣</span>Snapshot</button>
+        <button class="btn primary" id="exportBtn"><span class="g">↥</span>End &amp; export</button>
+      </div>
+      <div class="note" id="panelNote"></div>
+    </div>
+  </div>
+
+  <div class="refused hidden" id="refused">
+    <h3>! Overlay refused for this profile</h3>
+    <p id="refusedWhy"></p>
+    <p style="margin:0">Use the ADB trigger instead — this is precisely why it exists:</p>
+    <code>adb shell am broadcast -a dev.aarso.diagnostics.START --es label "run-1"<br>adb shell am broadcast -a dev.aarso.diagnostics.STOP<br>adb logcat -d -s Diag | grep REPORT_PATH</code>
+  </div>
+
+  <div class="scrim hidden" id="scrim"></div>
+  <div class="sheet hidden" id="sheet">
+    <div class="grab"></div>
+    <h2>Report written</h2>
+    <div class="file">
+      <div class="fname" id="fname">diag_….md</div>
+      <div class="fmeta" id="fmeta">schema diag/2</div>
+    </div>
+    <div class="row">
+      <button class="btn" id="shareBtn"><span class="g">↗</span>Share</button>
+      <button class="btn">View</button>
+      <button class="btn full" id="doneBtn">Done</button>
+    </div>
+    <p class="privacy">Stays on this device until you send it. <b>No network permission</b> in the module manifest — sharing is a manual chooser, never an upload. Secrets are replaced with typed placeholders, and the <code>stream</code> profile additionally asserts no raw signal values reached the file.</p>
+  </div>
+</div>
+
+<div class="anno">
+  <div class="a"><b>Profile-aware, not frame-aware</b>The panel reads the active profile's primary series. On <code>audio</code> the headline is a callback against the buffer period; on <code>service</code> it is request latency against an SLA. A panel that says "fps" over an instrument app is worse than no panel.</div>
+  <div class="a"><b>Budget line is derived</b>Never a hardcoded 16.7 ms. It comes from the actual refresh rate, the negotiated buffer, the capture cadence, or a stated SLA — and the sparkline scales to it, so the same widget reads correctly at 8 ms and at 2 000 ms.</div>
+  <div class="a"><b>Interval series get a tolerance band</b>Camera cadence and sensor spacing jitter around nominal by construction, so ~half of a healthy stream sits above it. Those series mark overruns only past a multiple of nominal — otherwise the panel would scream permanently and be ignored.</div>
+  <div class="a"><b>Refusal is a feature</b>For <code>ime</code> and <code>wallpaper</code> the overlay would cover or steal input from the surface under measurement. It refuses rather than quietly corrupting the run, and points at the ADB trigger.</div>
+  <div class="a"><b>Invariants over percentiles</b>The chips carry structural claims, not thresholds — accelerated delegate in use, nothing drawing while hidden, no egress while BYO-AI is off. Each is glyph + word + border, never colour alone.</div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  // ---- profiles: the same shape the Kotlin Profiles object declares -------
+  const P = {
+    ui: {
+      id:'ui', title:'UI (Activity-hosted)', app:'Fonebrew — Chats', sub:'activity · compose',
+      series:'Frames · vsync budget', unit:'ms', budget:8.33, jitter:.34, spike:.05,
+      word:'jank', budgetText:'jank above 8.33 ms (120 Hz)',
+      stats:[['jank rate','4.10','%','1 043 / 14 382'],['p99','14.2','ms','1.7× budget'],['PSS','412','MB','+0.3 MB/min']],
+      phaseLbl:'Phase means · worst frames',
+      phases:[['input',2],['animation',3],['layout',9],['draw',74],['sync',18],['cmd issue',52],['swap',6]],
+      inv:[['pass','Frame metrics were actually collected.']],
+      note:'Covers the UI thread only. If the real work is on a background pipeline, this profile will look perfect while the pipeline starves.'
+    },
+    ime: {
+      id:'ime', title:'IME (input method)', app:'Clackpad', sub:'InputMethodService · WebView UI',
+      refused:'A floating window covers the keyboard and steals the input events being measured. An IME also has no Activity, so the overlay would have nothing to attach to.',
+      series:'Key-down → glyph visible', unit:'ms', budget:32, jitter:.5, spike:.06, word:'slow key',
+      budgetText:'slow key above 32 ms',
+      stats:[['slow key rate','0.60','%','3 / 498'],['p99','29.4','ms','0.9× budget'],['keys','498','','ime.keys']],
+      phaseLbl:'Where the time went',
+      phases:[['native frame',22],['webview rAF',68],['bridge',10]],
+      inv:[['pass','Frame collector attached to the IME window.'],
+           ['pass','No network requests while BYO AI is disabled.'],
+           ['na','Key-to-glyph latency was measured. — not evaluated']],
+      note:'Frame rate is not a keyboard’s felt quality; latency is.'
+    },
+    wallpaper: {
+      id:'wallpaper', title:'Live wallpaper', app:'Animalcules — Pond', sub:'WallpaperService · Canvas',
+      refused:'A wallpaper has no Window and draws to a SurfaceHolder. A floating overlay forces a foreground window over the surface under test and changes the very thing being measured.',
+      series:'Draw-loop frames · vsync budget', unit:'ms', budget:8.33, jitter:.4, spike:.06, word:'jank',
+      budgetText:'jank above 8.33 ms (120 Hz)',
+      stats:[['jank rate','7.25','%','1 043 / 14 382'],['p99','38.7','ms','4.6× budget'],['graphics','168','MB','+1.34 MB/min']],
+      phaseLbl:'Phase means · worst frames',
+      phases:[['layout',4],['draw',82],['cmd issue',64],['swap',5]],
+      inv:[['fail','Engine draws nothing while not visible. — frames.while_hidden = 4 200'],
+           ['warn','No GC inside the draw loop. — gc.during_draw = 11'],
+           ['na','APK ships no native libraries. — not evaluated']],
+      note:'Run long. A wallpaper’s real failure modes are drain and thermal creep, not p99.'
+    },
+    audio: {
+      id:'audio', title:'Audio / instrument', app:'Bocal — Practice', sub:'AAudio · 96 fr @ 48 kHz',
+      series:'Audio callback · buffer period', unit:'ms', budget:2.0, jitter:.36, spike:.03, word:'underrun',
+      budgetText:'underrun above 2.00 ms (96 fr @ 48 kHz)',
+      stats:[['underrun rate','0.00','%','0 / 24 100'],['p99','1.42','ms','0.71× budget'],['callbacks','24 100','','']],
+      phaseLbl:'Callback composition',
+      phases:[['read',18],['dsp',58],['mix',20],['write',9]],
+      inv:[['pass','Low-latency audio path was granted.'],
+           ['pass','No buffer underruns occurred.'],
+           ['fail','Native sample rate and buffer size in use. — 44 100 vs native 48 000']],
+      note:'There is no acceptable non-zero underrun rate — every one is an audible click.'
+    },
+    'vision-pipeline': {
+      id:'vision-pipeline', title:'Camera / inference', app:'Crocodyl — Form', sub:'CameraX · BlazePose',
+      series:'Pose inference · one capture period', unit:'ms', budget:33.33, jitter:.55, spike:.08,
+      word:'over-budget', budgetText:'over-budget above 33.33 ms (30 fps)',
+      stats:[['over-budget','100.0','%','900 / 900'],['p95','58.9','ms','1.8× period'],['dropped','112','','12.4 % of frames']],
+      phaseLbl:'Pipeline stages · worst hops',
+      phases:[['camera',14],['inference',78],['dsp',8],['render',11]],
+      inv:[['fail','Pose inference ran on an accelerated delegate. — delegate = cpu'],
+           ['fail','Fewer than 5 % of camera frames dropped. — 12.44 %'],
+           ['fail','Analysis keeps up with capture. — p95 58.9 vs 33.3 ms']],
+      note:'UI frame rate is misleading here: the app can render at 120 fps while dropping two of every three camera frames.'
+    },
+    stream: {
+      id:'stream', title:'Sensor / BLE stream', app:'Baseline — EEG', sub:'MW75 · 256 Hz · 4 ch',
+      series:'Inter-sample interval · 256 Hz nominal', unit:'ms', budget:3.91, jitter:.3, spike:.02,
+      word:'late sample', budgetText:'late above 7.81 ms (2× nominal — jitter expected, a gap is not)',
+      stats:[['late samples','0.08','%','8 / 10 240'],['drift','40','ppm','max 200'],['dropped','0','','']],
+      phaseLbl:'DSP stages',
+      phases:[['filter',34],['fft',48],['bandpower',22]],
+      inv:[['pass','No samples were dropped.'],
+           ['pass','BLE link held for the whole session.'],
+           ['pass','No raw signal values appear in the report.']],
+      note:'Measures signal integrity, not speed. Dropped samples do not feel like anything — they poison the band-power estimates silently.'
+    },
+    service: {
+      id:'service', title:'Headless service', app:'ASOM — daemon', sub:'127.0.0.1:11435 · llama.cpp',
+      series:'Request latency · house SLA', unit:'ms', budget:2000, jitter:.45, spike:.07,
+      word:'slow request', budgetText:'slow above 2 000 ms (house SLA)',
+      stats:[['slow requests','2.10','%','8 / 381'],['p99','2 840','ms','1.4× SLA'],['PSS','9 420','MB','38 % of RAM']],
+      phaseLbl:'Request composition',
+      phases:[['queue',12],['prefill',44],['decode',72],['serialise',6]],
+      inv:[['pass','Process was never killed for memory.'],
+           ['warn','Session ended normally. — recovered from journal'],
+           ['pass','Fewer than 1 % of requests errored.']],
+      note:'The characteristic failure is death, not slowness — which is why this profile pairs with the journal.'
+    }
+  };
+  const ORDER = ['ui','ime','wallpaper','audio','vision-pipeline','stream','service'];
+  let cur = 'ui', state = 'bubble';
+
+  // ---- host-app backdrop -------------------------------------------------
+  const app = document.getElementById('app'), ax = app.getContext('2d');
+  let W=0,H=0; const dpr=Math.min(devicePixelRatio||1,2), blobs=[];
+  for(let i=0;i<24;i++) blobs.push({x:Math.random(),y:Math.random(),r:.02+Math.random()*.06,
+    vx:(Math.random()-.5)*.0006,vy:(Math.random()-.5)*.0006,
+    h:Math.random()<.5?'142,123,255':'8,254,213',a:.05+Math.random()*.15});
+  function sizeApp(){const b=app.getBoundingClientRect();W=b.width;H=b.height;
+    app.width=W*dpr;app.height=H*dpr;ax.setTransform(dpr,0,0,dpr,0,0);}
+  function drawApp(){
+    const g=ax.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0a1420');g.addColorStop(1,'#050a10');
+    ax.fillStyle=g;ax.fillRect(0,0,W,H);
+    for(const b of blobs){b.x+=b.vx;b.y+=b.vy;
+      if(b.x<-.1||b.x>1.1)b.vx*=-1; if(b.y<-.1||b.y>1.1)b.vy*=-1;
+      const rr=b.r*Math.min(W,H)*2.4, rg=ax.createRadialGradient(b.x*W,b.y*H,0,b.x*W,b.y*H,rr);
+      rg.addColorStop(0,'rgba('+b.h+','+b.a+')');rg.addColorStop(1,'rgba('+b.h+',0)');
+      ax.fillStyle=rg;ax.beginPath();ax.arc(b.x*W,b.y*H,rr,0,6.2832);ax.fill();}
+  }
+
+  // ---- simulated series --------------------------------------------------
+  const N=120; let hist=new Array(N).fill(0);
+  function reseed(){const p=P[cur];hist=new Array(N).fill(p.budget*.6);}
+  function nextValue(){
+    const p=P[cur];
+    let v = p.budget*(0.45 + Math.random()*p.jitter);
+    if(Math.random()<p.spike) v = p.budget*(1.1+Math.random()*1.8);
+    hist.push(v); hist.shift(); return v;
+  }
+
+  // ---- sparkline ---------------------------------------------------------
+  const sp=document.getElementById('spark'), sx=sp.getContext('2d');
+  let SW=0,SH=0;
+  function sizeSpark(){const b=sp.getBoundingClientRect(); if(!b.width) return;
+    SW=b.width;SH=b.height;sp.width=SW*dpr;sp.height=SH*dpr;sx.setTransform(dpr,0,0,dpr,0,0);
+    const p=P[cur], cap=p.budget*3;
+    document.getElementById('budgetLbl').style.top=(SH-(p.budget/cap)*SH)+'px';}
+  function drawSpark(){
+    if(!SW) return;
+    const p=P[cur], cap=p.budget*3;
+    sx.clearRect(0,0,SW,SH);
+    const by=SH-(p.budget/cap)*SH;
+    sx.strokeStyle='rgba(232,233,240,.26)';sx.lineWidth=1;sx.setLineDash([3,3]);
+    sx.beginPath();sx.moveTo(0,by);sx.lineTo(SW,by);sx.stroke();sx.setLineDash([]);
+    const bw=SW/N;
+    for(let i=0;i<N;i++){
+      const v=Math.min(hist[i],cap), h=Math.max(1,(v/cap)*SH);
+      sx.fillStyle = v>p.budget ? 'rgba(142,123,255,.95)' : 'rgba(8,254,213,.6)';
+      sx.fillRect(i*bw, SH-h, Math.max(1,bw-.6), h);
+    }
+  }
+
+  // ---- render profile into the DOM ---------------------------------------
+  function fmt(v){return v>=1000 ? Math.round(v).toLocaleString('en-US').replace(/,/g,' ') : v.toFixed(1);}
+  function applyProfile(){
+    const p=P[cur];
+    document.getElementById('appTitle').textContent=p.app;
+    document.getElementById('appSub').textContent=p.sub;
+    document.getElementById('pTitle').innerHTML='Recording<br><span class="pid">'+p.id+'</span>';
+    document.getElementById('seriesLbl').textContent=p.series;
+    document.getElementById('budgetLbl').textContent=p.budgetText;
+    document.getElementById('phaseLbl').textContent=p.phaseLbl;
+    document.getElementById('panelNote').innerHTML='<b>'+p.title+'</b> — '+p.note;
+    document.getElementById('fname').textContent =
+      'diag_'+p.id+'_20260807-142311_run-1.md';
+    document.getElementById('fmeta').textContent =
+      'schema diag/2 · profile '+p.id+' · Android/data/…/files/diagnostics/';
+
+    document.getElementById('stats').innerHTML = p.stats.map(s=>
+      '<div class="stat"><div class="k">'+s[0]+'</div><div class="v">'+s[1]+
+      '<span class="u">'+s[2]+'</span></div><div class="d">'+s[3]+'</div></div>').join('');
+
+    const max=Math.max.apply(null,p.phases.map(x=>x[1]));
+    document.getElementById('phases').innerHTML = p.phases.map(x=>{
+      const pct=Math.round(x[1]/max*100), hot=pct>60?' hot':'';
+      return '<div class="prow'+hot+'"><span class="n">'+x[0]+'</span>'+
+        '<span class="bar"><i style="width:'+pct+'%"></i></span>'+
+        '<span class="ms">'+x[1]+'</span></div>';}).join('');
+
+    const G={pass:'✓',warn:'!',fail:'✕',na:'·'};
+    document.getElementById('invariants').innerHTML = p.inv.map(x=>
+      '<div class="ichip '+x[0]+'"><span class="g">'+G[x[0]]+'</span><span>'+x[1]+'</span></div>').join('');
+
+    document.getElementById('refusedWhy').textContent = p.refused || '';
+    reseed(); requestAnimationFrame(sizeSpark); setState(state);
+  }
+
+  // ---- state -------------------------------------------------------------
+  const bubble=document.getElementById('bubble'), panel=document.getElementById('panel'),
+        refused=document.getElementById('refused'), sheet=document.getElementById('sheet'),
+        scrim=document.getElementById('scrim');
+  function setState(s){
+    state=s;
+    const isRefused = !!P[cur].refused;
+    bubble.classList.toggle('hidden', s!=='bubble' || isRefused);
+    panel.classList.toggle('hidden', s==='bubble' || isRefused || s==='sheet' && false);
+    refused.classList.toggle('hidden', !(isRefused && s!=='sheet'));
+    sheet.classList.toggle('hidden', s!=='sheet');
+    scrim.classList.toggle('hidden', s!=='sheet');
+    if(isRefused && s==='sheet'){ panel.classList.add('hidden'); }
+    document.querySelectorAll('.states button').forEach(b=>
+      b.setAttribute('aria-pressed', String(b.dataset.state===s)));
+    if(s!=='bubble') requestAnimationFrame(sizeSpark);
+  }
+
+  document.getElementById('picker').innerHTML = ORDER.map(id=>
+    '<button data-p="'+id+'" aria-pressed="'+(id===cur)+'">'+id+'</button>').join('');
+  document.getElementById('picker').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    cur=b.dataset.p;
+    document.querySelectorAll('#picker button').forEach(x=>
+      x.setAttribute('aria-pressed', String(x.dataset.p===cur)));
+    applyProfile();
+  });
+  document.querySelectorAll('.states button').forEach(b=>
+    b.addEventListener('click',()=>setState(b.dataset.state)));
+  document.getElementById('collapse').addEventListener('click',()=>setState('bubble'));
+  document.getElementById('exportBtn').addEventListener('click',()=>setState('sheet'));
+  document.getElementById('doneBtn').addEventListener('click',()=>setState('bubble'));
+  document.getElementById('shareBtn').addEventListener('click',()=>setState('bubble'));
+  scrim.addEventListener('click',()=>setState('panel'));
+  function flash(btn,label){const o=btn.innerHTML;btn.innerHTML='<span class="g">✓</span>'+label;
+    setTimeout(()=>btn.innerHTML=o,900);}
+  document.getElementById('markBtn').addEventListener('click',e=>flash(e.currentTarget,'Marked'));
+  document.getElementById('snapBtn').addEventListener('click',e=>flash(e.currentTarget,'Saved'));
+
+  // ---- drag --------------------------------------------------------------
+  let dragging=false,moved=false,ox=0,oy=0,dRect=null;
+  bubble.addEventListener('pointerdown',e=>{dragging=true;moved=false;
+    const r=bubble.getBoundingClientRect(); dRect=document.getElementById('device').getBoundingClientRect();
+    ox=e.clientX-r.left; oy=e.clientY-r.top; bubble.setPointerCapture(e.pointerId);});
+  bubble.addEventListener('pointermove',e=>{if(!dragging)return;moved=true;
+    const r=bubble.getBoundingClientRect();
+    bubble.style.left=Math.max(6,Math.min(dRect.width-r.width-6,e.clientX-dRect.left-ox))+'px';
+    bubble.style.top=Math.max(6,Math.min(dRect.height-r.height-6,e.clientY-dRect.top-oy))+'px';});
+  bubble.addEventListener('pointerup',()=>{dragging=false;
+    if(!moved){setState('panel');return;}
+    const r=bubble.getBoundingClientRect(), cx=r.left-dRect.left+r.width/2;
+    bubble.style.left=(cx<dRect.width/2 ? 6 : dRect.width-r.width-6)+'px';});
+
+  // ---- loop --------------------------------------------------------------
+  let acc=0,last=performance.now();
+  function loop(now){
+    const dt=now-last; last=now; acc+=dt;
+    const v=nextValue(); drawApp(); drawSpark();
+    if(acc>380){acc=0;
+      document.getElementById('bVal').textContent=fmt(v);
+      document.getElementById('bMem').textContent=P[cur].stats[2][1]+' '+(P[cur].stats[2][2]||'');}
+    requestAnimationFrame(loop);
+  }
+  function resize(){sizeApp();sizeSpark();}
+  addEventListener('resize',resize);
+  resize(); applyProfile(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

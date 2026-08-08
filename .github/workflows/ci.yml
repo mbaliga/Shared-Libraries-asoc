@@ -53,6 +53,12 @@ jobs:
       - name: Cell-shell tests (:cell-shell:test)
         run: ./gradlew --no-daemon :cell-shell:test
 
+      # Diagnostics: percentiles, verdicts, invariants, redaction, report rendering, journal
+      # round-trip. Pure JVM, same "fails fast, no Android toolchain needed" reasoning as
+      # :search-core above.
+      - name: Diagnostics-core tests (:diagnostics-core:test)
+        run: ./gradlew --no-daemon :diagnostics-core:test
+
       # Guards the composite-build contract every consumer relies on: the release variant
       # must actually assemble, not just compile under test.
       - name: Assemble crash-recovery release (:crash-recovery:assembleRelease)
@@ -60,3 +66,21 @@ jobs:
 
       - name: Assemble cell-shell release (:cell-shell:assembleRelease)
         run: ./gradlew --no-daemon :cell-shell:assembleRelease
+
+      # diagnostics-android/-overlay have no test source of their own (the core is where the
+      # logic lives) — assembleRelease is the real gate: does the module actually build against
+      # a real Android SDK, which no JVM check can answer.
+      - name: Assemble diagnostics-android release (:diagnostics-android:assembleRelease)
+        run: ./gradlew --no-daemon :diagnostics-android:assembleRelease
+
+      - name: Assemble diagnostics-overlay release (:diagnostics-overlay:assembleRelease)
+        run: ./gradlew --no-daemon :diagnostics-overlay:assembleRelease
+
+      - name: Assemble diagnostics-noop release (:diagnostics-noop:assembleRelease)
+        run: ./gradlew --no-daemon :diagnostics-noop:assembleRelease
+
+      # scripts/check-noop-parity.py asserts diagnostics-noop mirrors diagnostics-android
+      # function-for-function and parameter-for-parameter — signature drift must fail here, not
+      # later in someone's release build.
+      - name: Diagnostics noop/android API parity
+        run: python3 scripts/check-noop-parity.py
