@@ -1,6 +1,8 @@
 package dev.aarso.diagnostics.overlay
 
 import android.app.Activity
+import android.app.Application
+import android.os.Bundle
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -44,6 +46,22 @@ object OverlayController : OverlayHost {
     private val REFUSED = setOf("ime", "wallpaper")
 
     private var view: OverlayView? = null
+    private var hostActivity: Activity? = null
+
+    // OverlayController is a process-lifetime singleton holding a strong View(Activity) reference;
+    // without this, an Activity finished/rotated while the overlay is showing (and never paired
+    // with an explicit hideOverlay()) stays reachable through that static field for the rest of the
+    // process's life. This watches specifically for the hosting Activity's own destruction and
+    // releases the reference automatically, on top of the existing explicit hide() path.
+    private val lifecycleWatcher = object : Application.ActivityLifecycleCallbacks {
+        override fun onActivityDestroyed(a: Activity) { if (a === hostActivity) hide() }
+        override fun onActivityCreated(a: Activity, b: Bundle?) {}
+        override fun onActivityStarted(a: Activity) {}
+        override fun onActivityResumed(a: Activity) {}
+        override fun onActivityPaused(a: Activity) {}
+        override fun onActivityStopped(a: Activity) {}
+        override fun onActivitySaveInstanceState(a: Activity, b: Bundle) {}
+    }
 
     override fun show(activity: Activity) {
         val profileId = Diagnostics.profile.id
@@ -60,11 +78,15 @@ object OverlayController : OverlayHost {
         root.addView(v, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         view = v
+        hostActivity = activity
+        activity.application.registerActivityLifecycleCallbacks(lifecycleWatcher)
     }
 
     override fun hide() {
         view?.let { v -> (v.parent as? ViewGroup)?.removeView(v) }
         view = null
+        hostActivity?.application?.unregisterActivityLifecycleCallbacks(lifecycleWatcher)
+        hostActivity = null
     }
 
     /** Pushed by the session so the overlay never has to reach into the collectors. */
@@ -89,10 +111,17 @@ internal class OverlayView(activity: Activity) : View(activity) {
     private val bar = Paint(Paint.ANTI_ALIAS_FLAG)
 
     /** The profile's first series decides what this panel is about. */
-    private val spec: SeriesSpec? = Diagnostics.profile.series.firstOrNull()
-    private val budgetMs: Double = spec?.let { if (it.resolved) it.overrunAtMs else 0.0 } ?: 0.0
-    private val title: String = spec?.title ?: "Diagnostics"
-    private val overrunWord: String = spec?.overrunWord ?: "overrun"
+    private val declaredSpec: SeriesSpec? = Diagnostics.profile.series.firstOrNull()
+
+    /**
+     * Re-read on every draw rather than captured once: the static [declaredSpec] is often
+     * unresolved (budgetMs = 0.0) at overlay-construction time, because the REAL budget (e.g. the
+     * actual vsync period) is only computed once a source resolves it inside the running Session --
+     * which happens after the overlay is already showing. Falls back to the static declaration
+     * before a session/source has resolved anything.
+     */
+    private fun currentSpec(): SeriesSpec? =
+        declaredSpec?.let { d -> Diagnostics.resolvedSeriesSpec(d.id) ?: d }
 
     private var expanded = false
     private var bubbleX = dp(14f)
@@ -118,9 +147,23 @@ internal class OverlayView(activity: Activity) : View(activity) {
         if (expanded) drawPanel(canvas) else drawBubble(canvas)
     }
 
-    private fun drawBubble(c: Canvas) {
+    /** Bubble bounds, shared between drawing and touch hit-testing so the two can never drift apart. */
+    private fun bubbleRect(): RectF {
         val w = dp(112f); val h = dp(38f)
-        val r = RectF(bubbleX, bubbleY, bubbleX + w, bubbleY + h)
+        return RectF(bubbleX, bubbleY, bubbleX + w, bubbleY + h)
+    }
+
+    /** Panel bounds, shared between drawing and touch hit-testing. */
+    private fun panelRect(): RectF {
+        val pad = dp(10f)
+        return RectF(pad, dp(88f), width - pad, dp(88f) + dp(300f))
+    }
+
+    private fun activeRect(): RectF = if (expanded) panelRect() else bubbleRect()
+
+    private fun drawBubble(c: Canvas) {
+        val h = dp(38f)
+        val r = bubbleRect()
         c.drawRoundRect(r, h / 2, h / 2, bg)
         c.drawRoundRect(r, h / 2, h / 2, stroke)
         bar.color = violet
@@ -135,8 +178,13 @@ internal class OverlayView(activity: Activity) : View(activity) {
     }
 
     private fun drawPanel(c: Canvas) {
+        val spec = currentSpec()
+        val budgetMs = spec?.let { if (it.resolved) it.overrunAtMs else 0.0 } ?: 0.0
+        val title = spec?.title ?: "Diagnostics"
+        val overrunWord = spec?.overrunWord ?: "overrun"
+
         val pad = dp(10f)
-        val r = RectF(pad, dp(88f), width - pad, dp(88f) + dp(300f))
+        val r = panelRect()
         c.drawRoundRect(r, dp(14f), dp(14f), bg)
         c.drawRoundRect(r, dp(14f), dp(14f), stroke)
 
@@ -176,6 +224,12 @@ internal class OverlayView(activity: Activity) : View(activity) {
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // This view is MATCH_PARENT over the whole decorView so it can be hit-tested first,
+                // but only the drawn bubble/panel should ever consume a touch -- otherwise a tap on
+                // the host app anywhere else on screen is silently swallowed by an invisible full-
+                // screen catch-all. An untouched host below only sees the event at all if this
+                // returns false here.
+                if (!activeRect().contains(e.x, e.y)) return false
                 downX = e.x - bubbleX; downY = e.y - bubbleY; dragged = false; return true
             }
             MotionEvent.ACTION_MOVE -> {

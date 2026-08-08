@@ -39,7 +39,11 @@ open class Redactor(private val rules: List<Rule> = defaultRules()) {
             Rule("aws-key", Regex("""\b(?:AKIA|ASIA)[0-9A-Z]{16}\b""")),
             Rule("email", Regex("""\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b""")),
             Rule("assignment", Regex("""(?i)\b(?:password|passwd|secret|token|api[_-]?key)\s*[=:]\s*\S+""")),
-            Rule("user-path", Regex("""/(?:data|storage)/(?:emulated/\d+|user/\d+)/[A-Za-z0-9._\-]+/[^\s"']*""")),
+            // "data" (the literal /data/data/<pkg>/... app-private-storage alias -- shows up
+            // constantly in Room/SQLite "unable to open database file" errors and crash traces)
+            // sits alongside emulated/N and user/N as a third valid segment after /data/, not
+            // covered by the original two-branch version of this rule.
+            Rule("user-path", Regex("""/(?:data/(?:emulated/\d+|user/\d+|data)|storage/(?:emulated/\d+|user/\d+))/[A-Za-z0-9._\-]+/[^\s"']*""")),
             Rule("ipv4", Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")),
         )
     }

@@ -9,6 +9,7 @@ import dev.aarso.diagnostics.core.Profile
 import dev.aarso.diagnostics.core.Profiles
 import dev.aarso.diagnostics.core.Redactor
 import dev.aarso.diagnostics.core.Report
+import dev.aarso.diagnostics.core.SeriesSpec
 import dev.aarso.diagnostics.core.Trigger
 import java.io.File
 
@@ -62,6 +63,7 @@ object Diagnostics {
     @JvmStatic fun attribute(key: String, value: String) = Unit
     @JvmStatic fun screenEntered(name: String) = Unit
     @JvmStatic fun screenExited(name: String) = Unit
+    @JvmStatic fun resolvedSeriesSpec(seriesId: String): SeriesSpec? = null
 
     // per-profile intake
     @JvmStatic @JvmOverloads fun frame(durationMs: Double, scene: String? = null) = Unit

@@ -91,7 +91,11 @@ object Diagnostics {
     @JvmStatic
     fun addSource(source: MetricSource) {
         registry.register(source)
-        if (isCapturing) source.start(session!!.sinkRef())
+        // One read of the volatile field, not two: `isCapturing` then a separate `session!!` is a
+        // check-then-act race against a concurrent endSession() on another thread (push sources are
+        // documented as constructed on whatever thread resolves their parameters, e.g. the audio
+        // thread), which can NPE on the `!!` after the field goes null in between.
+        session?.takeIf { it.isRunning }?.let { source.start(it.sinkRef()) }
     }
 
     @JvmStatic
@@ -144,6 +148,15 @@ object Diagnostics {
     @JvmStatic fun attribute(key: String, value: String) { session?.attribute(key, value) }
     @JvmStatic fun screenEntered(name: String) { session?.screenEntered(name) }
     @JvmStatic fun screenExited(name: String) { session?.screenExited(name) }
+
+    /**
+     * The runtime-resolved spec for a series, if a session is running and a source has resolved
+     * one -- e.g. the actual vsync budget for the display's current refresh rate, not the profile's
+     * static declaration. Falls back to null so a caller (the overlay) can fall back to the static
+     * [Profile] declaration itself.
+     */
+    @JvmStatic
+    fun resolvedSeriesSpec(seriesId: String): SeriesSpec? = session?.resolvedSpec(seriesId)
 
     // ------------------------------------------------------------------ per-profile intake
     // Thin pass-throughs to whichever source consumes them. Each is a no-op when the active profile
@@ -257,7 +270,13 @@ object Diagnostics {
     @JvmStatic
     fun recoverAbandonedSessions(): List<File> {
         val a = app ?: return emptyList()
-        return dev.aarso.diagnostics.export.JournalWriter.recoverAll(a, config)
+        // Exclude the session that is (or was, until a moment ago) running in THIS process: its
+        // journal is a live, in-progress file, not evidence of an abandoned run. Without this, the
+        // documented call pattern -- invoke right after install() -- recovers and deletes the
+        // just-started autoSession's own header-only journal, so a later real crash in the same run
+        // leaves a headerless journal (no H line survives) that the next launch's recovery pass
+        // can't resolve to a sessionId and silently discards.
+        return dev.aarso.diagnostics.export.JournalWriter.recoverAll(a, config, excludeSessionId = session?.id)
     }
 
     // ------------------------------------------------------------------ overlay

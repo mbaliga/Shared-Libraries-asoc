@@ -30,10 +30,15 @@ class ActivityFrameSource(
 
     override val id = "activity-frames"
 
-    private var sink: MetricSource.Sink? = null
+    @Volatile private var sink: MetricSource.Sink? = null
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
-    private val attached = mutableSetOf<Window>()
+    // Keeps the actual listener instance per window, not just a dedup marker, because removal
+    // requires handing the platform back the exact same object it was registered with.
+    private val attached = mutableMapOf<Window, Window.OnFrameMetricsAvailableListener>()
+    // Independent of `attached`/stop(): survives a stop()/start() cycle so a restarted session
+    // can re-listen to a screen that was already open and never received a fresh onActivityCreated.
+    private val liveActivities = mutableSetOf<Activity>()
     private var app: Application? = null
     private var seenFirstDraw = false
 
@@ -53,18 +58,26 @@ class ActivityFrameSource(
         thread = HandlerThread("diag-frames").apply { start() }
         handler = Handler(thread!!.looper)
         app?.registerActivityLifecycleCallbacks(this)
+        // startSession()/endSession() are a public start/stop toggle, so a session can begin while
+        // Activities are already on screen -- onActivityCreated only fires for a genuinely new
+        // Activity instance, so without this a restart on an already-open screen silently stops
+        // collecting from it.
+        liveActivities.toList().forEach { listen(it.window) }
     }
 
     override fun stop() {
         app?.unregisterActivityLifecycleCallbacks(this)
+        for ((window, listener) in attached)
+            runCatching { window.removeOnFrameMetricsAvailableListener(listener) }
+        attached.clear()
         thread?.quitSafely(); thread = null; handler = null
-        attached.clear(); sink = null
+        sink = null
     }
 
     internal fun listen(window: Window) {
-        if (!supported || !attached.add(window)) return
-        window.addOnFrameMetricsAvailableListener({ _, m, _ ->
-            val s = sink ?: return@addOnFrameMetricsAvailableListener
+        if (!supported || attached.containsKey(window)) return
+        val listener = Window.OnFrameMetricsAvailableListener { _, m, _ ->
+            val s = sink ?: return@OnFrameMetricsAvailableListener
             val first = !seenFirstDraw && m.getMetric(FrameMetrics.FIRST_DRAW_FRAME) == 1L
             if (first) seenFirstDraw = true
             s.observe("frames", Observation(
@@ -82,16 +95,23 @@ class ActivityFrameSource(
                 ),
                 first = first,
             ))
-        }, handler)
+        }
+        attached[window] = listener
+        window.addOnFrameMetricsAvailableListener(listener, handler)
     }
 
-    override fun onActivityCreated(a: Activity, b: Bundle?) { listen(a.window) }
+    override fun onActivityCreated(a: Activity, b: Bundle?) { liveActivities += a; listen(a.window) }
     override fun onActivityStarted(a: Activity) {}
     override fun onActivityResumed(a: Activity) {}
     override fun onActivityPaused(a: Activity) {}
     override fun onActivityStopped(a: Activity) {}
     override fun onActivitySaveInstanceState(a: Activity, b: Bundle) {}
-    override fun onActivityDestroyed(a: Activity) { attached.remove(a.window) }
+    override fun onActivityDestroyed(a: Activity) {
+        liveActivities -= a
+        attached.remove(a.window)?.let { listener ->
+            runCatching { a.window.removeOnFrameMetricsAvailableListener(listener) }
+        }
+    }
 }
 
 // ==================================================================== IME
@@ -122,10 +142,11 @@ class ImeFrameSource(
 
     override val id = "ime-frames"
 
-    private var sink: MetricSource.Sink? = null
+    @Volatile private var sink: MetricSource.Sink? = null
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
     private var attachedWindow: Window? = null
+    private var attachedListener: Window.OnFrameMetricsAvailableListener? = null
 
     override fun specs(): List<SeriesSpec> {
         val base = Profiles.ime().spec("frames")!!
@@ -145,17 +166,29 @@ class ImeFrameSource(
     }
 
     override fun stop() {
+        detachCurrent()
         thread?.quitSafely(); thread = null; handler = null
-        attachedWindow = null; sink = null
+        sink = null
+    }
+
+    private fun detachCurrent() {
+        val w = attachedWindow ?: return
+        val l = attachedListener ?: return
+        runCatching { w.removeOnFrameMetricsAvailableListener(l) }
+        attachedWindow = null
+        attachedListener = null
     }
 
     fun attach(window: Window?) {
         val s = sink ?: return
         if (window == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         if (attachedWindow === window) return
-        attachedWindow = window
-        window.addOnFrameMetricsAvailableListener({ _, m, _ ->
-            val sk = sink ?: return@addOnFrameMetricsAvailableListener
+        // An IME's window can be recreated (e.g. onCreateInputView() re-running after a config
+        // change), so the previous window's listener must be released here -- attach() only guarding
+        // identical-instance re-entry left it registered on an abandoned window forever otherwise.
+        detachCurrent()
+        val listener = Window.OnFrameMetricsAvailableListener { _, m, _ ->
+            val sk = sink ?: return@OnFrameMetricsAvailableListener
             sk.observe("frames", Observation(
                 tSec = sk.now(),
                 valueMs = m.ms(FrameMetrics.TOTAL_DURATION),
@@ -170,7 +203,10 @@ class ImeFrameSource(
                     "swap" to m.ms(FrameMetrics.SWAP_BUFFERS_DURATION),
                 ),
             ))
-        }, handler)
+        }
+        attachedWindow = window
+        attachedListener = listener
+        window.addOnFrameMetricsAvailableListener(listener, handler)
         s.fact("ime.window_attached", "true")
     }
 }
@@ -188,7 +224,7 @@ class ImeFrameSource(
 class WebViewRafSource : MetricSource {
 
     override val id = "webview-raf"
-    private var sink: MetricSource.Sink? = null
+    @Volatile private var sink: MetricSource.Sink? = null
 
     override fun specs(): List<SeriesSpec> = listOfNotNull(Profiles.ime().spec("webview.raf"))
 

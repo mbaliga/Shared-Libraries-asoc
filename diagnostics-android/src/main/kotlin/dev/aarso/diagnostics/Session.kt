@@ -28,7 +28,7 @@ internal class Session(
     private val registry: SourceRegistry,
 ) {
     val profile: Profile = config.profile
-    val id: String = buildId(app.packageName, label)
+    val id: String = buildId(app.packageName, label, config.redactor)
 
     private val startedWallMs = System.currentTimeMillis()
     private val startedElapsedMs = SystemClock.elapsedRealtime()
@@ -167,6 +167,9 @@ internal class Session(
     fun currentScreen(): String? = screenStack.lastOrNull()
     fun sinkRef(): MetricSource.Sink = sink
 
+    /** The RUNTIME-resolved spec for a series, if a source has supplied one. See [start]. */
+    fun resolvedSpec(seriesId: String): SeriesSpec? = synchronized(lock) { specs[seriesId] }
+
     // ------------------------------------------------------------------ assembly
 
     private fun snapshotCounters(): Map<String, Long> = synchronized(lock) { counters.toMap() }
@@ -274,8 +277,11 @@ internal class Session(
         val TIME = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
         val ID = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
 
-        fun buildId(pkg: String, label: String?): String =
+        fun buildId(pkg: String, label: String?, redactor: Redactor): String =
             "diag_${pkg}_${ID.format(Date())}" +
-                (label?.let { "_${it.replace(Regex("[^A-Za-z0-9._-]"), "-")}" } ?: "")
+                // Redact BEFORE the filename-safety sanitisation below: this id becomes both the
+                // report body's session id and the exported .md filename (see ReportWriter.write),
+                // so a secret-shaped label must never survive into it either way.
+                (label?.let { "_${redactor.redact(it).replace(Regex("[^A-Za-z0-9._-]"), "-")}" } ?: "")
     }
 }

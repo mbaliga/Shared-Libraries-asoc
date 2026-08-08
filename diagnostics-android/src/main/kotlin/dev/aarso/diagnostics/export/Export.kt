@@ -116,12 +116,16 @@ internal class JournalWriter(private val context: Context, private val sessionId
          * precisely the runs that leave no trace, and a history of clean reports can mean nothing
          * more than that the bad ones vanished.
          */
-        fun recoverAll(context: Context, config: Config): List<File> {
+        fun recoverAll(context: Context, config: Config, excludeSessionId: String? = null): List<File> {
             val dir = File(context.filesDir, "diagnostics-journal")
             val journals = dir.listFiles { f -> f.isFile && f.name.endsWith(".jrnl") }
                 ?: return emptyList()
             val out = mutableListOf<File>()
             for (j in journals) {
+                // The journal file name is exactly "$sessionId.jrnl" (see `file` above), so this is
+                // an exact, cheap exclusion of the currently-running session's own journal -- see
+                // Diagnostics.recoverAbandonedSessions() for why that exclusion has to exist at all.
+                if (excludeSessionId != null && j.name == "$excludeSessionId.jrnl") continue
                 val rec = runCatching { Journal.parse(j.readLines()) }.getOrNull()
                 if (rec == null) { j.delete(); continue }
                 val profile = Profiles.byId(rec.profileId) ?: config.profile
