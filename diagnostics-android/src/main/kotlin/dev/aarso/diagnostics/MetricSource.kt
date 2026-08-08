@@ -76,11 +76,17 @@ interface MetricSource {
  */
 class SourceRegistry {
 
+    private val lock = Any()
     private val sources = LinkedHashMap<String, MetricSource>()
 
-    fun register(source: MetricSource) { sources[source.id] = source }
-    fun get(id: String): MetricSource? = sources[id]
-    fun all(): List<MetricSource> = sources.values.toList()
+    // addSource() can register a push source from an arbitrary app thread (e.g. once an audio
+    // engine resolves its negotiated buffer size) while Session.start()/stop() iterate all() on
+    // whatever thread started/ended the session -- an unsynchronized LinkedHashMap turns that into
+    // a fail-fast-iterator/corruption hazard, so every access goes through the same lock.
+    fun register(source: MetricSource) { synchronized(lock) { sources[source.id] = source } }
+    fun get(id: String): MetricSource? = synchronized(lock) { sources[id] }
+    fun all(): List<MetricSource> = synchronized(lock) { sources.values.toList() }
 
-    fun missingFor(expected: List<String>): List<String> = expected.filterNot { sources.containsKey(it) }
+    fun missingFor(expected: List<String>): List<String> =
+        synchronized(lock) { expected.filterNot { sources.containsKey(it) } }
 }

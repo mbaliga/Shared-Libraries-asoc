@@ -227,6 +227,15 @@ private fun redactorChecks() {
     check("ordinary line untouched",
         red.redact("atlas upload id=93 size=2048x2048") == "atlas upload id=93 size=2048x2048")
     check("version string not eaten by ipv4 rule", red.redact("version 0.4.2 (42)") == "version 0.4.2 (42)")
+
+    check("user-path /data/user/N/... redacted",
+        red.redact("/data/user/0/com.example.app/files/secret.db").contains("<redacted:user-path>"))
+    check("user-path /storage/emulated/N/... redacted",
+        red.redact("/storage/emulated/0/Download/notes.txt").contains("<redacted:user-path>"))
+    check("user-path /data/data/<pkg>/... redacted -- the app-private-storage alias Room/SQLite errors use",
+        red.redact("unable to open database file: /data/data/com.example.app/databases/x.db").contains("<redacted:user-path>"))
+    check("user-path redaction does not leak the package name",
+        !red.redact("/data/data/com.example.app/files/secret.db").contains("com.example.app"))
 }
 
 // ==================================================================== invariants
@@ -552,6 +561,25 @@ private fun reporterChecks() {
     check("profile notes carried into the report",
         md.contains("hottest thing a phone does"))
     check("plausible size", md.length in 4_000..80_000, "got ${md.length}")
+
+    // A session label is user-supplied (Diagnostics.startSession(label = ...)) and can carry
+    // anything a caller typed, including something secret-shaped -- same threat as a fact or
+    // attribute, so it must be redacted the same way.
+    val leakyLabel = r.copy(session = r.session.copy(label = "token=hunter2secret"))
+    val leakyLabelMd = MarkdownReporter(p).render(leakyLabel)
+    check("session label is redacted, not printed raw",
+        !leakyLabelMd.contains("hunter2secret") && leakyLabelMd.contains("<redacted:"))
+
+    // Bucket is also caller-supplied per observation (Observation(bucket = ...)); the endpoint/
+    // scene/channel a bucket names can itself be secret-shaped (e.g. a URL with a token in it).
+    val leakyBucketSpec = p.spec("pose.inference")!!
+        .resolve(Stats.rateBudget(30.0), "33.33 ms (one capture period)")
+    val leakyBucketObs = List(50) { Observation(it / 30.0, 40.0,
+        bucket = "https://api.example.com/x?token=hunter2secret") }
+    val leakyBucketReport = r.copy(series = listOf(Stats.seriesReport(leakyBucketObs, leakyBucketSpec, 5.0)))
+    val leakyBucketMd = MarkdownReporter(p).render(leakyBucketReport)
+    check("bucket column is redacted in the 'By bucket' table and worst-observations table",
+        !leakyBucketMd.contains("hunter2secret") && leakyBucketMd.contains("<redacted:"))
 
     java.io.File("/tmp/samples").mkdirs()
     java.io.File("/tmp/samples/SAMPLE_REPORT_vision-pipeline.md").writeText(md)

@@ -45,7 +45,7 @@ class ManualFrameSource(
 
     override val id = "manual-frames"
 
-    private var sink: MetricSource.Sink? = null
+    @Volatile private var sink: MetricSource.Sink? = null
 
     @Volatile private var visible: Boolean = true
     @Volatile private var gcAtDrawStart: Int = 0
@@ -138,7 +138,7 @@ class AudioCallbackSource(
 ) : MetricSource {
 
     override val id = "audio-callback"
-    private var sink: MetricSource.Sink? = null
+    @Volatile private var sink: MetricSource.Sink? = null
 
     override fun specs(): List<SeriesSpec> {
         val p = Profiles.audio()
@@ -212,7 +212,7 @@ class PipelineSource(
 ) : MetricSource {
 
     override val id = "pipeline"
-    private var sink: MetricSource.Sink? = null
+    @Volatile private var sink: MetricSource.Sink? = null
     private var lastArrivalNs: Long = 0
 
     override fun specs(): List<SeriesSpec> {
@@ -292,7 +292,7 @@ class StreamIntegritySource(
 ) : MetricSource {
 
     override val id = "stream-integrity"
-    private var sink: MetricSource.Sink? = null
+    @Volatile private var sink: MetricSource.Sink? = null
     private var lastSampleNs: Long = 0
 
     override fun specs(): List<SeriesSpec> {
@@ -356,7 +356,8 @@ class StreamIntegritySource(
 class RequestSource : MetricSource {
 
     override val id = "request"
-    private var sink: MetricSource.Sink? = null
+    @Volatile private var sink: MetricSource.Sink? = null
+    private val queueLock = Any()
     private var queueDepth = 0
     private var maxQueueDepth = 0
 
@@ -389,17 +390,24 @@ class RequestSource : MetricSource {
         s.observe("model.load", Observation(s.now(), ms, bucket = model))
     }
 
+    // ASOM serves requests concurrently, so enqueue()/dequeue() can race across request-handling
+    // threads; a plain queueDepth++/-- is a non-atomic read-modify-write that silently drops
+    // increments under contention and corrupts the exact "bounded queue depth" invariant this
+    // metric feeds.
     fun enqueue() {
-        queueDepth++
-        if (queueDepth > maxQueueDepth) {
-            maxQueueDepth = queueDepth
-            // A high-water mark is a gauge, not a tally — incrementing here would report how many
-            // times the maximum moved rather than what it reached.
-            sink?.set("queue.max_depth", maxQueueDepth.toLong())
+        var depth = 0
+        var newMax = false
+        synchronized(queueLock) {
+            queueDepth++
+            depth = queueDepth
+            if (depth > maxQueueDepth) { maxQueueDepth = depth; newMax = true }
         }
+        // A high-water mark is a gauge, not a tally — incrementing here would report how many
+        // times the maximum moved rather than what it reached.
+        if (newMax) sink?.set("queue.max_depth", depth.toLong())
     }
 
-    fun dequeue() { if (queueDepth > 0) queueDepth-- }
+    fun dequeue() { synchronized(queueLock) { if (queueDepth > 0) queueDepth-- } }
 
     fun modelFacts(modelId: String, quant: String, runtime: String) {
         sink?.fact("model.id", modelId)
@@ -420,7 +428,7 @@ class RequestSource : MetricSource {
 class InputLatencySource : MetricSource {
 
     override val id = "input-latency"
-    private var sink: MetricSource.Sink? = null
+    @Volatile private var sink: MetricSource.Sink? = null
     private var keyDownNs: Long = 0
 
     override fun specs(): List<SeriesSpec> =

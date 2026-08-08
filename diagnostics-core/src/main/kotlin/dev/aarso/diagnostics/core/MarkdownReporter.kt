@@ -159,7 +159,7 @@ class MarkdownReporter(
         sb.line("## Context")
         sb.blank()
         val d = r.device
-        sb.line("**Session** `${r.session.id}` · label `${r.session.label ?: "—"}` · started " +
+        sb.line("**Session** `${r.session.id}` · label `${r.session.label?.let { redactor.redact(it) } ?: "—"}` · started " +
             "${r.session.startedAtIso} · duration ${f(r.session.durationSec, 1)} s · trigger " +
             "`${r.session.trigger.name.lowercase().replace('_', '-')}`" +
             if (r.session.recovered) " · **recovered from journal**" else "")
@@ -241,7 +241,7 @@ class MarkdownReporter(
             sb.blank()
             sb.line("| ${spec.bucketLabel ?: "Bucket"} | n | ${spec.overrunWord} rate | p95 | p99 | first |")
             sb.line("|---|---|---|---|---|---|")
-            for (b in s.buckets) sb.line("| ${b.bucket} | ${grp(b.stats.count)} | " +
+            for (b in s.buckets) sb.line("| ${redactor.redact(b.bucket)} | ${grp(b.stats.count)} | " +
                 "${f(b.stats.overrunRatePct)} % | ${f(b.stats.p95)} ms | ${f(b.stats.p99)} ms | " +
                 "${b.firstMs?.let { "${f(it, 0)} ms" } ?: "—"} |")
             sb.blank()
@@ -271,7 +271,7 @@ class MarkdownReporter(
             s.worst.forEachIndexed { i, o ->
                 sb.line("| ${i + 1} | ${f(o.tSec)} | ${f(o.valueMs, 1)} | " +
                     phases.joinToString(" | ") { f(o.phases[it] ?: 0.0, 1) } +
-                    " | ${o.bucket ?: "—"} |")
+                    " | ${o.bucket?.let { redactor.redact(it) } ?: "—"} |")
             }
             sb.blank()
             sb.line("All times in ms.")

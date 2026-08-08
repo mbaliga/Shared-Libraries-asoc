@@ -220,10 +220,20 @@ internal object StartupTracker : android.app.Application.ActivityLifecycleCallba
     private var firstActivityCreateMs = 0L
     private var firstResumeMs = 0L
     private var firstFrameMs = 0L
-    private var activityCount = 0
     private var warmMs: Double? = null
     private var hotMs: Double? = null
     private var resumeStartMs = 0L
+
+    // A relaunch (warm or hot) is only meaningful for a resume that follows the app actually
+    // leaving the foreground -- ordinary forward navigation to a new screen resumes an activity
+    // without the app ever backgrounding, and is neither. startedCount tracks that transition;
+    // createsWhileBackground distinguishes "activity had to be recreated" (warm) from "the same
+    // instance came back" (hot); relaunchMeasured makes it a one-shot capture of the first genuine
+    // relaunch rather than an overwrite on every later transition.
+    private var startedCount = 0
+    private var backgrounded = false
+    private var createsWhileBackground = 0
+    private var relaunchMeasured = false
 
     fun attach(app: android.app.Application) {
         appOnCreateMs = SystemClock.elapsedRealtime()
@@ -236,25 +246,33 @@ internal object StartupTracker : android.app.Application.ActivityLifecycleCallba
 
     override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {
         if (firstActivityCreateMs == 0L) firstActivityCreateMs = SystemClock.elapsedRealtime()
-        activityCount++
+        if (backgrounded) createsWhileBackground++
     }
 
     override fun onActivityStarted(a: android.app.Activity) {
         resumeStartMs = SystemClock.elapsedRealtime()
+        startedCount++
     }
 
     override fun onActivityResumed(a: android.app.Activity) {
         val now = SystemClock.elapsedRealtime()
         if (firstResumeMs == 0L) { firstResumeMs = now; onFirstFrame(); return }
-        // Warm: the process lived but the activity was recreated. Hot: both survived.
-        val delta = (now - resumeStartMs).toDouble()
-        if (activityCount > 1) warmMs = delta else hotMs = delta
+        if (backgrounded && !relaunchMeasured) {
+            relaunchMeasured = true
+            // Warm: the process lived but the activity was recreated. Hot: both survived.
+            val delta = (now - resumeStartMs).toDouble()
+            if (createsWhileBackground > 0) warmMs = delta else hotMs = delta
+        }
+        backgrounded = false
     }
 
     override fun onActivityPaused(a: android.app.Activity) {}
-    override fun onActivityStopped(a: android.app.Activity) {}
+    override fun onActivityStopped(a: android.app.Activity) {
+        startedCount--
+        if (startedCount <= 0) { backgrounded = true; createsWhileBackground = 0 }
+    }
     override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
-    override fun onActivityDestroyed(a: android.app.Activity) { activityCount-- }
+    override fun onActivityDestroyed(a: android.app.Activity) {}
 
     fun section(): StartupSection? {
         if (firstFrameMs == 0L) return StartupSection(null, emptyList(), warmMs, hotMs)
