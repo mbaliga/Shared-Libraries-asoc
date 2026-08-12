@@ -6,10 +6,13 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -111,6 +114,16 @@ fun SpatialShell(
     val density = LocalDensity.current
     val bandPx = with(density) { BAND_DP.dp.toPx() }
     val edgePx = with(density) { EDGE_DP.dp.toPx() }
+    // The status bar strip is not ours to claim, however edge-to-edge our own window is.
+    // SystemUI's notification-shade gesture sits in a window layer above the app and takes
+    // first touch on the physical status bar regardless of what the app draws there or how
+    // widely its own pointerInput listens -- an app cannot out-consume it. Left unaccounted
+    // for, EDGE_DP's top zone spans BOTH that dead strip and the live app content below it,
+    // so a top-edge pull is a coin flip: land in the strip and the OS shade opens instead of
+    // the room; land just below it and the room opens as designed. Starting the top zone
+    // after the status bar removes the coin flip entirely, and it costs the gesture nothing
+    // real: the strip was never reachable to begin with.
+    val topInsetPx = WindowInsets.statusBars.getTop(density).toFloat()
 
     // Read the axes in composition: the conditional room subtrees below depend on them, so the
     // shell has to recompose as they move anyway. The card's own translation is still deferred
@@ -130,6 +143,7 @@ fun SpatialShell(
             .spatialEdgeDrag(
                 controller = controller,
                 edgePx = edgePx,
+                topInsetPx = topInsetPx,
                 hasLeft = left != null,
                 hasRight = right != null,
                 hasTop = top != null,
@@ -263,7 +277,9 @@ fun SpatialShell(
         if (controller.atHome) {
             if (left != null) EdgePeek(Alignment.CenterStart, accentColor)
             if (right != null) EdgePeek(Alignment.CenterEnd, accentColor)
-            if (top != null) EdgePeek(Alignment.TopCenter, accentColor, vertical = true)
+            // Below the status bar, same reasoning as topInsetPx above: a hint drawn where the
+            // gesture cannot actually be claimed teaches the wrong spot to pull from.
+            if (top != null) EdgePeek(Alignment.TopCenter, accentColor, vertical = true, belowStatusBar = true)
             if (bottom != null) EdgePeek(Alignment.BottomCenter, accentColor, vertical = true)
         }
     }
@@ -271,10 +287,16 @@ fun SpatialShell(
 
 /** The at-rest hint on one edge. [vertical] means the edge is horizontal, so the pill lies flat. */
 @Composable
-private fun BoxScope.EdgePeek(alignment: Alignment, accentColor: Color, vertical: Boolean = false) {
+private fun BoxScope.EdgePeek(
+    alignment: Alignment,
+    accentColor: Color,
+    vertical: Boolean = false,
+    belowStatusBar: Boolean = false,
+) {
     Box(
         modifier = Modifier
             .align(alignment)
+            .then(if (belowStatusBar) Modifier.statusBarsPadding() else Modifier)
             .padding(8.dp)
             .then(
                 if (vertical) Modifier.size(width = 56.dp, height = 4.dp)
@@ -301,22 +323,28 @@ private fun BoxScope.EdgePeek(alignment: Alignment, accentColor: Color, vertical
  * [hasLeft]/[hasRight]/[hasTop]/[hasBottom] are the host's populated edges. A missing edge is
  * never an origin, so its drag is refused outright — and because the direction clamps below are
  * derived from the same flags, even a diagonal that engages the other way clamps that axis to 0.
+ *
+ * [topInsetPx] moves the top edge's acquisition zone below the status bar rather than
+ * shrinking it: the zone stays [EDGE_DP] tall, it just starts where a touch can actually
+ * reach the app. The status bar strip itself is never a legal origin — see the KDoc on the
+ * call site in [SpatialShell] for why competing with SystemUI there cannot be won.
  */
 private fun Modifier.spatialEdgeDrag(
     controller: SpatialController,
     edgePx: Float,
+    topInsetPx: Float,
     hasLeft: Boolean,
     hasRight: Boolean,
     hasTop: Boolean,
     hasBottom: Boolean,
-): Modifier = pointerInput(controller, edgePx, hasLeft, hasRight, hasTop, hasBottom) {
+): Modifier = pointerInput(controller, edgePx, topInsetPx, hasLeft, hasRight, hasTop, hasBottom) {
     awaitEachGesture {
         val down = awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
         // Only home opens rooms. Once one is open, the parked card's return-drag owns the shell.
         if (!controller.atHome) return@awaitEachGesture
         val fromLeft = hasLeft && down.position.x <= edgePx
         val fromRight = hasRight && down.position.x >= size.width - edgePx
-        val fromTop = hasTop && down.position.y <= edgePx
+        val fromTop = hasTop && down.position.y in topInsetPx..(topInsetPx + edgePx)
         val fromBottom = hasBottom && down.position.y >= size.height - edgePx
         if (!fromLeft && !fromRight && !fromTop && !fromBottom) return@awaitEachGesture
 
