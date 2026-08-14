@@ -56,6 +56,29 @@ object SpatialMotion {
     /** Scrim over the parked card at full open — quiets its content so it cannot read as overlap. */
     const val PARK_SCRIM_ALPHA = 0.62f
 
+    /**
+     * How far the card turns about its hinge edge at full open, in degrees, under
+     * [ParkStyle.SWIVEL].
+     *
+     * Deliberately small. The reference (Honor's Magic Portal) reads as a door easing open, not
+     * as a card thrown edge-on; and every degree here is bought out of the grab band, since a
+     * turned surface presents less of itself to the screen (see [swivelForeshorten]). Ten degrees
+     * is enough for the eye to read depth and cheap enough that the band survives it.
+     */
+    const val PARK_SWIVEL_DEG = 10f
+
+    /**
+     * Perspective strength for the swivel, expressed in **card widths**.
+     *
+     * Compose's `cameraDistance` is in units of 72 pixels — it is an inch measure, not a pixel
+     * one — and its default of 8f therefore puts the camera 576px from a pane that may be 1080px
+     * wide. At that distance a modest rotation throws the near edge into violent perspective, and
+     * past roughly 32 degrees the far edge crosses behind the camera plane entirely, where
+     * pointer mapping stops being meaningful. Expressing the distance relative to the card and
+     * resolving it at the call site keeps the perspective honest on any screen.
+     */
+    const val PARK_CAMERA_DISTANCE_CARDS = 3f
+
     /** Past this fraction of travel, release completes the transition rather than retreating. */
     const val SETTLE_THRESHOLD = 0.5f
 
@@ -222,6 +245,52 @@ fun settleTarget(value: Float, lastDelta: Float): Float {
  */
 fun parkDistance(extent: Float, scale: Float, bandPx: Float): Float =
     extent * (1f + scale) / 2f - bandPx
+
+/**
+ * How the home card leaves the screen when a room opens.
+ *
+ * Both styles shrink the card — the shrink is what makes it read as a card rather than as the
+ * screen sliding away, and it is common to both. They differ in whether the card also *turns*.
+ *
+ * @see SLIDE
+ * @see SWIVEL
+ */
+enum class ParkStyle {
+    /**
+     * Shrink and slide. The card stays flat to the screen and translates towards its band.
+     *
+     * The default, and unchanged from what the shell has always done, so an app that says nothing
+     * keeps exactly the motion it had.
+     */
+    SLIDE,
+
+    /**
+     * Shrink and swivel. The card additionally turns about the hinge edge that stays on screen,
+     * so it reads as a panel swinging open rather than a rectangle sliding off — the Magic Portal
+     * shape (owner, 2026-08-14: *"add the swivel while keeping the slight shrink"*).
+     *
+     * The hinge is always the edge that remains visible as the grab band, which is the edge the
+     * user would physically be holding: opening the room on the right hinges the card's left
+     * edge, and vice versa.
+     */
+    SWIVEL,
+}
+
+/**
+ * How much of a turned surface's extent still faces the screen, as a fraction.
+ *
+ * A swivelled card presents its width foreshortened by `cos(angle)`, which comes directly out of
+ * the grab band: at 10 degrees a 72dp band would render as roughly 71dp, and at angles where the
+ * swivel starts to look dramatic the band falls below the 48dp minimum touch target the shell
+ * guarantees. Callers use this to widen the park translation by exactly the amount the rotation
+ * took away, so the band that is *seen* stays the band that was *promised*.
+ *
+ * Pure and separate from the shell so the compensation can be asserted rather than eyeballed.
+ *
+ * @param degrees the swivel angle actually applied, already scaled by openness.
+ */
+fun swivelForeshorten(degrees: Float): Float =
+    kotlin.math.cos(degrees * kotlin.math.PI.toFloat() / 180f).coerceIn(0.01f, 1f)
 
 /** Remembers a [SpatialController] scoped to the composition. The shell's entry point. */
 @Composable

@@ -1,0 +1,77 @@
+package dev.aarso.cellshell
+
+import kotlin.math.abs
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The swivel park (owner, 2026-08-14: *"add the swivel while keeping the slight shrink"*) turns
+ * the parked card about its hinge edge. Turning a surface foreshortens it, and what it
+ * foreshortens is the grab band the shell guarantees stays on screen — so the compensation is
+ * not cosmetic, it is what keeps the band touchable. These pin that arithmetic, which is the
+ * only part of the swivel that can be checked without a device.
+ */
+class SwivelParkTest {
+
+    @Test
+    fun `no rotation foreshortens nothing`() {
+        assertEquals(1f, swivelForeshorten(0f), 1e-6f)
+    }
+
+    @Test
+    fun `foreshortening falls off as the card turns away`() {
+        val gentle = swivelForeshorten(10f)
+        val steep = swivelForeshorten(45f)
+        assertTrue("a turned card presents less of itself", gentle < 1f)
+        assertTrue("turning further presents less still", steep < gentle)
+    }
+
+    @Test
+    fun `the shells swivel angle costs the band only a few percent`() {
+        // The whole reason PARK_SWIVEL_DEG is small. At 10 degrees a 72dp band renders as ~70.9dp;
+        // if this ever drops far below the 48dp touch minimum the angle has gone too far.
+        val kept = swivelForeshorten(SpatialMotion.PARK_SWIVEL_DEG)
+        assertTrue("kept=$kept", kept > 0.98f)
+        val bandDp = 72f
+        assertTrue("band would fall below the 48dp minimum", bandDp * kept > 48f)
+    }
+
+    @Test
+    fun `compensating the park travel restores the promised band exactly`() {
+        // The shell divides the band by the foreshortening before handing it to parkDistance.
+        // Applying the rotation to that widened band must land back on the original.
+        val band = 72f
+        val degrees = SpatialMotion.PARK_SWIVEL_DEG
+        val widened = band / swivelForeshorten(degrees)
+        val seenAfterRotation = widened * swivelForeshorten(degrees)
+        assertEquals(band, seenAfterRotation, 1e-3f)
+        assertTrue("compensation must widen, never narrow", widened > band)
+    }
+
+    @Test
+    fun `the compensation is a no-op when the card is not swivelled`() {
+        // SLIDE hosts must get byte-identical travel to what they had before ParkStyle existed.
+        val band = 72f
+        assertEquals(
+            parkDistance(2400f, scale = 0.9f, bandPx = band),
+            parkDistance(2400f, scale = 0.9f, bandPx = band / swivelForeshorten(0f)),
+            1e-4f,
+        )
+    }
+
+    @Test
+    fun `foreshortening is clamped so an edge-on card can never invert the travel`() {
+        // Guards a division by ~0 in the shell's band compensation.
+        assertTrue(swivelForeshorten(90f) > 0f)
+        assertTrue(swivelForeshorten(180f) > 0f)
+        assertTrue(abs(swivelForeshorten(90f)) >= 0.01f)
+    }
+
+    @Test
+    fun `both park styles exist and slide is the default-compatible one`() {
+        assertEquals(2, ParkStyle.entries.size)
+        assertTrue(ParkStyle.entries.contains(ParkStyle.SLIDE))
+        assertTrue(ParkStyle.entries.contains(ParkStyle.SWIVEL))
+    }
+}

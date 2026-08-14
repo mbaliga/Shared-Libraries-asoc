@@ -103,6 +103,10 @@ data class WheelItem(val id: String, val label: String)
  *   was always a placeholder for exactly this (owner, 2026-08-09).
  * @param trailing optional content drawn after the selected row's word — a count, a spinner.
  *   Only the selected row gets it; on every other row it would compete with the words.
+ * @param markerWidth the gutter reserved for the marker on every row, so the words keep one
+ *   optical left edge whether or not a marker is beside them. Widen it when the marker is more
+ *   than a glyph — a host showing a stack of covers needs room the default 30dp does not have.
+ * @param markerHeight the marker's vertical extent, centred on its row.
  */
 @Composable
 fun WordWheelRail(
@@ -114,6 +118,8 @@ fun WordWheelRail(
     modifier: Modifier = Modifier,
     marker: @Composable (WheelItem) -> Unit = { DefaultMarker(accentColor) },
     trailing: @Composable (WheelItem) -> Unit = {},
+    markerWidth: Dp = BULLET_GUTTER.dp,
+    markerHeight: Dp = MARKER_SIZE.dp,
 ) {
     if (items.isEmpty()) return
 
@@ -217,6 +223,7 @@ fun WordWheelRail(
                     distance = { index - scrollRows() },
                     onClick = { if (item.id != selectedId) onSelect(item.id) },
                     trailing = trailing,
+                    gutter = markerWidth,
                 )
             }
             Spacer(Modifier.height(padDp))
@@ -228,11 +235,11 @@ fun WordWheelRail(
         // it tracks a turn frame by frame without recomposing.
         val markerItem = items.getOrNull(selectedIndex)
         if (markerItem != null) {
-            val markerHalfPx = with(density) { (MARKER_SIZE / 2f).dp.toPx() }
+            val markerHalfPx = with(density) { markerHeight.toPx() / 2f }
             Box(
                 modifier = Modifier
-                    .width(BULLET_GUTTER.dp)
-                    .height(MARKER_SIZE.dp)
+                    .width(markerWidth)
+                    .height(markerHeight)
                     .offset {
                         IntOffset(
                             0,
@@ -288,6 +295,7 @@ private fun WheelRow(
     distance: () -> Float,
     onClick: () -> Unit,
     trailing: @Composable (WheelItem) -> Unit,
+    gutter: Dp,
 ) {
     // Weight is a text-layout property, so unlike alpha it cannot be deferred to the draw phase —
     // it costs a re-layout. [wheelFontWeight] quantises it so that cost is paid a handful of times
@@ -316,7 +324,7 @@ private fun WheelRow(
     ) {
         // Fixed gutter so every word sits on one optical left edge whether or not the bullet is
         // beside it — the words must not shuffle sideways when selection moves.
-        Spacer(Modifier.width(BULLET_GUTTER.dp))
+        Spacer(Modifier.width(gutter))
         BasicText(
             text = item.label,
             style = TextStyle(

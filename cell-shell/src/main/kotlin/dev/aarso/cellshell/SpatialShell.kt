@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -47,6 +48,16 @@ private const val GRIP_INSET_DP = 34f
 
 /** Alpha of the grip pill at full open; it fades in with the lift so it never blinks on. */
 private const val GRIP_ALPHA = 0.9f
+
+/**
+ * The pixel value of one unit of Compose's `cameraDistance`.
+ *
+ * `cameraDistance` is documented in inches at a nominal 72 pixels per inch, NOT in pixels, and
+ * that is the whole reason its default of 8f is unusable for a full-screen pane: it places the
+ * camera 576px away. Named rather than inlined because a bare `/ 72f` next to a rotation reads
+ * like an arbitrary fudge and is exactly the kind of line someone deletes while simplifying.
+ */
+private const val DEFAULT_CAMERA_DISTANCE_PX = 72f
 
 /**
  * Alpha of an edge affordance at rest — loud enough to be noticed once, quiet enough to ignore
@@ -96,6 +107,9 @@ internal const val EDGE_REST_ALPHA = 0.35f
  * @param accentColor the ring around the parked card and the colour of the grip and edge peeks.
  * @param scrimColor the room floor behind everything, and the scrim that quiets the parked card.
  * @param cardColor the raised surface of the home card, so it reads as above the room floor.
+ * @param parkStyle whether the parked card merely slides away or also turns about its hinge
+ *   edge. Both shrink it; see [ParkStyle]. Defaults to [ParkStyle.SLIDE], which is the motion
+ *   this shell has always had, so an app that says nothing sees no change.
  * @param home the surface the app lives on. Always composed, always alive — even while parked.
  */
 @Composable
@@ -109,6 +123,7 @@ fun SpatialShell(
     right: (@Composable () -> Unit)? = null,
     top: (@Composable () -> Unit)? = null,
     bottom: (@Composable () -> Unit)? = null,
+    parkStyle: ParkStyle = ParkStyle.SLIDE,
     home: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -195,8 +210,15 @@ fun SpatialShell(
         }
 
         // ── The home card: live, lifted and parked while a room is open ───────────────
-        val tx = (hProgress * parkDistance(w, scale, bandPx)).roundToInt()
-        val ty = (vProgress * parkDistance(hgt, scale, bandPx)).roundToInt()
+        // Under SWIVEL the card turns about its hinge edge, which foreshortens it: the band it
+        // leaves on screen is cos(angle) of what a flat card would leave. That is taken straight
+        // out of the grab band, and BAND_DP is a documented 72dp minimum, so the park travel is
+        // reduced by exactly what the rotation took away rather than letting the band silently
+        // shrink below a touchable size.
+        val swivelDeg = if (parkStyle == ParkStyle.SWIVEL) SpatialMotion.PARK_SWIVEL_DEG * lift else 0f
+        val bandKeep = if (swivelDeg == 0f) bandPx else bandPx / swivelForeshorten(swivelDeg)
+        val tx = (hProgress * parkDistance(w, scale, bandKeep)).roundToInt()
+        val ty = (vProgress * parkDistance(hgt, scale, bandKeep)).roundToInt()
         val cardShape = RoundedCornerShape((SpatialMotion.PARK_CORNER_DP * lift).dp)
         Box(
             modifier = Modifier
@@ -206,6 +228,39 @@ fun SpatialShell(
                 // pixels but leaves hit-testing where the card used to be, so the card would
                 // draw over there and answer touches over here.
                 .offset { IntOffset(tx, ty) }
+                // The swivel is its OWN layer, ahead of the scale/shape one below, and the two
+                // must not be merged. transformOrigin is per-layer: hinging the rotation on an
+                // edge would drag the *scale* pivot onto that edge too, and parkDistance's
+                // arithmetic assumes the card scales about its centre. Two layers keeps each
+                // transform on the origin it was designed around.
+                //
+                // Pointer input survives this: Compose maps pointers back through the full layer
+                // matrix (NodeCoordinator.fromParentPosition -> OwnedLayer.mapOffset(inverse)),
+                // perspective divide included, so the card answers touches where it is drawn. The
+                // guard that matters is cameraDistance -- at Compose's default the far edge
+                // crosses behind the camera at large angles, where that mapping stops being
+                // meaningful. PARK_SWIVEL_DEG is nowhere near it, and the distance below keeps
+                // the margin proportional to the card rather than fixed in pixels.
+                .then(
+                    if (swivelDeg == 0f) {
+                        Modifier
+                    } else {
+                        Modifier.graphicsLayer {
+                            // Hinge on the edge that stays on screen as the band: the room opens
+                            // on the far side, so the card turns away from it like a door.
+                            transformOrigin = TransformOrigin(
+                                pivotFractionX = if (hProgress < 0f) 0f else if (hProgress > 0f) 1f else 0.5f,
+                                pivotFractionY = if (vProgress < 0f) 0f else if (vProgress > 0f) 1f else 0.5f,
+                            )
+                            // Negative for a right-hand room (hProgress < 0) so the free edge
+                            // recedes rather than swinging out of the screen towards the viewer.
+                            rotationY = -swivelDeg * hProgress
+                            rotationX = swivelDeg * vProgress
+                            cameraDistance = size.width.coerceAtLeast(1f) *
+                                SpatialMotion.PARK_CAMERA_DISTANCE_CARDS / DEFAULT_CAMERA_DISTANCE_PX
+                        }
+                    },
+                )
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
@@ -256,14 +311,24 @@ fun SpatialShell(
                             Modifier.align(Alignment.CenterEnd).padding(end = GRIP_INSET_DP.dp)
                                 .size(width = 4.dp, height = 48.dp).then(grip),
                         )
-                        // Card parked down (top room open): band = the card's bottom edge.
+                        // Card parked DOWN (top room open): the card has travelled down the
+                        // screen, so the sliver still visible along the screen's bottom is the
+                        // card's TOP edge -- and the grip belongs on it.
+                        //
+                        // These two cases were inverted, and the comments named the wrong edges
+                        // with them. parkDistance moves the card by extent*(1+scale)/2 - band, so
+                        // at +v its top edge lands exactly `band` above the screen bottom while
+                        // its bottom edge is most of a screen height below the display; the pill
+                        // was being aligned to that off-screen edge and drawn roughly 2000px out
+                        // of view on a tall phone. Nothing crashed, the affordance was simply
+                        // never there -- on the one axis the viewer's top room already uses.
                         vProgress > 0.01f -> Box(
-                            Modifier.align(Alignment.BottomCenter).padding(bottom = GRIP_INSET_DP.dp)
+                            Modifier.align(Alignment.TopCenter).padding(top = GRIP_INSET_DP.dp)
                                 .size(width = 48.dp, height = 4.dp).then(grip),
                         )
-                        // Card parked up (bottom room open): band = the card's top edge.
+                        // Card parked UP (bottom room open): band = the card's BOTTOM edge.
                         else -> Box(
-                            Modifier.align(Alignment.TopCenter).padding(top = GRIP_INSET_DP.dp)
+                            Modifier.align(Alignment.BottomCenter).padding(bottom = GRIP_INSET_DP.dp)
                                 .size(width = 48.dp, height = 4.dp).then(grip),
                         )
                     }
