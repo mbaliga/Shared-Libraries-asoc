@@ -340,7 +340,7 @@ class MarkdownReporter(
             sb.line("| Span | n | p50 | p95 | max |")
             sb.line("|---|---|---|---|---|")
             for (sp in r.spans.sortedByDescending { it.count }) sb.line(
-                "| `${sp.name}` | ${grp(sp.count)} | ${f(sp.p50Ms)} ms | " +
+                "| `${redactor.redact(sp.name)}` | ${grp(sp.count)} | ${f(sp.p50Ms)} ms | " +
                     "${sp.p95Ms?.let { "${f(it)} ms" } ?: "—"} | ${f(sp.maxMs)} ms |")
             sb.blank()
             sb.line("`p95` is omitted below 20 observations — a p95 over fewer samples is not a p95.")
@@ -352,7 +352,7 @@ class MarkdownReporter(
             sb.blank()
             sb.line("```")
             for (mk in r.marks.sortedBy { it.tSec })
-                sb.line("t+%-9s %s%s".format(f(mk.tSec, 3), mk.name,
+                sb.line("t+%-9s %s%s".format(f(mk.tSec, 3), redactor.redact(mk.name),
                     if (mk.auto) "   (auto-emitted)" else ""))
             sb.line("```")
             sb.blank()

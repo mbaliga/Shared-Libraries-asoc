@@ -49,6 +49,7 @@ fun main() {
     seriesChecks()
     ringChecks()
     redactorChecks()
+    clackMetricChecks()
     invariantChecks()
     profileChecks()
     verdictChecks()
@@ -236,6 +237,54 @@ private fun redactorChecks() {
         red.redact("unable to open database file: /data/data/com.example.app/databases/x.db").contains("<redacted:user-path>"))
     check("user-path redaction does not leak the package name",
         !red.redact("/data/data/com.example.app/files/secret.db").contains("com.example.app"))
+}
+
+// ==================================================================== ClackMetric interop
+
+private fun clackMetricChecks() {
+    println("\n== ClackMetric line parser (Clackpad interop) ==")
+
+    fun span(name: String, ms: Double, attrs: Map<String, String> = emptyMap()) =
+        ClackMetricLine.Span(name, ms, attrs)
+
+    check("bare name=value parses",
+        ClackMetricLine.parseMessage("touch2char=37.4ms") == span("touch2char", 37.4))
+    check("ms suffix is optional",
+        ClackMetricLine.parseMessage("cold_start=612") == span("cold_start", 612.0))
+    check("integer duration parses as a whole double",
+        ClackMetricLine.parseMessage("float_build=88ms") == span("float_build", 88.0))
+    check("further key=value pairs collected as attrs, not folded into the span",
+        ClackMetricLine.parseMessage("recovery_capture=15ms build=debug api=34") ==
+            span("recovery_capture", 15.0, mapOf("build" to "debug", "api" to "34")))
+    check("no name=value token yields null, not a fabricated span",
+        ClackMetricLine.parseMessage("keyboard resumed") == null)
+    check("negative duration still parses (a clock-skew artifact should surface, not vanish)",
+        ClackMetricLine.parseMessage("cold_start=-3.0ms")?.durationMs == -3.0)
+
+    check("brief-format logcat line parses",
+        ClackMetricLine.parseLogcatLine("D/ClackMetric( 8123): touch2char=37.4ms") == span("touch2char", 37.4))
+    check("brief-format with a wider tag column still parses",
+        ClackMetricLine.parseLogcatLine("D/ClackMetric(12345): cold_start=612ms") == span("cold_start", 612.0))
+    check("threadtime-format logcat line parses",
+        ClackMetricLine.parseLogcatLine(
+            "08-15 09:41:03.118  8123  8123 D ClackMetric: touch2char=37.4ms") == span("touch2char", 37.4))
+    check("bare 'TAG: message' parses",
+        ClackMetricLine.parseLogcatLine("ClackMetric: float_build=88ms") == span("float_build", 88.0))
+    check("a foreign tag is silently not a ClackMetric span, not a parse error",
+        ClackMetricLine.parseLogcatLine("D/OtherTag( 8123): touch2char=37.4ms") == null)
+    check("a foreign tag in threadtime format is also silently excluded",
+        ClackMetricLine.parseLogcatLine(
+            "08-15 09:41:03.118  8123  8123 D SomethingElse: touch2char=37.4ms") == null)
+    check("gibberish is not a span",
+        ClackMetricLine.parseLogcatLine("not a logcat line at all") == null)
+
+    check("format() round-trips through parseMessage()",
+        ClackMetricLine.parseMessage(ClackMetricLine.format(span("touch2char", 37.4))) == span("touch2char", 37.4))
+    check("format() round-trips with attrs preserved",
+        ClackMetricLine.parseMessage(ClackMetricLine.format(span("cold_start", 612.0, mapOf("api" to "34")))) ==
+            span("cold_start", 612.0, mapOf("api" to "34")))
+    check("format() renders a whole-number duration without a trailing .0",
+        ClackMetricLine.format(span("float_build", 88.0)) == "float_build=88ms")
 }
 
 // ==================================================================== invariants
@@ -581,6 +630,23 @@ private fun reporterChecks() {
     check("bucket column is redacted in the 'By bucket' table and worst-observations table",
         !leakyBucketMd.contains("hunter2secret") && leakyBucketMd.contains("<redacted:"))
 
+    // Diagnostics.mark(name) and beginSpan(name) are just as caller-supplied as a session label
+    // or a bucket -- an app can call Diagnostics.mark(someRuntimeString) and there is nothing in
+    // the type system stopping that string from being user-typed content on a keyboard host. The
+    // Marks and Custom-spans sections were rendering `name` raw while every other free-text field
+    // in the report went through the redactor: found by reading Redactor.kt's own claim ("runs
+    // over every free-text string that reaches the file") against what MarkdownReporter actually
+    // called it on.
+    val leakyMarksReport = r.copy(
+        marks = listOf(Mark(1.0, "token=hunter2secret")),
+        spans = listOf(SpanStat("token=hunter3secret", 1, 5.0, null, 5.0)),
+    )
+    val leakyMarksMd = MarkdownReporter(p).render(leakyMarksReport)
+    check("mark name is redacted in the Marks section",
+        !leakyMarksMd.contains("hunter2secret") && leakyMarksMd.contains("<redacted:"))
+    check("span name is redacted in the Custom spans table",
+        !leakyMarksMd.contains("hunter3secret"))
+
     java.io.File("/tmp/samples").mkdirs()
     java.io.File("/tmp/samples/SAMPLE_REPORT_vision-pipeline.md").writeText(md)
     // Emit one rendered sample per profile. These are renderer OUTPUT, not hand-written prose —
@@ -795,6 +861,7 @@ class CoreChecksSuite {
     @Test fun series() { seriesChecks(); assertAllPassed("seriesChecks") }
     @Test fun ring() { ringChecks(); assertAllPassed("ringChecks") }
     @Test fun redactor() { redactorChecks(); assertAllPassed("redactorChecks") }
+    @Test fun clackMetric() { clackMetricChecks(); assertAllPassed("clackMetricChecks") }
     @Test fun invariants() { invariantChecks(); assertAllPassed("invariantChecks") }
     @Test fun profiles() { profileChecks(); assertAllPassed("profileChecks") }
     @Test fun verdicts() { verdictChecks(); assertAllPassed("verdictChecks") }
