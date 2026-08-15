@@ -53,6 +53,7 @@ object Diagnostics {
     @JvmStatic inline fun <T> span(name: String, block: () -> T): T = block()
 
     @JvmStatic fun beginSpan(name: String): SpanHandle? = null
+    @JvmStatic fun recordSpan(name: String, durationMs: Double) = Unit
 
     @JvmStatic
     @JvmOverloads

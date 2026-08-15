@@ -153,6 +153,18 @@ internal class Session(
         }
     }
 
+    /**
+     * Record a span whose duration was already measured elsewhere -- the bridge [beginSpan]/[end]
+     * cannot serve, because there the elapsed time is measured in-process on this clock, and a
+     * span replayed from an external source (a ClackMetric logcat line, a journal replay) already
+     * has its duration as a number, not as a pair of instants on this process's nanoTime clock.
+     * Same table, same aggregation, same report section as [beginSpan] -- this is a second way IN,
+     * not a second kind of span.
+     */
+    fun recordSpan(name: String, durationMs: Double) {
+        synchronized(lock) { spans.getOrPut(name) { mutableListOf() } += durationMs }
+    }
+
     fun log(tag: String, message: String, level: Level) {
         synchronized(lock) {
             logs.add(LogEntry(TIME.format(Date()), level, tag, message, Thread.currentThread().name))

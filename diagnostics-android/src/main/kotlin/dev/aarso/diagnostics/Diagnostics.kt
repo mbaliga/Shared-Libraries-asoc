@@ -132,6 +132,13 @@ object Diagnostics {
 
     @JvmStatic fun beginSpan(name: String): SpanHandle? = session?.beginSpan(name)
 
+    /**
+     * Record a span whose duration is already known -- the ingestion point for a span measured
+     * outside this process's clock, e.g. one parsed from a [dev.aarso.diagnostics.interop.ClackMetricLine].
+     * Same span table [beginSpan] populates.
+     */
+    @JvmStatic fun recordSpan(name: String, durationMs: Double) { session?.recordSpan(name, durationMs) }
+
     @JvmStatic
     @JvmOverloads
     fun log(tag: String, message: String, level: Level = Level.INFO) { session?.log(tag, message, level) }
