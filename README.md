@@ -38,13 +38,13 @@ includeBuild("shared-libraries")
 ```kotlin
 // app/build.gradle.kts
 implementation("dev.aarso:search-core:0.1.0")
-implementation("dev.aarso:crash-recovery:1.2.0")
+implementation("dev.aarso:crash-recovery:1.4.0")
 
 // diagnostics: debug-only collector + overlay, release-only no-op, plus the safety guard that
 // fails a release build if it ever resolves a real collector instead of the no-op.
-debugImplementation("dev.aarso:diagnostics-android:0.2.0")
-debugImplementation("dev.aarso:diagnostics-overlay:0.2.0")
-releaseImplementation("dev.aarso:diagnostics-noop:0.2.0")
+debugImplementation("dev.aarso:diagnostics-android:0.3.0")
+debugImplementation("dev.aarso:diagnostics-overlay:0.3.0")
+releaseImplementation("dev.aarso:diagnostics-noop:0.3.0")
 apply(from = "$rootDir/gradle/release-safety.gradle.kts")
 ```
 

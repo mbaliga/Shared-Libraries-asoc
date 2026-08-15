@@ -10,7 +10,7 @@ plugins {
 
 val diagnosticsGroup = "dev.aarso"
 val diagnosticsNoopArtifact = "diagnostics-noop"
-val diagnosticsVersion = "0.2.0"
+val diagnosticsVersion = "0.3.0"
 
 group = diagnosticsGroup
 version = diagnosticsVersion

@@ -1,9 +1,9 @@
 # `:diagnostics` — on-device evidence module
 
-**Repo:** Hyle (alongside `:crash-recovery`, and like it *not part of Hyle* — zero Compose/Material in anything an app is required to take)
-**Artifact:** `dev.aarso:diagnostics-*` · `publishToMavenLocal` only
+**Repo:** `shared-libraries-asoc` (alongside `:crash-recovery`, and like it *not part of Hyle* — zero Compose/Material in anything an app is required to take). Landed here directly rather than being relocated from Hyle-Design-System, for the same D-L reason `:crash-recovery` moved.
+**Artifact:** `dev.aarso:diagnostics-*` `0.3.0` · consumed via composite-build substitution, not a Maven registry (see the root README)
 **Schema:** `diag/2`
-**Status:** core verified off-device (224 checks); Android layer written, never compiled against an SDK, never run on a device
+**Status:** core verified off-device (248 checks, JVM, in CI); Android layer compiles and assembles (`assembleDebug`/`assembleRelease`) against a real Android SDK in CI, including the merged-manifest no-permission check — still never run on a device
 
 ---
 
@@ -183,15 +183,39 @@ Four independent guards, listed in order of how much they are worth:
 
 1. **`release-safety.gradle.kts`** fails the build if a release variant resolves a collector. This is the one that matters — the others assume someone wired the dependency correctly, which is the mistake being guarded against.
 2. **`check-noop-parity.py`** asserts the no-op mirrors the real facade, function for function and parameter for parameter. Signature drift does not fail when introduced; it fails later, in someone's release build.
-3. **No `INTERNET` permission** in the module manifest, ever. The absence is verifiable in the merged manifest — a sovereignty claim that can be checked beats one that must be trusted.
+3. **No `INTERNET` permission** in the module manifest, ever. The absence is verifiable in the merged manifest — a sovereignty claim that can be checked beats one that must be trusted. `scripts/check-no-internet-permission.py` asserts exactly this against the actual AGP-merged manifest for both build types (not the source manifest this repo authors — a dependency's own manifest could in principle contribute a permission that never appears there) and runs in CI.
 4. **`install()` refuses** in a non-debuggable process, and the ADB receiver re-checks `FLAG_DEBUGGABLE` at runtime.
 
-Redaction replaces anything shaped like a key, token, JWT, email or user path with a *typed* placeholder, because a reader needs to know a value was present and withheld rather than absent.
+Redaction replaces anything shaped like a key, token, JWT, email or user path with a *typed* placeholder, because a reader needs to know a value was present and withheld rather than absent. It runs on every free-text field that reaches the rendered report — session label, facts, bucket names, log tag/message, crash throwable/frames, **and** custom-span and mark names (an app can call `Diagnostics.mark(someRuntimeString)`; nothing in the type system stops that string from being user-typed content on a keyboard host, so it gets the same treatment as a bucket or a label).
+
+Storage is app-private throughout: exports go to `getExternalFilesDir(null)/diagnostics/` (package-scoped, no runtime permission on any supported API, not the public/shared external directory), the crash-survivable journal goes to `filesDir/diagnostics-journal/`, and the `FileProvider` path config (`diagnostics_file_paths.xml`) scopes sharing to the `diagnostics/` export directory only — the journal directory is deliberately not exposed, since it is working state, not a deliverable.
 
 ---
 
-## 8. What is verified and what is not
+## 8. Clackpad interop: ingesting `ClackMetric`
 
-Verified off-device, 224 checks: percentile and regression maths; the source-agnostic claim (identical overrun rate for the same population through four different domains); interval tolerance, including that a naive treatment misfires and that real gaps are still caught; phase means excluding severe outliers; ring wraparound; redaction; every invariant builder in all three outcomes; every profile's structure; verdict boundaries; the no-false-leak rule; confidence and caveats; journal round-trip including a truncated final line; renderer determinism; and every profile rendering coherently with its own vocabulary and no leakage between them.
+Clackpad is the intended first consumer, and it already has its own metrics convention: debug builds log spans as `ClackMetric` logcat lines, gated on `BuildConfig.CLACKPAD_DEBUG_METRICS`, with span names like `touch2char` / `cold_start` / `float_build` / `recovery_capture`, and Clackpad already has `scripts/parse_metrics.sh` reading them. The integration constraint the owner set is explicit: this suite ingests those *existing* spans; Clackpad's logging does not change for it.
 
-Not verified: everything below the core. The Android layer has never seen an SDK or a device. It is a skeleton with real structure and real platform calls, and per the environment-honesty convention it is owner-verified only until you build it and see it.
+That constraint is implemented as two pieces, split the way everything else in this module is split — the text-parsing half is source-agnostic and lives in `diagnostics-core`, the Android-facing half lives in `diagnostics-android`:
+
+- **`ClackMetricLine`** (`diagnostics-core`) — a pure parser/formatter for the `ClackMetric` line convention, unit-tested off-device like the rest of the maths (`clackMetricChecks()` in `CoreChecks.kt`). It reads `name=value[ms]` as the span, tolerates further `key=value` attributes on the line, and is permissive about the surrounding `adb logcat` framing (brief, threadtime, or a bare already-stripped message) so it survives whichever `-v` format a host captured with.
+- **`ClackMetricAdapter`** (`diagnostics-android`, package `interop`) — feeds a parsed span into the SAME span table `Diagnostics.span { }` / `beginSpan` already populate, via a new `Diagnostics.recordSpan(name, durationMs)` entry point (a span whose duration is already known, as opposed to one measured in-process against this clock). It is deliberately not a `MetricSource` that owns a callback — there is no portable, permission-free "a logcat line just arrived" event to subscribe to — so the host decides how lines reach it: shelling out to `logcat -s ClackMetric` (an app may read its own process's log without any permission), a `LogcatReceiver`, or a captured-log replay in a test.
+
+**Caveat, stated plainly:** this repo does not have Clackpad attached, so the exact wire format above is *inferred* from the stated convention (tag, span-name shapes, the existence of a parser script already reading them), not read from Clackpad's own source. `ClackMetricLine.parseMessage` is the single seam to adjust if Clackpad's actual line shape differs; neither the logcat-framing parser nor the Android-side adapter would need to change.
+
+**Privacy, by construction, not by promise:** only the span name and duration cross into the report — both go through the same redactor every mark/span/bucket does before rendering. Any further `key=value` attribute the parser notices on a `ClackMetric` line is available on `ClackMetricLine.Span.attrs` but is deliberately **not** forwarded by the adapter. This is the ingestion seam for a privacy-first keyboard's own debug log lines; a future attribute Clackpad logs alongside a span must not gain a path into a file this module exists to make shareable just because the parser happened to notice it sitting there.
+
+```kotlin
+// Clackpad, debug build, wherever it reads its own ClackMetric lines today:
+ClackMetricAdapter.ingest("D/ClackMetric( 8123): touch2char=37.4ms")   // -> recorded as a span
+```
+
+---
+
+## 9. What is verified and what is not
+
+Verified off-device, 248 checks, all in CI (`:diagnostics-core:test`): percentile and regression maths; the source-agnostic claim (identical overrun rate for the same population through four different domains); interval tolerance, including that a naive treatment misfires and that real gaps are still caught; phase means excluding severe outliers; ring wraparound; redaction — including span/mark-name redaction and the ClackMetric-adapter's attribute drop; every invariant builder in all three outcomes; every profile's structure; verdict boundaries; the no-false-leak rule; confidence and caveats; journal round-trip including a truncated final line; renderer determinism; every profile rendering coherently with its own vocabulary and no leakage between them; and the `ClackMetricLine` parser/formatter round-trip across brief/threadtime/bare logcat framing.
+
+Also verified, in CI, against a real Android SDK: `diagnostics-android`, `diagnostics-overlay` and `diagnostics-noop` all compile and assemble (`assembleDebug`/`assembleRelease`) as real AARs; `diagnostics-noop`'s API surface is asserted to mirror `diagnostics-android`'s exactly (`check-noop-parity.py`); and the merged manifest of both `diagnostics-android` build types is asserted to declare zero permissions (`check-no-internet-permission.py`).
+
+Not verified: the Android layer has never run on a device or in an emulator, so no MetricSource has ever observed a real callback, no overlay has ever been drawn, and no ADB trigger has ever been fired against a running app. It compiles and assembles against a real SDK now — that gate did not exist before this reconciliation — but "assembles" and "runs correctly" are different claims, and per the environment-honesty convention only the first one is made here.
