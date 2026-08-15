@@ -69,9 +69,12 @@ jobs:
 
       # diagnostics-android/-overlay have no test source of their own (the core is where the
       # logic lives) — assembleRelease is the real gate: does the module actually build against
-      # a real Android SDK, which no JVM check can answer.
-      - name: Assemble diagnostics-android release (:diagnostics-android:assembleRelease)
-        run: ./gradlew --no-daemon :diagnostics-android:assembleRelease
+      # a real Android SDK, which no JVM check can answer. diagnostics-android's debug variant is
+      # assembled too (not just release) because the no-INTERNET-permission check below asserts
+      # against the MERGED manifest of both variants — the debug one is where the FileProvider
+      # actually lives.
+      - name: Assemble diagnostics-android debug + release
+        run: ./gradlew --no-daemon :diagnostics-android:assembleDebug :diagnostics-android:assembleRelease
 
       - name: Assemble diagnostics-overlay release (:diagnostics-overlay:assembleRelease)
         run: ./gradlew --no-daemon :diagnostics-overlay:assembleRelease
@@ -84,3 +87,11 @@ jobs:
       # later in someone's release build.
       - name: Diagnostics noop/android API parity
         run: python3 scripts/check-noop-parity.py
+
+      # The README's and spec's central privacy claim — "no network permission, ever" — is only
+      # actually verified by inspecting the MERGED manifest AGP produces, not the source one this
+      # repo authors: a dependency's own manifest could in principle contribute a permission that
+      # never appears in diagnostics-android/src/main/AndroidManifest.xml. This checks the real
+      # build output.
+      - name: Diagnostics-android has no manifest permissions (debug or release)
+        run: python3 scripts/check-no-internet-permission.py
