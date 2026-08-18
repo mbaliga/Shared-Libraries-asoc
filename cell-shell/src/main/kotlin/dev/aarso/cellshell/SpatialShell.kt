@@ -269,13 +269,27 @@ fun SpatialShell(
                                 pivotFractionX = hingePivot(hBand, scale),
                                 pivotFractionY = hingePivot(vBand, scale),
                             )
-                            // Sign so the FREE edge recedes, never swings out towards the viewer.
-                            // Positive rotationY sends the card's right edge away from the
-                            // viewer, which is what a left-room park (hProgress > 0, hinged on
-                            // the left edge) wants; positive rotationX brings the bottom edge
-                            // forward, so the vertical axis takes the opposite sign.
-                            rotationY = swivelDeg * hProgress
-                            rotationX = -swivelDeg * vProgress
+                            // The card turns to FACE the room it just revealed (owner,
+                            // 2026-08-18: *"it has to swivel to point to the interactive content
+                            // (nav, settings, info, etc)"*). Not away from it -- that reads as
+                            // the pane turning its back on the thing the user just opened.
+                            //
+                            // Which way that is, without having to re-derive it at a whiteboard:
+                            // Compose's rotationY takes the face normal (0,0,1) to
+                            // (sin θ, 0, cos θ), so a POSITIVE angle aims the face at +X, to the
+                            // right. hProgress > 0 means the LEFT room is open, so the face must
+                            // aim at -X, so the angle is negative -- hence the minus.
+                            // rotationX takes the normal to (0, -sin θ, cos θ) and Compose's Y
+                            // axis points DOWN, so a positive angle aims the face UP, which is
+                            // what a top room (vProgress > 0) wants. Hence no minus there.
+                            //
+                            // Facing the room also removes the camera-plane hazard rather than
+                            // flirting with it: the far edge now swings TOWARDS the viewer, to at
+                            // most sin(θ) of a card width, and the camera sits three card widths
+                            // out. It is the receding direction that could cross the camera
+                            // plane, and this is no longer it.
+                            rotationY = -swivelDeg * hProgress
+                            rotationX = swivelDeg * vProgress
                             cameraDistance = size.width.coerceAtLeast(1f) *
                                 SpatialMotion.PARK_CAMERA_DISTANCE_CARDS / DEFAULT_CAMERA_DISTANCE_PX
                         }
