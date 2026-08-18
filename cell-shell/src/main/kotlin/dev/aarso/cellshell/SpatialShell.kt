@@ -26,6 +26,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlin.math.abs
@@ -110,6 +111,12 @@ internal const val EDGE_REST_ALPHA = 0.35f
  * @param parkStyle whether the parked card merely slides away or also turns about its hinge
  *   edge. Both shrink it; see [ParkStyle]. Defaults to [ParkStyle.SLIDE], which is the motion
  *   this shell has always had, so an app that says nothing sees no change.
+ * @param topReserve a strip below the status bar that the HOST owns, which the top-edge gesture
+ *   must start beneath. Zero by default. The case it exists for: a host that reveals its own
+ *   pull-down surface at the top of the pane — a status band, a notification layer — would
+ *   otherwise have that surface's own drag swallowed by the shell's top-room gesture, since both
+ *   live in the same 56dp of screen and the shell claims pointers on the Initial pass. Reserving
+ *   the strip hands those pixels back, and the top room stays reachable directly beneath it.
  * @param home the surface the app lives on. Always composed, always alive — even while parked.
  */
 @Composable
@@ -124,6 +131,7 @@ fun SpatialShell(
     top: (@Composable () -> Unit)? = null,
     bottom: (@Composable () -> Unit)? = null,
     parkStyle: ParkStyle = ParkStyle.SLIDE,
+    topReserve: Dp = 0.dp,
     home: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -138,7 +146,11 @@ fun SpatialShell(
     // the room; land just below it and the room opens as designed. Starting the top zone
     // after the status bar removes the coin flip entirely, and it costs the gesture nothing
     // real: the strip was never reachable to begin with.
-    val topInsetPx = WindowInsets.statusBars.getTop(density).toFloat()
+    // Plus whatever strip the host has claimed for a surface of its own at the top of the pane
+    // (see topReserve). Same reasoning as the status bar: a zone that overlaps something else's
+    // gesture is a coin flip, and moving ours below it costs the top room nothing.
+    val topInsetPx = WindowInsets.statusBars.getTop(density).toFloat() +
+        with(density) { topReserve.toPx() }
 
     // Read the axes in composition: the conditional room subtrees below depend on them, so the
     // shell has to recompose as they move anyway. The card's own translation is still deferred
