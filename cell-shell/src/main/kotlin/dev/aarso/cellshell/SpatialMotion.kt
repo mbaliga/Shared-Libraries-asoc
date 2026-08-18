@@ -68,11 +68,10 @@ object SpatialMotion {
      * rest the pane must be more tilted"*). Ten degrees read as depth only in motion and looked
      * nearly flat once parked, which is precisely where the tilt is meant to be legible.
      *
-     * 22 degrees costs the band about 7% of its width to foreshortening, which [swivelForeshorten]
-     * compensation gives straight back, so the band the user actually grabs is unchanged. The real
-     * ceiling is not the band but the camera: past roughly 32 degrees at [PARK_CAMERA_DISTANCE_CARDS]
-     * the far edge crosses behind the camera plane, where pointer mapping stops being meaningful.
-     * 22 leaves a deliberate margin under that.
+     * The angle costs the grab band nothing, because the card hinges on the band edge itself
+     * ([hingePivot]) and that edge therefore never moves. The ceiling is the camera: past roughly
+     * 32 degrees at [PARK_CAMERA_DISTANCE_CARDS] the far edge crosses behind the camera plane,
+     * where pointer mapping stops being meaningful. 22 leaves a deliberate margin under that.
      */
     const val PARK_SWIVEL_DEG = 22f
 
@@ -286,20 +285,49 @@ enum class ParkStyle {
 }
 
 /**
- * How much of a turned surface's extent still faces the screen, as a fraction.
+ * Which edge of the parked card is the one still on screen — the grab band.
  *
- * A swivelled card presents its width foreshortened by `cos(angle)`, which comes directly out of
- * the grab band: at 10 degrees a 72dp band would render as roughly 71dp, and at angles where the
- * swivel starts to look dramatic the band falls below the 48dp minimum touch target the shell
- * guarantees. Callers use this to widen the park translation by exactly the amount the rotation
- * took away, so the band that is *seen* stays the band that was *promised*.
- *
- * Pure and separate from the shell so the compensation can be asserted rather than eyeballed.
- *
- * @param degrees the swivel angle actually applied, already scaled by openness.
+ * Named START/END rather than left/right because it serves both axes: on the horizontal axis
+ * START is the card's left edge, on the vertical its top.
  */
-fun swivelForeshorten(degrees: Float): Float =
-    kotlin.math.cos(degrees * kotlin.math.PI.toFloat() / 180f).coerceIn(0.01f, 1f)
+enum class BandEdge { START, END, NONE }
+
+/**
+ * The edge left on screen when an axis is pushed to [progress].
+ *
+ * Positive progress pushes the card towards the far end of the axis, so what stays behind is its
+ * near ([BandEdge.START]) edge. This reads backwards at a glance, which is exactly why it lives
+ * in one function: the shell needs this same answer in three places — where to draw the grip
+ * pill, which edge to hinge the swivel on, and which way that hinge turns — and it previously
+ * derived it independently in each. Two of the three agreed; the swivel did not, and hinged on
+ * the edge that was off screen, which threw the visible sliver out through the perspective
+ * divide and made the parked card look like it had vanished entirely.
+ */
+fun bandEdge(progress: Float): BandEdge = when {
+    progress > 0.01f -> BandEdge.START
+    progress < -0.01f -> BandEdge.END
+    else -> BandEdge.NONE
+}
+
+/**
+ * Where to put the swivel's hinge, as a `transformOrigin` fraction of the **un-scaled** card.
+ *
+ * The scale lives in its own layer inside the swivel one, so this fraction is measured against
+ * the card's full extent while the card actually drawn is [scale] of it, centred. Hence the
+ * `(1 ± scale) / 2` rather than a plain 0 or 1: those would put the hinge on the *box's* edge,
+ * a half-shrink outside the card, and rotate the card about a line it does not touch.
+ *
+ * With the hinge on the visible edge, that edge sits at z = 0 through the whole rotation and the
+ * projection leaves it exactly where it was — so the band the user sees stays exactly [BAND_DP]
+ * wide at any swivel angle, and SLIDE and SWIVEL park to the identical depth. This is why the
+ * shell needs no foreshortening compensation: hinge it correctly and there is nothing to
+ * compensate for.
+ */
+fun hingePivot(edge: BandEdge, scale: Float): Float = when (edge) {
+    BandEdge.START -> (1f - scale) / 2f
+    BandEdge.END -> (1f + scale) / 2f
+    BandEdge.NONE -> 0.5f
+}
 
 /** Remembers a [SpatialController] scoped to the composition. The shell's entry point. */
 @Composable

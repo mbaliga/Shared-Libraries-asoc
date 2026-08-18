@@ -210,15 +210,17 @@ fun SpatialShell(
         }
 
         // ── The home card: live, lifted and parked while a room is open ───────────────
-        // Under SWIVEL the card turns about its hinge edge, which foreshortens it: the band it
-        // leaves on screen is cos(angle) of what a flat card would leave. That is taken straight
-        // out of the grab band, and BAND_DP is a documented 72dp minimum, so the park travel is
-        // reduced by exactly what the rotation took away rather than letting the band silently
-        // shrink below a touchable size.
+        // Which edge stays on screen is decided ONCE, here, and every consumer below reads it:
+        // the swivel's hinge, the direction it turns, and the grip pill that marks the band. They
+        // used to each work it out for themselves and the swivel got it backwards.
+        val hBand = bandEdge(hProgress)
+        val vBand = bandEdge(vProgress)
         val swivelDeg = if (parkStyle == ParkStyle.SWIVEL) SpatialMotion.PARK_SWIVEL_DEG * lift else 0f
-        val bandKeep = if (swivelDeg == 0f) bandPx else bandPx / swivelForeshorten(swivelDeg)
-        val tx = (hProgress * parkDistance(w, scale, bandKeep)).roundToInt()
-        val ty = (vProgress * parkDistance(hgt, scale, bandKeep)).roundToInt()
+        // No foreshortening compensation: the card hinges on the band edge, so that edge sits at
+        // z = 0 throughout the rotation and the projection leaves it exactly where it was. The
+        // band stays BAND_DP wide at any angle, and SLIDE and SWIVEL park to the same depth.
+        val tx = (hProgress * parkDistance(w, scale, bandPx)).roundToInt()
+        val ty = (vProgress * parkDistance(hgt, scale, bandPx)).roundToInt()
         val cardShape = RoundedCornerShape((SpatialMotion.PARK_CORNER_DP * lift).dp)
         Box(
             modifier = Modifier
@@ -246,16 +248,22 @@ fun SpatialShell(
                         Modifier
                     } else {
                         Modifier.graphicsLayer {
-                            // Hinge on the edge that stays on screen as the band: the room opens
-                            // on the far side, so the card turns away from it like a door.
+                            // Hinge on the edge that stays on screen as the band -- the edge the
+                            // user is effectively holding -- so the card swings away like a door
+                            // whose hinges you can see. Hinging on the far edge instead swings
+                            // the *visible* sliver through the perspective divide and throws it
+                            // off screen, which is what "the pane goes away completely" was.
                             transformOrigin = TransformOrigin(
-                                pivotFractionX = if (hProgress < 0f) 0f else if (hProgress > 0f) 1f else 0.5f,
-                                pivotFractionY = if (vProgress < 0f) 0f else if (vProgress > 0f) 1f else 0.5f,
+                                pivotFractionX = hingePivot(hBand, scale),
+                                pivotFractionY = hingePivot(vBand, scale),
                             )
-                            // Negative for a right-hand room (hProgress < 0) so the free edge
-                            // recedes rather than swinging out of the screen towards the viewer.
-                            rotationY = -swivelDeg * hProgress
-                            rotationX = swivelDeg * vProgress
+                            // Sign so the FREE edge recedes, never swings out towards the viewer.
+                            // Positive rotationY sends the card's right edge away from the
+                            // viewer, which is what a left-room park (hProgress > 0, hinged on
+                            // the left edge) wants; positive rotationX brings the bottom edge
+                            // forward, so the vertical axis takes the opposite sign.
+                            rotationY = swivelDeg * hProgress
+                            rotationX = -swivelDeg * vProgress
                             cameraDistance = size.width.coerceAtLeast(1f) *
                                 SpatialMotion.PARK_CAMERA_DISTANCE_CARDS / DEFAULT_CAMERA_DISTANCE_PX
                         }
@@ -300,29 +308,20 @@ fun SpatialShell(
                         accentColor.copy(alpha = GRIP_ALPHA * lift),
                         RoundedCornerShape(2.dp),
                     )
+                    // Same [bandEdge] answer the hinge above uses, so the pill can never again
+                    // end up marking a different edge than the one the card actually turns on.
                     when {
-                        // Card parked right (left room open): the band is the card's left edge.
-                        hProgress > 0.01f -> Box(
+                        hBand == BandEdge.START -> Box(
                             Modifier.align(Alignment.CenterStart).padding(start = GRIP_INSET_DP.dp)
                                 .size(width = 4.dp, height = 48.dp).then(grip),
                         )
-                        // Card parked left (right room open): band = the card's right edge.
-                        hProgress < -0.01f -> Box(
+                        hBand == BandEdge.END -> Box(
                             Modifier.align(Alignment.CenterEnd).padding(end = GRIP_INSET_DP.dp)
                                 .size(width = 4.dp, height = 48.dp).then(grip),
                         )
-                        // Card parked DOWN (top room open): the card has travelled down the
-                        // screen, so the sliver still visible along the screen's bottom is the
-                        // card's TOP edge -- and the grip belongs on it.
-                        //
-                        // These two cases were inverted, and the comments named the wrong edges
-                        // with them. parkDistance moves the card by extent*(1+scale)/2 - band, so
-                        // at +v its top edge lands exactly `band` above the screen bottom while
-                        // its bottom edge is most of a screen height below the display; the pill
-                        // was being aligned to that off-screen edge and drawn roughly 2000px out
-                        // of view on a tall phone. Nothing crashed, the affordance was simply
-                        // never there -- on the one axis the viewer's top room already uses.
-                        vProgress > 0.01f -> Box(
+                        // Card parked DOWN (top room open): the sliver still visible along the
+                        // screen's bottom is the card's TOP edge, and the grip belongs on it.
+                        vBand == BandEdge.START -> Box(
                             Modifier.align(Alignment.TopCenter).padding(top = GRIP_INSET_DP.dp)
                                 .size(width = 48.dp, height = 4.dp).then(grip),
                         )
