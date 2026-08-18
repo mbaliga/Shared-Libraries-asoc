@@ -28,13 +28,22 @@ class SwivelParkTest {
     }
 
     @Test
-    fun `the shells swivel angle costs the band only a few percent`() {
-        // The whole reason PARK_SWIVEL_DEG is small. At 10 degrees a 72dp band renders as ~70.9dp;
-        // if this ever drops far below the 48dp touch minimum the angle has gone too far.
+    fun `the shells swivel angle leaves the band comfortably touchable`() {
+        // This deliberately does NOT pin a tolerance on the angle itself -- the angle is a look,
+        // and it was raised 10 -> 22 degrees on owner direction. What must hold at any angle the
+        // shell ships is the invariant underneath it: even WITHOUT the compensation
+        // SpatialShell applies, the foreshortened band stays above the 48dp minimum touch target
+        // documented in SpatialShell's BAND_DP. Pinning the look would have failed this test for
+        // a change that was intended; pinning the invariant fails it only for one that is unsafe.
         val kept = swivelForeshorten(SpatialMotion.PARK_SWIVEL_DEG)
-        assertTrue("kept=$kept", kept > 0.98f)
         val bandDp = 72f
-        assertTrue("band would fall below the 48dp minimum", bandDp * kept > 48f)
+        assertTrue(
+            "a ${SpatialMotion.PARK_SWIVEL_DEG} degree swivel leaves ${bandDp * kept}dp, under the 48dp minimum",
+            bandDp * kept > 48f,
+        )
+        // And the angle must stay well clear of the camera plane, past which pointer mapping
+        // through the perspective divide stops being meaningful (see PARK_CAMERA_DISTANCE_CARDS).
+        assertTrue("swivel must stay under 32 degrees", SpatialMotion.PARK_SWIVEL_DEG < 32f)
     }
 
     @Test

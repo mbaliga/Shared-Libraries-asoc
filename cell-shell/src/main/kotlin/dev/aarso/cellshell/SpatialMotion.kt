@@ -62,10 +62,19 @@ object SpatialMotion {
      *
      * Deliberately small. The reference (Honor's Magic Portal) reads as a door easing open, not
      * as a card thrown edge-on; and every degree here is bought out of the grab band, since a
-     * turned surface presents less of itself to the screen (see [swivelForeshorten]). Ten degrees
-     * is enough for the eye to read depth and cheap enough that the band survives it.
+     * turned surface presents less of itself to the screen (see [swivelForeshorten]).
+     *
+     * Raised 10 -> 22 degrees (owner, 2026-08-15: *"I want the swivel to be more pronounced -- at
+     * rest the pane must be more tilted"*). Ten degrees read as depth only in motion and looked
+     * nearly flat once parked, which is precisely where the tilt is meant to be legible.
+     *
+     * 22 degrees costs the band about 7% of its width to foreshortening, which [swivelForeshorten]
+     * compensation gives straight back, so the band the user actually grabs is unchanged. The real
+     * ceiling is not the band but the camera: past roughly 32 degrees at [PARK_CAMERA_DISTANCE_CARDS]
+     * the far edge crosses behind the camera plane, where pointer mapping stops being meaningful.
+     * 22 leaves a deliberate margin under that.
      */
-    const val PARK_SWIVEL_DEG = 10f
+    const val PARK_SWIVEL_DEG = 22f
 
     /**
      * Perspective strength for the swivel, expressed in **card widths**.
