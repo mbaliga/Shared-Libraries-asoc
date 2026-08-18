@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,16 @@ private const val BAND_DP = 72f
 
 /** How close to an edge a touch must start to be read as an edge drag, in dp. */
 private const val EDGE_DP = 56f
+
+/**
+ * Height of each vertical edge's gesture-exclusion band, in dp.
+ *
+ * 200dp is Android's own ceiling for `systemGestureExclusion` per edge — anything requested past
+ * it is silently dropped, so asking for more would just be a claim the platform ignores. That
+ * makes it a band rather than the full edge, which is why it needs centring: see
+ * [EdgeGestureExclusion].
+ */
+private val EXCLUSION_SPAN = 200.dp
 
 /** Inset of the grip pill from the parked card's exposed edge, in dp — centred in the band. */
 private const val GRIP_INSET_DP = 34f
@@ -136,6 +147,13 @@ fun SpatialShell(
                 hasBottom = bottom != null,
             ),
     ) {
+        // ── Gesture exclusion ─────────────────────────────────────────────────────────
+        // Unconditional on `atHome`, unlike everything below: a swipe that starts on a populated
+        // edge must not fall through to the system even while a room is parked, not only while
+        // idle at rest.
+        if (left != null) EdgeGestureExclusion(Alignment.CenterStart)
+        if (right != null) EdgeGestureExclusion(Alignment.CenterEnd)
+
         val w = controller.viewport.width.toFloat()
         val hgt = controller.viewport.height.toFloat()
         val scale = 1f - SpatialMotion.PARK_SCALE_DROP * lift
@@ -267,6 +285,28 @@ fun SpatialShell(
             if (bottom != null) EdgePeek(Alignment.BottomCenter, accentColor, vertical = true)
         }
     }
+}
+
+/**
+ * Claims a band of one vertical edge back from Android's own edge-swipe gestures.
+ *
+ * Without this, [spatialEdgeDrag] never wins the race on gesture navigation, no matter how it is
+ * tuned: the system's back/home swipe owns the outermost pixels of every screen edge
+ * unconditionally, and it resolves before a single pointer event reaches Compose — the drag is
+ * simply cancelled (`pressed` goes `false`, the bail-out already in [spatialEdgeDrag]'s loops)
+ * rather than losing a race Compose could see happen. [EXCLUSION_SPAN] is the platform's own
+ * per-edge cap, so the band is only ever a slice of the edge — centred on [EdgePeek] so the one
+ * part of the edge that visibly promises a drag is the part that is actually reachable. Top and
+ * bottom edges get no equivalent: Android's own gesture bar lives on the vertical edges only.
+ */
+@Composable
+private fun BoxScope.EdgeGestureExclusion(alignment: Alignment) {
+    Box(
+        Modifier
+            .align(alignment)
+            .size(width = EDGE_DP.dp, height = EXCLUSION_SPAN)
+            .systemGestureExclusion(),
+    )
 }
 
 /** The at-rest hint on one edge. [vertical] means the edge is horizontal, so the pill lies flat. */
