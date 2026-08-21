@@ -586,10 +586,34 @@ class CrashRecoveryActivity : Activity() {
             return
         }
         CrashRecovery.clear(this)
-        runCatching { packageManager.getLaunchIntentForPackage(packageName) }
-            .getOrNull()
-            ?.let { startActivity(it) }
+        relaunchApp()
+    }
+
+    /**
+     * Relaunch the host app cleanly. The naive `startActivity(getLaunchIntentForPackage())`
+     * + `finish()` failed in practice: [CrashRecovery.maybeShowRecovery] already finished the
+     * launcher, so this recovery screen is the task's only activity; the launch intent's
+     * `NEW_TASK` reuses that same task (shared affinity), and finishing here tears the task
+     * down before the launcher appears — the app just closes. Build a proper restart task
+     * (`NEW_TASK | CLEAR_TASK`) instead, then drop this process so the app comes up fresh
+     * rather than layered on whatever the crash left half-initialized.
+     */
+    private fun relaunchApp() {
+        val launch = runCatching { packageManager.getLaunchIntentForPackage(packageName) }.getOrNull()
+        val component = launch?.component
+        runCatching {
+            when {
+                component != null -> startActivity(Intent.makeRestartActivityTask(component))
+                launch != null -> startActivity(
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                )
+                // No resolvable launcher (rare) — nothing to relaunch; just leave.
+            }
+        }
         finish()
+        // The launch is already queued with the system, so ending our own process here does not
+        // cancel it — it guarantees the app restarts in a brand-new process.
+        Runtime.getRuntime().exit(0)
     }
 
     private fun discard() {

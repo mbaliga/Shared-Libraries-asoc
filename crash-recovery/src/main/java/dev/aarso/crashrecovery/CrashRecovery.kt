@@ -226,6 +226,11 @@ object CrashRecovery {
 
     fun clear(context: Context) {
         runCatching { file(context).delete() }
+        // Mark every death up to now as already seen. A JVM crash also leaves an OS exit record
+        // (REASON_CRASH); without this, the next launch's captureExitDeath would rediscover the
+        // very crash the user just dismissed and re-show recovery in a loop. Advancing the
+        // watermark on dismissal (Continue / Discard / reset) is what makes "Continue" stick.
+        runCatching { exitSeenFile(context).writeText(System.currentTimeMillis().toString()) }
     }
 
     /**
