@@ -34,6 +34,13 @@ import kotlin.math.roundToInt
  * This single number does two jobs and they must agree: it is the band [parkDistance] leaves
  * visible, and it is the inset each room applies on the side the card parks to. If they drift
  * apart the card either covers room content or floats off screen with no way back.
+ *
+ * Note what the band actually contains. The card is scaled about its centre and then translated,
+ * so the strip left on screen is the far edge of home's own layout: park the card right and the
+ * band is home's leading 72dp — the first characters of every row — and park it up and the band
+ * is home's *bottom* 72dp, which in a host with bottom chrome is that chrome and nothing else.
+ * Left bare, that band reads as a loose slab of the previous screen floating over the room. It is
+ * the card's exposed edge, and [parkVeil] is what makes it look like one.
  */
 private const val BAND_DP = 72f
 
@@ -69,6 +76,32 @@ private const val GRIP_ALPHA = 0.9f
 internal const val EDGE_REST_ALPHA = 0.35f
 
 /**
+ * How opaque the parked card's own face is at a given [lift] — 0 shows home through it, 1 hides
+ * home entirely and leaves a blank card.
+ *
+ * The shell's scrim was always meant to stop the parked card being "misread as live overlap", and
+ * on its own it does not: [SpatialMotion.PARK_SCRIM_ALPHA] is a *tint*, drawn in the same colour
+ * the host hands over for the room floor, so 38% of home's ink survives it. Across a 72dp band
+ * that is enough to read a column of filenames clipped mid-word, or a whole slab of bottom chrome,
+ * next to a room that is also asking to be read. Two UIs at once is what the owner reported.
+ *
+ * The face therefore closes on top of the scrim, and it closes late: nothing at all until the
+ * lift passes [SpatialMotion.SETTLE_THRESHOLD], then linearly to fully closed at full park. That
+ * boundary is not a taste call — it is the same line a release settles on, so home stays legible
+ * for exactly as long as letting go would bring it back, and only goes blank once the gesture has
+ * committed to the room. A drag reversed mid-flight re-opens the face on the way back, because
+ * this is a pure function of the current lift and nothing latches.
+ *
+ * Pure so the curve can be asserted rather than eyeballed; see `ParkVeilTest`.
+ */
+internal fun parkVeil(lift: Float): Float {
+    val onset = SpatialMotion.SETTLE_THRESHOLD
+    // Defensive: the contract pins the threshold at 0.5, but a threshold of 1 would divide by 0.
+    val span = (1f - onset).coerceAtLeast(0.001f)
+    return ((lift - onset) / span).coerceIn(0f, 1f)
+}
+
+/**
  * The spatial shell: one home surface with up to four rooms parked off its edges.
  *
  * Home is always the thing on screen. A room is revealed by dragging in from the matching
@@ -76,6 +109,13 @@ internal const val EDGE_REST_ALPHA = 0.35f
  * gaining a shadow and rounded corners, and sliding aside until only a grab band of it
  * remains. That parked card is the way back: tap it or drag it, and home returns. Nothing is
  * pushed onto a back stack, because nothing was ever left.
+ *
+ * Home stays live and composed the whole time, but past the halfway line it stops being *shown*:
+ * the card's face closes over its content ([parkVeil]) so the band is the blank edge of a card
+ * and not a legible offcut of the previous screen sitting beside a room. The band is 72dp of
+ * whichever edge of home the card parked away from, so leaving it bare means whatever the host
+ * pinned to that edge — a tab strip, a toolbar, the left margin of a list — is what the user is
+ * left reading. See [BAND_DP].
  *
  * Motion comes entirely from [SpatialMotion] and [SpatialController], which are a contract
  * shared across the constellation — see their documentation before reaching for a tuning knob.
@@ -103,7 +143,8 @@ internal const val EDGE_REST_ALPHA = 0.35f
  * @param controller the two-axis state driving the shell; see [rememberSpatialController].
  * @param accentColor the ring around the parked card and the colour of the grip and edge peeks.
  * @param scrimColor the room floor behind everything, and the scrim that quiets the parked card.
- * @param cardColor the raised surface of the home card, so it reads as above the room floor.
+ * @param cardColor the raised surface of the home card, so it reads as above the room floor —
+ *   and, once parked, the face that closes over home's content in the exposed band.
  * @param home the surface the app lives on. Always composed, always alive — even while parked.
  */
 @Composable
@@ -229,8 +270,12 @@ fun SpatialShell(
             // While parked, the whole card is one return affordance. It sits above home at a
             // high zIndex and swallows every pointer event, so a control the finger happens to
             // land on cannot fire — the user is aiming at "back", not at whatever is under it.
-            // The scrim quiets home's own content so it cannot be misread as live overlap, and
-            // the grip pill marks the exposed band as the thing to grab.
+            //
+            // Two coats, in draw order, doing two different jobs: the scrim quiets the card
+            // against the room floor, and over it the card's own face ([parkVeil]) closes over
+            // home's content so the exposed band reads as the edge of a card rather than as a
+            // strip of the previous screen. The grip pill then marks that band as the thing to
+            // grab — which is also why it has to be on the edge that is actually on screen.
             if (anyRoom) {
                 Box(
                     Modifier
@@ -243,7 +288,11 @@ fun SpatialShell(
                             hasTop = top != null,
                             hasBottom = bottom != null,
                         )
-                        .background(scrimColor.copy(alpha = SpatialMotion.PARK_SCRIM_ALPHA * lift)),
+                        .background(scrimColor.copy(alpha = SpatialMotion.PARK_SCRIM_ALPHA * lift))
+                        // Over the scrim, not under it: at full park the band is the card's own
+                        // surface colour, so it stays plainly distinct from the room floor the
+                        // scrim is tinted with instead of dissolving into it.
+                        .background(cardColor.copy(alpha = parkVeil(lift))),
                 ) {
                     val grip = Modifier.background(
                         accentColor.copy(alpha = GRIP_ALPHA * lift),
@@ -260,14 +309,20 @@ fun SpatialShell(
                             Modifier.align(Alignment.CenterEnd).padding(end = GRIP_INSET_DP.dp)
                                 .size(width = 4.dp, height = 48.dp).then(grip),
                         )
-                        // Card parked down (top room open): band = the card's bottom edge.
+                        // Card parked DOWN (top room open): the card has travelled down the
+                        // screen, so the edge of it still on screen — the band — is its TOP one,
+                        // sitting on the viewport's bottom edge. These two branches used to be
+                        // the other way round, which placed both vertical grips a whole screen
+                        // height outside the viewport: the top and bottom rooms parked a card
+                        // with no grab marker on it at all.
                         vProgress > 0.01f -> Box(
-                            Modifier.align(Alignment.BottomCenter).padding(bottom = GRIP_INSET_DP.dp)
+                            Modifier.align(Alignment.TopCenter).padding(top = GRIP_INSET_DP.dp)
                                 .size(width = 48.dp, height = 4.dp).then(grip),
                         )
-                        // Card parked up (bottom room open): band = the card's top edge.
+                        // Card parked UP (bottom room open): band = the card's BOTTOM edge,
+                        // sitting on the viewport's top edge.
                         else -> Box(
-                            Modifier.align(Alignment.TopCenter).padding(top = GRIP_INSET_DP.dp)
+                            Modifier.align(Alignment.BottomCenter).padding(bottom = GRIP_INSET_DP.dp)
                                 .size(width = 48.dp, height = 4.dp).then(grip),
                         )
                     }
@@ -413,6 +468,11 @@ private fun Modifier.spatialEdgeDrag(
  * so the down is consumed immediately. The axis is whichever one is open, not whichever way the
  * finger moves, so a sloppy diagonal still drags the card along its actual travel.
  *
+ * "Whichever one is open" is a comparison between the axes, not a fixed threshold on one of them.
+ * Asking only whether `|h| > 0.5` mislabelled every horizontal room below half travel: a left room
+ * dragged back to 40% and then touched again answered "vertical", so the next drag moved the
+ * vertical axis and opened a top or bottom room out of a gesture that was closing a side one.
+ *
  * The clamps open past 0 rather than stopping at the half the current room lives in: dragging a
  * room shut and straight on into the opposite room is one continuous motion, and stopping dead
  * at 0 would feel like hitting a wall mid-screen. They open only as far as a room that actually
@@ -431,7 +491,7 @@ private fun Modifier.returnDrag(
         awaitEachGesture {
             val down = awaitFirstDown()
             down.consume()
-            val horizontal = abs(controller.hProgress) > 0.5f
+            val horizontal = abs(controller.hProgress) >= abs(controller.vProgress)
             val hMin = if (hasRight) -1f else 0f
             val hMax = if (hasLeft) 1f else 0f
             val vMin = if (hasBottom) -1f else 0f
