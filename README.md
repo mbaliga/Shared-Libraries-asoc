@@ -10,6 +10,7 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:search-testkit` | `dev.aarso:search-testkit` | pure JVM | Conformance fixtures and golden-corpus helpers for anything implementing the search contracts. |
 | `:crash-recovery` | `dev.aarso:crash-recovery` | Android library | Capture an uncaught crash to a file; show a recovery screen on the next launch instead of bricking. Zero Hyle dependency. |
 | `:cell-shell` | `dev.aarso:cell-shell` | Android library (Compose) | The constellation's shared navigation and motion shell — spatial layout, edge timeline scrubber, shake-to-refresh. |
+| `:feedback` | `dev.aarso:feedback` | Android library | Opt-in feedback for experimental features: a fully user-readable draft, delivered only by a share/mail chooser the user launches. No telemetry, no network, ever. |
 
 ## Why this repo exists
 
