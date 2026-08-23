@@ -6,16 +6,20 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -23,6 +27,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlin.math.abs
@@ -62,6 +67,16 @@ private const val GRIP_INSET_DP = 34f
 
 /** Alpha of the grip pill at full open; it fades in with the lift so it never blinks on. */
 private const val GRIP_ALPHA = 0.9f
+
+/**
+ * The pixel value of one unit of Compose's `cameraDistance`.
+ *
+ * `cameraDistance` is documented in inches at a nominal 72 pixels per inch, NOT in pixels, and
+ * that is the whole reason its default of 8f is unusable for a full-screen pane: it places the
+ * camera 576px away. Named rather than inlined because a bare `/ 72f` next to a rotation reads
+ * like an arbitrary fudge and is exactly the kind of line someone deletes while simplifying.
+ */
+private const val DEFAULT_CAMERA_DISTANCE_PX = 72f
 
 /**
  * Alpha of an edge affordance at rest — loud enough to be noticed once, quiet enough to ignore
@@ -145,6 +160,15 @@ internal fun parkVeil(lift: Float): Float {
  * @param scrimColor the room floor behind everything, and the scrim that quiets the parked card.
  * @param cardColor the raised surface of the home card, so it reads as above the room floor —
  *   and, once parked, the face that closes over home's content in the exposed band.
+ * @param parkStyle whether the parked card merely slides away or also turns about its hinge
+ *   edge. Both shrink it; see [ParkStyle]. Defaults to [ParkStyle.SLIDE], which is the motion
+ *   this shell has always had, so an app that says nothing sees no change.
+ * @param topReserve a strip below the status bar that the HOST owns, which the top-edge gesture
+ *   must start beneath. Zero by default. The case it exists for: a host that reveals its own
+ *   pull-down surface at the top of the pane — a status band, a notification layer — would
+ *   otherwise have that surface's own drag swallowed by the shell's top-room gesture, since both
+ *   live in the same 56dp of screen and the shell claims pointers on the Initial pass. Reserving
+ *   the strip hands those pixels back, and the top room stays reachable directly beneath it.
  * @param home the surface the app lives on. Always composed, always alive — even while parked.
  */
 @Composable
@@ -158,11 +182,27 @@ fun SpatialShell(
     right: (@Composable () -> Unit)? = null,
     top: (@Composable () -> Unit)? = null,
     bottom: (@Composable () -> Unit)? = null,
+    parkStyle: ParkStyle = ParkStyle.SLIDE,
+    topReserve: Dp = 0.dp,
     home: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
     val bandPx = with(density) { BAND_DP.dp.toPx() }
     val edgePx = with(density) { EDGE_DP.dp.toPx() }
+    // The status bar strip is not ours to claim, however edge-to-edge our own window is.
+    // SystemUI's notification-shade gesture sits in a window layer above the app and takes
+    // first touch on the physical status bar regardless of what the app draws there or how
+    // widely its own pointerInput listens -- an app cannot out-consume it. Left unaccounted
+    // for, EDGE_DP's top zone spans BOTH that dead strip and the live app content below it,
+    // so a top-edge pull is a coin flip: land in the strip and the OS shade opens instead of
+    // the room; land just below it and the room opens as designed. Starting the top zone
+    // after the status bar removes the coin flip entirely, and it costs the gesture nothing
+    // real: the strip was never reachable to begin with.
+    // Plus whatever strip the host has claimed for a surface of its own at the top of the pane
+    // (see topReserve). Same reasoning as the status bar: a zone that overlaps something else's
+    // gesture is a coin flip, and moving ours below it costs the top room nothing.
+    val topInsetPx = WindowInsets.statusBars.getTop(density).toFloat() +
+        with(density) { topReserve.toPx() }
 
     // Read the axes in composition: the conditional room subtrees below depend on them, so the
     // shell has to recompose as they move anyway. The card's own translation is still deferred
@@ -182,6 +222,7 @@ fun SpatialShell(
             .spatialEdgeDrag(
                 controller = controller,
                 edgePx = edgePx,
+                topInsetPx = topInsetPx,
                 hasLeft = left != null,
                 hasRight = right != null,
                 hasTop = top != null,
@@ -240,6 +281,15 @@ fun SpatialShell(
         }
 
         // ── The home card: live, lifted and parked while a room is open ───────────────
+        // Which edge stays on screen is decided ONCE, here, and every consumer below reads it:
+        // the swivel's hinge, the direction it turns, and the grip pill that marks the band. They
+        // used to each work it out for themselves and the swivel got it backwards.
+        val hBand = bandEdge(hProgress)
+        val vBand = bandEdge(vProgress)
+        val swivelDeg = if (parkStyle == ParkStyle.SWIVEL) SpatialMotion.PARK_SWIVEL_DEG * lift else 0f
+        // No foreshortening compensation: the card hinges on the band edge, so that edge sits at
+        // z = 0 throughout the rotation and the projection leaves it exactly where it was. The
+        // band stays BAND_DP wide at any angle, and SLIDE and SWIVEL park to the same depth.
         val tx = (hProgress * parkDistance(w, scale, bandPx)).roundToInt()
         val ty = (vProgress * parkDistance(hgt, scale, bandPx)).roundToInt()
         val cardShape = RoundedCornerShape((SpatialMotion.PARK_CORNER_DP * lift).dp)
@@ -251,6 +301,59 @@ fun SpatialShell(
                 // pixels but leaves hit-testing where the card used to be, so the card would
                 // draw over there and answer touches over here.
                 .offset { IntOffset(tx, ty) }
+                // The swivel is its OWN layer, ahead of the scale/shape one below, and the two
+                // must not be merged. transformOrigin is per-layer: hinging the rotation on an
+                // edge would drag the *scale* pivot onto that edge too, and parkDistance's
+                // arithmetic assumes the card scales about its centre. Two layers keeps each
+                // transform on the origin it was designed around.
+                //
+                // Pointer input survives this: Compose maps pointers back through the full layer
+                // matrix (NodeCoordinator.fromParentPosition -> OwnedLayer.mapOffset(inverse)),
+                // perspective divide included, so the card answers touches where it is drawn. The
+                // guard that matters is cameraDistance -- at Compose's default the far edge
+                // crosses behind the camera at large angles, where that mapping stops being
+                // meaningful. PARK_SWIVEL_DEG is nowhere near it, and the distance below keeps
+                // the margin proportional to the card rather than fixed in pixels.
+                .then(
+                    if (swivelDeg == 0f) {
+                        Modifier
+                    } else {
+                        Modifier.graphicsLayer {
+                            // Hinge on the edge that stays on screen as the band -- the edge the
+                            // user is effectively holding -- so the card swings away like a door
+                            // whose hinges you can see. Hinging on the far edge instead swings
+                            // the *visible* sliver through the perspective divide and throws it
+                            // off screen, which is what "the pane goes away completely" was.
+                            transformOrigin = TransformOrigin(
+                                pivotFractionX = hingePivot(hBand, scale),
+                                pivotFractionY = hingePivot(vBand, scale),
+                            )
+                            // The card turns to FACE the room it just revealed (owner,
+                            // 2026-08-18: *"it has to swivel to point to the interactive content
+                            // (nav, settings, info, etc)"*). Not away from it -- that reads as
+                            // the pane turning its back on the thing the user just opened.
+                            //
+                            // Which way that is, without having to re-derive it at a whiteboard:
+                            // Compose's rotationY takes the face normal (0,0,1) to
+                            // (sin θ, 0, cos θ), so a POSITIVE angle aims the face at +X, to the
+                            // right. hProgress > 0 means the LEFT room is open, so the face must
+                            // aim at -X, so the angle is negative -- hence the minus.
+                            // rotationX takes the normal to (0, -sin θ, cos θ) and Compose's Y
+                            // axis points DOWN, so a positive angle aims the face UP, which is
+                            // what a top room (vProgress > 0) wants. Hence no minus there.
+                            //
+                            // Facing the room also removes the camera-plane hazard rather than
+                            // flirting with it: the far edge now swings TOWARDS the viewer, to at
+                            // most sin(θ) of a card width, and the camera sits three card widths
+                            // out. It is the receding direction that could cross the camera
+                            // plane, and this is no longer it.
+                            rotationY = -swivelDeg * hProgress
+                            rotationX = swivelDeg * vProgress
+                            cameraDistance = size.width.coerceAtLeast(1f) *
+                                SpatialMotion.PARK_CAMERA_DISTANCE_CARDS / DEFAULT_CAMERA_DISTANCE_PX
+                        }
+                    },
+                )
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
@@ -298,29 +401,24 @@ fun SpatialShell(
                         accentColor.copy(alpha = GRIP_ALPHA * lift),
                         RoundedCornerShape(2.dp),
                     )
+                    // Same [bandEdge] answer the hinge above uses, so the pill can never again
+                    // end up marking a different edge than the one the card actually turns on.
                     when {
-                        // Card parked right (left room open): the band is the card's left edge.
-                        hProgress > 0.01f -> Box(
+                        hBand == BandEdge.START -> Box(
                             Modifier.align(Alignment.CenterStart).padding(start = GRIP_INSET_DP.dp)
                                 .size(width = 4.dp, height = 48.dp).then(grip),
                         )
-                        // Card parked left (right room open): band = the card's right edge.
-                        hProgress < -0.01f -> Box(
+                        hBand == BandEdge.END -> Box(
                             Modifier.align(Alignment.CenterEnd).padding(end = GRIP_INSET_DP.dp)
                                 .size(width = 4.dp, height = 48.dp).then(grip),
                         )
-                        // Card parked DOWN (top room open): the card has travelled down the
-                        // screen, so the edge of it still on screen — the band — is its TOP one,
-                        // sitting on the viewport's bottom edge. These two branches used to be
-                        // the other way round, which placed both vertical grips a whole screen
-                        // height outside the viewport: the top and bottom rooms parked a card
-                        // with no grab marker on it at all.
-                        vProgress > 0.01f -> Box(
+                        // Card parked DOWN (top room open): the sliver still visible along the
+                        // screen's bottom is the card's TOP edge, and the grip belongs on it.
+                        vBand == BandEdge.START -> Box(
                             Modifier.align(Alignment.TopCenter).padding(top = GRIP_INSET_DP.dp)
                                 .size(width = 48.dp, height = 4.dp).then(grip),
                         )
-                        // Card parked UP (bottom room open): band = the card's BOTTOM edge,
-                        // sitting on the viewport's top edge.
+                        // Card parked UP (bottom room open): band = the card's BOTTOM edge.
                         else -> Box(
                             Modifier.align(Alignment.BottomCenter).padding(bottom = GRIP_INSET_DP.dp)
                                 .size(width = 48.dp, height = 4.dp).then(grip),
@@ -336,7 +434,9 @@ fun SpatialShell(
         if (controller.atHome) {
             if (left != null) EdgePeek(Alignment.CenterStart, accentColor)
             if (right != null) EdgePeek(Alignment.CenterEnd, accentColor)
-            if (top != null) EdgePeek(Alignment.TopCenter, accentColor, vertical = true)
+            // Below the status bar, same reasoning as topInsetPx above: a hint drawn where the
+            // gesture cannot actually be claimed teaches the wrong spot to pull from.
+            if (top != null) EdgePeek(Alignment.TopCenter, accentColor, vertical = true, belowStatusBar = true)
             if (bottom != null) EdgePeek(Alignment.BottomCenter, accentColor, vertical = true)
         }
     }
@@ -366,10 +466,16 @@ private fun BoxScope.EdgeGestureExclusion(alignment: Alignment) {
 
 /** The at-rest hint on one edge. [vertical] means the edge is horizontal, so the pill lies flat. */
 @Composable
-private fun BoxScope.EdgePeek(alignment: Alignment, accentColor: Color, vertical: Boolean = false) {
+private fun BoxScope.EdgePeek(
+    alignment: Alignment,
+    accentColor: Color,
+    vertical: Boolean = false,
+    belowStatusBar: Boolean = false,
+) {
     Box(
         modifier = Modifier
             .align(alignment)
+            .then(if (belowStatusBar) Modifier.statusBarsPadding() else Modifier)
             .padding(8.dp)
             .then(
                 if (vertical) Modifier.size(width = 56.dp, height = 4.dp)
@@ -396,22 +502,28 @@ private fun BoxScope.EdgePeek(alignment: Alignment, accentColor: Color, vertical
  * [hasLeft]/[hasRight]/[hasTop]/[hasBottom] are the host's populated edges. A missing edge is
  * never an origin, so its drag is refused outright — and because the direction clamps below are
  * derived from the same flags, even a diagonal that engages the other way clamps that axis to 0.
+ *
+ * [topInsetPx] moves the top edge's acquisition zone below the status bar rather than
+ * shrinking it: the zone stays [EDGE_DP] tall, it just starts where a touch can actually
+ * reach the app. The status bar strip itself is never a legal origin — see the KDoc on the
+ * call site in [SpatialShell] for why competing with SystemUI there cannot be won.
  */
 private fun Modifier.spatialEdgeDrag(
     controller: SpatialController,
     edgePx: Float,
+    topInsetPx: Float,
     hasLeft: Boolean,
     hasRight: Boolean,
     hasTop: Boolean,
     hasBottom: Boolean,
-): Modifier = pointerInput(controller, edgePx, hasLeft, hasRight, hasTop, hasBottom) {
+): Modifier = pointerInput(controller, edgePx, topInsetPx, hasLeft, hasRight, hasTop, hasBottom) {
     awaitEachGesture {
         val down = awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
         // Only home opens rooms. Once one is open, the parked card's return-drag owns the shell.
         if (!controller.atHome) return@awaitEachGesture
         val fromLeft = hasLeft && down.position.x <= edgePx
         val fromRight = hasRight && down.position.x >= size.width - edgePx
-        val fromTop = hasTop && down.position.y <= edgePx
+        val fromTop = hasTop && down.position.y in topInsetPx..(topInsetPx + edgePx)
         val fromBottom = hasBottom && down.position.y >= size.height - edgePx
         if (!fromLeft && !fromRight && !fromTop && !fromBottom) return@awaitEachGesture
 
