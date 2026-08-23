@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -22,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -43,6 +46,19 @@ import kotlin.math.roundToInt
 
 /** Width of the touch strip. Wide enough to hit without looking, narrow enough to ignore. */
 private const val STRIP_WIDTH_DP = 44f
+
+/**
+ * Height of the strip's gesture-exclusion band, in dp.
+ *
+ * 200dp is Android's own ceiling for `systemGestureExclusion` per edge -- anything requested past
+ * it is silently dropped, honoured only from the bottom of the request upward. The strip itself
+ * runs the caller's full height (easily 400-600dp on a phone), so excluding the whole strip would
+ * ask for far more than the cap and leave most of its own length unreachable regardless -- the
+ * same reason SpatialShell centres its own edge exclusion in a fixed band rather than its full
+ * edge. Centring a band this size on the strip keeps the request within budget everywhere a scrub
+ * can start, instead of granting reachability only near whichever end the platform happens to keep.
+ */
+private val EXCLUSION_SPAN_DP = 200.dp
 
 /** How far the hairline track sits in from the screen edge. */
 private const val TRACK_INSET_DP = 7f
@@ -132,6 +148,13 @@ data class ScrubberStop(val label: String, val itemIndex: Int)
  * one thing the strip takes, and it takes that one completely: the list underneath never
  * follows a scrub.
  *
+ * None of the above matters on gesture navigation unless the strip also excludes itself from
+ * Android's own edge swipe: a `systemGestureExclusion` band centred on the strip is what lets a
+ * deliberate drag reach [pointerInput] at all instead of being read as "go back" before it gets
+ * here, the same reachability problem [SpatialShell]'s rooms have on their edges. It is a band,
+ * not the strip's full bounds, because the platform caps what any one edge can claim at 200dp
+ * regardless of how tall this strip runs — see [EXCLUSION_SPAN_DP].
+ *
  * @param stops the labelled stops, **ascending by [ScrubberStop.itemIndex]**.
  * @param itemCount how many items the list holds; the strip's height maps onto `0 until itemCount`.
  * @param currentIndex the list's actual first-visible index — where the marker rests when nobody
@@ -140,6 +163,10 @@ data class ScrubberStop(val label: String, val itemIndex: Int)
  *   can scroll to that item. The host is expected to jump, not animate: this is finger-tracking.
  * @param inkColor the track, ticks and labels — the strip's quiet ink.
  * @param accentColor the bubble's fill and the current stop's highlight.
+ * @param restAlpha how visible the strip is when untouched. Defaults to the constellation's
+ *   shared edge-affordance alpha; pass a smaller value (or 0f) where the strip should stay out of
+ *   the way until touched or until the list it describes is moving. It never affects hit testing
+ *   -- the strip stays grabbable at any alpha, which is the point.
  * @param bubbleTextColor the label drawn on top of [accentColor]; the host owns this because only
  *   it knows what is readable on its own accent.
  */
@@ -153,6 +180,7 @@ fun EdgeTimelineScrubber(
     accentColor: Color,
     bubbleTextColor: Color,
     modifier: Modifier = Modifier,
+    restAlpha: Float = EDGE_REST_ALPHA,
 ) {
     // Nothing to scrub: an empty list, or a list nobody has indexed yet. Drawing a live-looking
     // strip over it would be an affordance that does nothing.
@@ -182,8 +210,16 @@ fun EdgeTimelineScrubber(
     val scrubIndex = remember { mutableIntStateOf(0) }
 
     val strength by animateFloatAsState(
-        // At rest the strip is an edge affordance like the shell's peeks, so it uses their alpha.
-        targetValue = if (pressed) 1f else EDGE_REST_ALPHA,
+        // At rest the strip is an edge affordance like the shell's peeks, so it defaults to their
+        // alpha. A host may pass a lower [restAlpha] -- 0f included -- to keep the strip off a
+        // busy surface until it is wanted.
+        //
+        // The press branch is what makes a zero rest alpha safe. Fading the strip out from
+        // OUTSIDE, with a graphicsLayer on the caller's side, would hide the pixels while leaving
+        // the 44dp touch target fully live: a drag down the right edge would then scrub a control
+        // that never becomes visible, because the caller's alpha does not know about the press.
+        // Handing the rest value in here keeps the two facts in one place.
+        targetValue = if (pressed) 1f else restAlpha,
         // The constellation's settle curve, so the strip waking up feels like the same app as
         // the rooms opening. It is a fade, not a motion, but the timing is the family resemblance.
         animationSpec = SpatialMotion.settleSpec,
@@ -280,6 +316,19 @@ fun EdgeTimelineScrubber(
                 }
             },
     ) {
+        // Same edge-ownership problem as SpatialShell's rooms, on whichever edge the host places
+        // this strip: without it, Android's own edge-swipe claims the touch before the
+        // pointerInput above ever sees it. Sized and centred rather than applied to the strip's
+        // own fillMaxHeight bounds -- see EXCLUSION_SPAN_DP's own KDoc for why the whole strip
+        // would ask for more than the platform's 200dp-per-edge cap grants.
+        Box(
+            Modifier
+                .align(Alignment.Center)
+                .width(STRIP_WIDTH_DP.dp)
+                .height(EXCLUSION_SPAN_DP)
+                .systemGestureExclusion(),
+        )
+
         val density = LocalDensity.current
         val heightPx = constraints.maxHeight.toFloat()
         val widthPx = constraints.maxWidth.toFloat()

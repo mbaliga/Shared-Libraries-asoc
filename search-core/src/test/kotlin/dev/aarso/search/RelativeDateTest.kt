@@ -84,6 +84,120 @@ class RelativeDateTest {
         assertEquals(instant(zone, 2026, 6, 30), RelativeDate.resolveRange("-1m", now, zone)!!.startInclusiveMillis)
     }
 
+    @Test fun `this-week resolves to the current Monday-to-Monday window`() {
+        val zone = ZoneId.of("UTC")
+        // 2026-07-30 is a Thursday; this week started Monday 2026-07-27.
+        val now = instant(zone, 2026, 7, 30, h = 15)
+        val range = RelativeDate.resolveRange("this-week", now, zone)!!
+        assertEquals(instant(zone, 2026, 7, 27), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2026, 8, 3), range.endExclusiveMillis)
+        assertTrue(now in range)
+    }
+
+    @Test fun `this-month resolves to the first-of-month through first-of-next-month window`() {
+        val zone = ZoneId.of("UTC")
+        val now = instant(zone, 2026, 7, 30)
+        val range = RelativeDate.resolveRange("this-month", now, zone)!!
+        assertEquals(instant(zone, 2026, 7, 1), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2026, 8, 1), range.endExclusiveMillis)
+    }
+
+    @Test fun `last-month resolves to the prior calendar month`() {
+        val zone = ZoneId.of("UTC")
+        val now = instant(zone, 2026, 7, 30)
+        val range = RelativeDate.resolveRange("last-month", now, zone)!!
+        assertEquals(instant(zone, 2026, 6, 1), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2026, 7, 1), range.endExclusiveMillis)
+    }
+
+    @Test fun `last-month in January lands on December of the previous year`() {
+        val zone = ZoneId.of("UTC")
+        val now = instant(zone, 2026, 1, 15)
+        val range = RelativeDate.resolveRange("last-month", now, zone)!!
+        assertEquals(instant(zone, 2025, 12, 1), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2026, 1, 1), range.endExclusiveMillis)
+    }
+
+    @Test fun `this-year resolves to the full calendar year, including from its last day`() {
+        val zone = ZoneId.of("UTC")
+        // Querying on December 31st must not spill into next year's January 1st.
+        val now = instant(zone, 2026, 12, 31, h = 23)
+        val range = RelativeDate.resolveRange("this-year", now, zone)!!
+        assertEquals(instant(zone, 2026, 1, 1), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2027, 1, 1), range.endExclusiveMillis)
+        assertTrue(now in range)
+    }
+
+    @Test fun `last-year resolves to the prior calendar year`() {
+        val zone = ZoneId.of("UTC")
+        val now = instant(zone, 2026, 7, 30)
+        val range = RelativeDate.resolveRange("last-year", now, zone)!!
+        assertEquals(instant(zone, 2025, 1, 1), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2026, 1, 1), range.endExclusiveMillis)
+    }
+
+    @Test fun `a bare four-digit year resolves to that whole calendar year`() {
+        val zone = ZoneId.of("UTC")
+        val range = RelativeDate.resolveRange("2024", 0L, zone)!!
+        assertEquals(instant(zone, 2024, 1, 1), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2025, 1, 1), range.endExclusiveMillis)
+    }
+
+    @Test fun `a month name with no year means this year's occurrence once that month has started`() {
+        val zone = ZoneId.of("UTC")
+        // "today" is in July; March has already happened this year.
+        val now = instant(zone, 2026, 7, 30)
+        val range = RelativeDate.resolveRange("march", now, zone)!!
+        assertEquals(instant(zone, 2026, 3, 1), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2026, 4, 1), range.endExclusiveMillis)
+    }
+
+    @Test fun `a month name with no year means last year's occurrence when it has not happened yet`() {
+        val zone = ZoneId.of("UTC")
+        // "today" is in July; December has not happened yet this year.
+        val now = instant(zone, 2026, 7, 30)
+        val range = RelativeDate.resolveRange("december", now, zone)!!
+        assertEquals(instant(zone, 2025, 12, 1), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2026, 1, 1), range.endExclusiveMillis)
+    }
+
+    @Test fun `a month name typed during that same month means the current occurrence`() {
+        val zone = ZoneId.of("UTC")
+        val now = instant(zone, 2026, 7, 15)
+        val range = RelativeDate.resolveRange("july", now, zone)!!
+        assertEquals(instant(zone, 2026, 7, 1), range.startInclusiveMillis)
+        assertTrue(now in range)
+    }
+
+    @Test fun `a month name is case-insensitive`() {
+        val zone = ZoneId.of("UTC")
+        val now = instant(zone, 2026, 7, 30)
+        assertEquals(
+            RelativeDate.resolveRange("March", now, zone),
+            RelativeDate.resolveRange("march", now, zone),
+        )
+        assertEquals(
+            RelativeDate.resolveRange("MARCH", now, zone),
+            RelativeDate.resolveRange("march", now, zone),
+        )
+    }
+
+    @Test fun `a month name with an explicit trailing year ignores today entirely`() {
+        val zone = ZoneId.of("UTC")
+        val now = instant(zone, 2026, 1, 1) // December has not happened yet this year
+        val range = RelativeDate.resolveRange("december-2026", now, zone)!!
+        assertEquals(instant(zone, 2026, 12, 1), range.startInclusiveMillis)
+        assertEquals(instant(zone, 2027, 1, 1), range.endExclusiveMillis)
+    }
+
+    @Test fun `month and year tokens reject malformed input rather than throwing`() {
+        val zone = ZoneId.of("UTC")
+        assertNull(RelativeDate.resolveRange("decembr", 0L, zone))
+        assertNull(RelativeDate.resolveRange("december-", 0L, zone))
+        assertNull(RelativeDate.resolveRange("december-26", 0L, zone)) // not four digits
+        assertNull(RelativeDate.resolveRange("20245", 0L, zone)) // not four digits
+    }
+
     @Test fun `resolvePoint returns the start of the resolved range`() {
         val zone = ZoneId.of("UTC")
         val now = instant(zone, 2026, 7, 30)

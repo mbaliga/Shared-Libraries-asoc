@@ -50,6 +50,12 @@ include(":cell-shell")
 // carry the entire Hyle submodule to get a utility that has zero Hyle dependency by design.
 include(":crash-recovery")
 
+// The opt-in feedback utility for experimental features. No backend and no telemetry exist in
+// this constellation, so it composes a user-readable draft and hands delivery to a chooser the
+// user launches — it cannot send anything itself. Zero Hyle dependency, no Compose: each app
+// renders its own prompt.
+include(":feedback")
+
 // NOTE: `word-graph/` is intentionally absent from this file.
 //
 // It is a plain asset package (graph.html + vendored AntV G6 + WordNet-derived TSVs), not a

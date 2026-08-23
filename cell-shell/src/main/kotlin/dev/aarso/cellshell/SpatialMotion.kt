@@ -56,6 +56,37 @@ object SpatialMotion {
     /** Scrim over the parked card at full open — quiets its content so it cannot read as overlap. */
     const val PARK_SCRIM_ALPHA = 0.62f
 
+    /**
+     * How far the card turns about its hinge edge at full open, in degrees, under
+     * [ParkStyle.SWIVEL].
+     *
+     * Deliberately small. The reference (Honor's Magic Portal) reads as a door easing open, not
+     * as a card thrown edge-on; and every degree here is bought out of the grab band, since a
+     * turned surface presents less of itself to the screen (see [swivelForeshorten]).
+     *
+     * Raised 10 -> 22 degrees (owner, 2026-08-15: *"I want the swivel to be more pronounced -- at
+     * rest the pane must be more tilted"*). Ten degrees read as depth only in motion and looked
+     * nearly flat once parked, which is precisely where the tilt is meant to be legible.
+     *
+     * The angle costs the grab band nothing, because the card hinges on the band edge itself
+     * ([hingePivot]) and that edge therefore never moves. The ceiling is the camera: past roughly
+     * 32 degrees at [PARK_CAMERA_DISTANCE_CARDS] the far edge crosses behind the camera plane,
+     * where pointer mapping stops being meaningful. 22 leaves a deliberate margin under that.
+     */
+    const val PARK_SWIVEL_DEG = 22f
+
+    /**
+     * Perspective strength for the swivel, expressed in **card widths**.
+     *
+     * Compose's `cameraDistance` is in units of 72 pixels — it is an inch measure, not a pixel
+     * one — and its default of 8f therefore puts the camera 576px from a pane that may be 1080px
+     * wide. At that distance a modest rotation throws the near edge into violent perspective, and
+     * past roughly 32 degrees the far edge crosses behind the camera plane entirely, where
+     * pointer mapping stops being meaningful. Expressing the distance relative to the card and
+     * resolving it at the call site keeps the perspective honest on any screen.
+     */
+    const val PARK_CAMERA_DISTANCE_CARDS = 3f
+
     /** Past this fraction of travel, release completes the transition rather than retreating. */
     const val SETTLE_THRESHOLD = 0.5f
 
@@ -222,6 +253,81 @@ fun settleTarget(value: Float, lastDelta: Float): Float {
  */
 fun parkDistance(extent: Float, scale: Float, bandPx: Float): Float =
     extent * (1f + scale) / 2f - bandPx
+
+/**
+ * How the home card leaves the screen when a room opens.
+ *
+ * Both styles shrink the card — the shrink is what makes it read as a card rather than as the
+ * screen sliding away, and it is common to both. They differ in whether the card also *turns*.
+ *
+ * @see SLIDE
+ * @see SWIVEL
+ */
+enum class ParkStyle {
+    /**
+     * Shrink and slide. The card stays flat to the screen and translates towards its band.
+     *
+     * The default, and unchanged from what the shell has always done, so an app that says nothing
+     * keeps exactly the motion it had.
+     */
+    SLIDE,
+
+    /**
+     * Shrink and swivel. The card additionally turns about the hinge edge that stays on screen,
+     * so it reads as a panel swinging open rather than a rectangle sliding off — the Magic Portal
+     * shape (owner, 2026-08-14: *"add the swivel while keeping the slight shrink"*).
+     *
+     * The hinge is always the edge that remains visible as the grab band, which is the edge the
+     * user would physically be holding: opening the room on the right hinges the card's left
+     * edge, and vice versa.
+     */
+    SWIVEL,
+}
+
+/**
+ * Which edge of the parked card is the one still on screen — the grab band.
+ *
+ * Named START/END rather than left/right because it serves both axes: on the horizontal axis
+ * START is the card's left edge, on the vertical its top.
+ */
+enum class BandEdge { START, END, NONE }
+
+/**
+ * The edge left on screen when an axis is pushed to [progress].
+ *
+ * Positive progress pushes the card towards the far end of the axis, so what stays behind is its
+ * near ([BandEdge.START]) edge. This reads backwards at a glance, which is exactly why it lives
+ * in one function: the shell needs this same answer in three places — where to draw the grip
+ * pill, which edge to hinge the swivel on, and which way that hinge turns — and it previously
+ * derived it independently in each. Two of the three agreed; the swivel did not, and hinged on
+ * the edge that was off screen, which threw the visible sliver out through the perspective
+ * divide and made the parked card look like it had vanished entirely.
+ */
+fun bandEdge(progress: Float): BandEdge = when {
+    progress > 0.01f -> BandEdge.START
+    progress < -0.01f -> BandEdge.END
+    else -> BandEdge.NONE
+}
+
+/**
+ * Where to put the swivel's hinge, as a `transformOrigin` fraction of the **un-scaled** card.
+ *
+ * The scale lives in its own layer inside the swivel one, so this fraction is measured against
+ * the card's full extent while the card actually drawn is [scale] of it, centred. Hence the
+ * `(1 ± scale) / 2` rather than a plain 0 or 1: those would put the hinge on the *box's* edge,
+ * a half-shrink outside the card, and rotate the card about a line it does not touch.
+ *
+ * With the hinge on the visible edge, that edge sits at z = 0 through the whole rotation and the
+ * projection leaves it exactly where it was — so the band the user sees stays exactly [BAND_DP]
+ * wide at any swivel angle, and SLIDE and SWIVEL park to the identical depth. This is why the
+ * shell needs no foreshortening compensation: hinge it correctly and there is nothing to
+ * compensate for.
+ */
+fun hingePivot(edge: BandEdge, scale: Float): Float = when (edge) {
+    BandEdge.START -> (1f - scale) / 2f
+    BandEdge.END -> (1f + scale) / 2f
+    BandEdge.NONE -> 0.5f
+}
 
 /** Remembers a [SpatialController] scoped to the composition. The shell's entry point. */
 @Composable
