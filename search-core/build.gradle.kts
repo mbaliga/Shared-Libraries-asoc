@@ -16,7 +16,7 @@ plugins {
 
 val searchCoreGroup = "dev.aarso"
 val searchCoreArtifact = "search-core"
-val searchCoreVersion = "0.1.0"
+val searchCoreVersion = "0.2.0"
 
 // Project coordinate — required for Gradle composite-build (`includeBuild`) dependency
 // substitution, which is how every consumer resolves this module.
