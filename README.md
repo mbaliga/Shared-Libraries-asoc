@@ -9,6 +9,13 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:search-core` | `dev.aarso:search-core` | pure JVM | On-device search: query language, facet evaluation, ranking. No Android, no storage engine, no coroutines. |
 | `:search-testkit` | `dev.aarso:search-testkit` | pure JVM | Conformance fixtures and golden-corpus helpers for anything implementing the search contracts. |
 | `:crash-recovery` | `dev.aarso:crash-recovery` | Android library | Capture an uncaught crash to a file; show a recovery screen on the next launch instead of bricking. Zero Hyle dependency. |
+| `:cell-shell` | `dev.aarso:cell-shell` | Android library | The constellation's navigation + motion shell: the fonebrew spatial pattern, the word-wheel rail, the edge scrubber. |
+
+One shared unit here is **not** a Gradle module and has no coordinate:
+
+| Package | Platform | What it is |
+|---|---|---|
+| [`word-graph/`](word-graph/) | assets only (JS + data) | Offline word-relationship graph — an ego-network of synonyms/antonyms/hypernyms rendered with vendored AntV G6 over WordNet-derived TSVs. Consumed as an **asset source-set directory**, not `includeBuild`, so it carries no AGP constraint. See [its README](word-graph/README.md). |
 
 ## Why this repo exists
 
