@@ -49,3 +49,9 @@ include(":cell-shell")
 // that apps forbidden from depending on Hyle (D-L: Animalcules, Clackpad) no longer have to
 // carry the entire Hyle submodule to get a utility that has zero Hyle dependency by design.
 include(":crash-recovery")
+
+// The opt-in feedback utility for experimental features. No backend and no telemetry exist in
+// this constellation, so it composes a user-readable draft and hands delivery to a chooser the
+// user launches — it cannot send anything itself. Zero Hyle dependency, no Compose: each app
+// renders its own prompt.
+include(":feedback")

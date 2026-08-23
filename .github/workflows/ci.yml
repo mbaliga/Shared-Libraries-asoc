@@ -47,6 +47,11 @@ jobs:
       - name: Crash-recovery tests (:crash-recovery:test)
         run: ./gradlew --no-daemon :crash-recovery:test
 
+      # The opt-in feedback utility. Its tests are the no-hidden-data promise in executable
+      # form (the draft renders exactly what it was given), so they gate every push.
+      - name: Feedback tests (:feedback:test)
+        run: ./gradlew --no-daemon :feedback:test
+
       # The navigation shell. Its unit tests are the pure motion/mapping maths — the settle
       # curve, the rail's focus falloff, the scrubber's index mapping — which is exactly the
       # part that quietly changes how every app in the constellation feels if it drifts.
@@ -60,3 +65,6 @@ jobs:
 
       - name: Assemble cell-shell release (:cell-shell:assembleRelease)
         run: ./gradlew --no-daemon :cell-shell:assembleRelease
+
+      - name: Assemble feedback release (:feedback:assembleRelease)
+        run: ./gradlew --no-daemon :feedback:assembleRelease
