@@ -17,9 +17,15 @@ composeBom = "2025.05.01"
 lifecycle = "2.8.7"
 # :diagnostics-android's FileProvider export path only — see that module's build.gradle.kts.
 androidxCoreKtx = "1.13.1"
+# :modelbench test-only — validates BenchmarkSuite's hand-written JSON output against
+# schema/modelbench-report.v1.schema.json with a real JSON Schema implementation, rather than
+# trusting the writer by inspection. Never on the main classpath (testImplementation only); the
+# shipped module stays as dependency-free as :search-core/:diagnostics-core.
+jsonSchemaValidator = "1.5.1"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+json-schema-validator = { group = "com.networknt", name = "json-schema-validator", version.ref = "jsonSchemaValidator" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }

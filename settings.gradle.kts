@@ -59,3 +59,9 @@ include(":diagnostics-core")
 include(":diagnostics-android")
 include(":diagnostics-overlay")
 include(":diagnostics-noop")
+
+// v1 scaffolding for local-model benchmarking: EngineAdapter seam + BenchmarkSuite metrics +
+// the modelbench-report.v1 JSON grammar, so the constellation's apps (Fonebrew, Studio, the
+// future asystemofmodels router) can pick models per device. Pure `kotlin("jvm")` — no
+// llama.cpp, no native code; that lands with the asystemofmodels router, in that repo.
+include(":modelbench")

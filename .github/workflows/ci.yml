@@ -59,6 +59,12 @@ jobs:
       - name: Diagnostics-core tests (:diagnostics-core:test)
         run: ./gradlew --no-daemon :diagnostics-core:test
 
+      # Benchmark math + report grammar: tok/s, TTFT, RSS-delta derivation, and a real
+      # JSON-Schema validation of the produced modelbench-report.v1 JSON. Pure JVM, same
+      # "fails fast, no Android toolchain needed" reasoning as :search-core above.
+      - name: Modelbench tests (:modelbench:test)
+        run: ./gradlew --no-daemon :modelbench:test
+
       # Guards the composite-build contract every consumer relies on: the release variant
       # must actually assemble, not just compile under test.
       - name: Assemble crash-recovery release (:crash-recovery:assembleRelease)

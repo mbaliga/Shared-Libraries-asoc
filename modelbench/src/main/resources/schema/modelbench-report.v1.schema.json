@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shared-libraries-asoc.dev.aarso/schemas/modelbench-report.v1.schema.json",
+  "$comment": "v1 scaffolding for the local-model-benchmarking module — the constellation's apps (Fonebrew, Studio, the future asystemofmodels router) consume this to pick models per device. Grammar mirrors Android-IDE-core's schemas/integrations/* house style: schemaVersion pinned to major 1, a producer{app,version} block, and an unknownFields passthrough bag for forward-compat round-tripping. Not wrapped in a ContractEnvelope — :modelbench is a standalone JVM module with zero dependency on core's envelope library, same posture as that repo's assay-index.v1 (a fully independent producer's own file). Numeric metrics are 'number' (not 'integer') because tok/s and ms values are computed, not counted.",
+  "title": "ModelBenchReport",
+  "description": "One benchmark session's result: a device+engine+model triple run through a context-length sweep, each point producing timing/throughput/memory metrics. Written by ModelBenchReport.toJson() (dev.aarso.modelbench.json, JVM module :modelbench) after BenchmarkSuite.run() completes a full sweep.",
+  "type": "object",
+  "required": ["schemaVersion", "reportId", "generatedAt", "producer", "device", "engine", "model", "runs"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.\\d+\\.\\d+$",
+      "description": "MAJOR.MINOR.PATCH of this report shape. A reader MUST reject any schemaVersion whose major is not '1'."
+    },
+    "reportId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Globally unique stable ID for this benchmark session, independent of device/model identity."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC instant the sweep completed and this report was assembled."
+    },
+    "producer": { "$ref": "#/$defs/ProducerRef" },
+    "device": { "$ref": "#/$defs/DeviceProvenance" },
+    "engine": { "$ref": "#/$defs/EngineInfo" },
+    "model": { "$ref": "#/$defs/ModelInfo" },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/BenchmarkRun" },
+      "description": "One entry per context-length sweep point, in the order the sweep was run."
+    },
+    "unknownFields": {
+      "type": "object",
+      "default": {},
+      "description": "Bag for fields a decoder received but did not recognize, preserved for round-trip."
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "ProducerRef": {
+      "type": "object",
+      "required": ["app", "version"],
+      "properties": {
+        "app": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable producer app/module identifier, e.g. 'modelbench'."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The producing app/module's own release version."
+        }
+      },
+      "additionalProperties": true
+    },
+    "DeviceProvenance": {
+      "type": "object",
+      "required": ["deviceModel"],
+      "properties": {
+        "deviceModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Build.MODEL or equivalent identifying string. Owner-verified on-device only; a JVM-host run should supply a synthetic/placeholder value rather than leave it blank."
+        },
+        "androidRelease": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Build.VERSION.RELEASE, if known."
+        },
+        "thermalStatus": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "PowerManager thermal status label at report time, if readable."
+        },
+        "governor": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "CPU scaling governor, if readable (root/sysfs-dependent; frequently null)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "EngineInfo": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "EngineAdapter.engineName — e.g. 'llama.cpp' once the real adapter lands, 'synthetic' for scripted test runs."
+        },
+        "version": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "ModelInfo": {
+      "type": "object",
+      "required": ["ggufName", "quant"],
+      "properties": {
+        "ggufName": { "type": "string", "minLength": 1 },
+        "quant": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Quantization label, e.g. 'Q4_K_M'."
+        },
+        "paramsB": {
+          "type": ["number", "null"],
+          "default": null,
+          "description": "Parameter count in billions, if known."
+        }
+      },
+      "additionalProperties": true
+    },
+    "BenchmarkRun": {
+      "type": "object",
+      "required": ["contextLength", "promptTokens", "generatedTokens", "metrics"],
+      "properties": {
+        "contextLength": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The context-length sweep point this run targeted."
+        },
+        "promptTokens": { "type": "integer", "minimum": 0 },
+        "generatedTokens": { "type": "integer", "minimum": 0 },
+        "metrics": { "$ref": "#/$defs/RunMetrics" },
+        "thermal": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/ThermalSample" }],
+          "default": null,
+          "description": "Sampled once per run via the ThermalSampler hook. Null when no sampler was supplied (the default on a JVM-only run) or the platform couldn't answer."
+        }
+      },
+      "additionalProperties": true
+    },
+    "RunMetrics": {
+      "type": "object",
+      "required": ["promptProcessingTokPerSec", "decodeTokPerSec", "loadTimeMs"],
+      "properties": {
+        "timeToFirstTokenMs": {
+          "type": ["number", "null"],
+          "default": null,
+          "description": "Elapsed time from the start of generateTokens() to its first token callback. Null when a run generated zero tokens."
+        },
+        "promptProcessingTokPerSec": {
+          "type": "number",
+          "minimum": 0,
+          "description": "tokensProcessed / prompt-processing elapsed seconds. Zero (never NaN/Infinity) when elapsed time is zero."
+        },
+        "decodeTokPerSec": {
+          "type": "number",
+          "minimum": 0,
+          "description": "tokensGenerated / decode elapsed seconds. Zero (never NaN/Infinity) when elapsed time is zero."
+        },
+        "peakRssDeltaBytes": {
+          "type": ["integer", "null"],
+          "default": null,
+          "description": "Peak resident-set size sampled after this run minus the value sampled right after loadModel(). Null when the adapter can't report RSS on both samples (true for SyntheticEngine and any JVM-host run)."
+        },
+        "loadTimeMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "loadModel() wall time. Load happens once per sweep, not per point, so this repeats identically across every run in a report's runs[]."
+        }
+      },
+      "additionalProperties": true
+    },
+    "ThermalSample": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Platform thermal status label at sample time (e.g. Android's THERMAL_STATUS_* names). Vocabulary is intentionally open-ended — real sensors are a device-side hook this schema does not constrain."
+        },
+        "batteryPercent": { "type": ["integer", "null"], "default": null },
+        "atElapsedNanos": {
+          "type": ["integer", "null"],
+          "default": null,
+          "description": "Nanos since the sampled run began, if the sampler timestamped it."
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
