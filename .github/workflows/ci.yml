@@ -85,6 +85,12 @@ jobs:
       - name: Assemble diagnostics-noop release (:diagnostics-noop:assembleRelease)
         run: ./gradlew --no-daemon :diagnostics-noop:assembleRelease
 
+      # :modelbench-ui has no test source of its own (the metrics/report logic it renders lives
+      # in :modelbench) — assembleRelease is the real gate: does the Compose UI actually build
+      # against a real Android SDK, which no JVM check can answer.
+      - name: Assemble modelbench-ui release (:modelbench-ui:assembleRelease)
+        run: ./gradlew --no-daemon :modelbench-ui:assembleRelease
+
       # scripts/check-noop-parity.py asserts diagnostics-noop mirrors diagnostics-android
       # function-for-function and parameter-for-parameter — signature drift must fail here, not
       # later in someone's release build.

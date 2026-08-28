@@ -65,3 +65,8 @@ include(":diagnostics-noop")
 // future asystemofmodels router) can pick models per device. Pure `kotlin("jvm")` — no
 // llama.cpp, no native code; that lands with the asystemofmodels router, in that repo.
 include(":modelbench")
+
+// Minimal Compose UI over :modelbench's report model (run list + run detail). Same
+// "no runnable app module in this repo" posture as :cell-shell/:diagnostics-* — a host app
+// embeds these composables rather than this repo shipping one of its own.
+include(":modelbench-ui")
