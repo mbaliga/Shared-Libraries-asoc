@@ -32,7 +32,7 @@ val crashRecoveryArtifact = "crash-recovery"
 // crash loop where the OS showed "keeps stopping" and our recovery screen never could.
 // (1.2.0 was the first release from this home: hyle-design-system@c586f8f + previewIntent
 // merged forward from the never-merged 33b0faa. See MIGRATION.md.)
-val crashRecoveryVersion = "1.4.0"
+val crashRecoveryVersion = "1.5.0"
 
 // Project coordinate — required for Gradle composite-build (`includeBuild`) dependency
 // substitution, which is how every consumer resolves this module.

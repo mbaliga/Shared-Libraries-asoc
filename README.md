@@ -38,7 +38,7 @@ includeBuild("shared-libraries")
 ```kotlin
 // app/build.gradle.kts
 implementation("dev.aarso:search-core:0.1.0")
-implementation("dev.aarso:crash-recovery:1.2.0")
+implementation("dev.aarso:crash-recovery:1.5.0")
 
 // diagnostics: debug-only collector + overlay, release-only no-op, plus the safety guard that
 // fails a release build if it ever resolves a real collector instead of the no-op.
