@@ -11,6 +11,7 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:crash-recovery` | `dev.aarso:crash-recovery` | Android library | Capture an uncaught crash to a file; show a recovery screen on the next launch instead of bricking. Zero Hyle dependency. |
 | `:cell-shell` | `dev.aarso:cell-shell` | Android library (Compose) | The constellation's shared navigation and motion shell — spatial layout, edge timeline scrubber, shake-to-refresh. |
 | `:feedback` | `dev.aarso:feedback` | Android library | Opt-in feedback for experimental features: a fully user-readable draft, delivered only by a share/mail chooser the user launches. No telemetry, no network, ever. |
+| `:local-session-core` | `dev.aarso:local-session-core` | pure JVM | Deterministic, host-authoritative local rooms for coach/athlete, same-device and nearby-device flows. Transport, persistence and UI stay with the host app. |
 
 ## Why this repo exists
 
@@ -32,6 +33,7 @@ includeBuild("shared-libraries")
 // app/build.gradle.kts
 implementation("dev.aarso:search-core:0.2.0")
 implementation("dev.aarso:crash-recovery:1.4.0")
+implementation("dev.aarso:local-session-core:0.1.0")
 ```
 
 Gradle substitutes any `dev.aarso:<name>` dependency with the matching project in the included

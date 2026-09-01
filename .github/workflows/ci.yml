@@ -44,6 +44,11 @@ jobs:
       - name: Search testkit tests (:search-testkit:test)
         run: ./gradlew --no-daemon :search-testkit:test
 
+      # Shared host-authoritative session protocol. These tests pin ordering,
+      # idempotency, role boundaries and bounded history without a network.
+      - name: Local session core tests (:local-session-core:test)
+        run: ./gradlew --no-daemon :local-session-core:test
+
       - name: Crash-recovery tests (:crash-recovery:test)
         run: ./gradlew --no-daemon :crash-recovery:test
 

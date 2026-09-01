@@ -55,3 +55,7 @@ include(":crash-recovery")
 // user launches — it cannot send anything itself. Zero Hyle dependency, no Compose: each app
 // renders its own prompt.
 include(":feedback")
+
+// Host-authoritative, transport-neutral local sessions for coach/athlete and other
+// multi-participant app flows. Pure JVM: no Android, backend, discovery, storage or UI policy.
+include(":local-session-core")
