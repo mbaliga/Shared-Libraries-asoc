@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aarso.dev/evidence/v1/evidence-record.schema.json",
+  "title": "Evidence record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "subjectId", "recordType", "recordClass", "observedAt", "ingestedAt",
+    "timezone", "resolution", "source", "privacyClass", "schemaVersion", "contentHash"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "subjectId": { "type": "string", "minLength": 1 },
+    "recordType": { "enum": ["ENTITY", "OBSERVATION", "EVENT", "STATE_ESTIMATE", "CLAIM", "RETRACTION"] },
+    "recordClass": { "enum": ["RAW", "DERIVED", "INFERRED", "DECLARED"] },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "effectiveFrom": { "type": "string", "format": "date-time" },
+    "effectiveTo": { "type": ["string", "null"], "format": "date-time" },
+    "ingestedAt": { "type": "string", "format": "date-time" },
+    "timezone": { "type": "string", "minLength": 1 },
+    "resolution": { "enum": ["RAW_SAMPLE", "WINDOW", "EVENT", "SESSION", "DAY", "PERIOD"] },
+    "source": { "$ref": "provenance.schema.json" },
+    "measurement": { "type": ["object", "null"] },
+    "privacyClass": { "enum": ["PUBLIC", "PERSONAL", "PRIVATE", "MEDICAL"] },
+    "evidenceGrade": { "enum": ["E0", "E1", "E2", "E3", "E4", "E5", null] },
+    "schemaVersion": { "type": "integer", "minimum": 1 },
+    "contentHash": { "type": "string", "minLength": 1 },
+    "derivedFromIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "supersedesId": { "type": ["string", "null"] },
+    "retractsId": { "type": ["string", "null"] }
+  }
+}

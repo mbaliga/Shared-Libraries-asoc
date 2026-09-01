@@ -55,3 +55,7 @@ include(":crash-recovery")
 // user launches — it cannot send anything itself. Zero Hyle dependency, no Compose: each app
 // renders its own prompt.
 include(":feedback")
+
+// Portable JSON schemas shared by Baseline, Crocodyl and Ebbflow. Pure JVM/resources;
+// implementations remain in their owning products.
+include(":evidence-schema")
