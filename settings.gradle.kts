@@ -55,3 +55,14 @@ include(":crash-recovery")
 // user launches — it cannot send anything itself. Zero Hyle dependency, no Compose: each app
 // renders its own prompt.
 include(":feedback")
+
+// NOTE: `word-graph/` is intentionally absent from this file.
+//
+// It is a plain asset package (graph.html + vendored AntV G6 + WordNet-derived TSVs), not a
+// Gradle project, and consumers take it by pointing an asset source-set at the directory
+// rather than by `includeBuild` + a dev.aarso coordinate. That is deliberate: an Android
+// library module would put THIS build's AGP into every consumer's composite build graph and
+// force the lockstep above (currently 8.9.1). Clackpad, its first consumer, is pinned to AGP
+// 8.13.2 — the floor for compileSdk 36, which Play requires for updates from 2026-08-31 — so
+// under the lockstep it could not take this at all. Shipping no plugin sidesteps the whole
+// constraint. See word-graph/README.md.

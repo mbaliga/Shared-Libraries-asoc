@@ -12,6 +12,12 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:cell-shell` | `dev.aarso:cell-shell` | Android library (Compose) | The constellation's shared navigation and motion shell — spatial layout, edge timeline scrubber, shake-to-refresh. |
 | `:feedback` | `dev.aarso:feedback` | Android library | Opt-in feedback for experimental features: a fully user-readable draft, delivered only by a share/mail chooser the user launches. No telemetry, no network, ever. |
 
+One shared unit here is **not** a Gradle module and has no coordinate:
+
+| Package | Platform | What it is |
+|---|---|---|
+| [`word-graph/`](word-graph/) | assets only (JS + data) | Offline word-relationship graph — an ego-network of synonyms/antonyms/hypernyms rendered with vendored AntV G6 over WordNet-derived TSVs. Consumed as an **asset source-set directory**, not `includeBuild`, so it carries no AGP constraint. See [its README](word-graph/README.md). |
+
 ## Why this repo exists
 
 Hyle-Design-System is the *design system*. Things that are shared but are **not** design-system
