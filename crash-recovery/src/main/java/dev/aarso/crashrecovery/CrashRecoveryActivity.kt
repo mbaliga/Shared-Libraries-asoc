@@ -71,6 +71,7 @@ class CrashRecoveryActivity : Activity() {
     private lateinit var root: FrameLayout
 
     private var pendingSaveText: String? = null
+    private var hasQuarantine = false
 
     @Suppress("DEPRECATION")
     private fun readStyle(): CrashRecoveryStyle =
@@ -97,6 +98,7 @@ class CrashRecoveryActivity : Activity() {
         // Show the repeat-crash reset affordance in preview so it can be reviewed; a real
         // streak read would report 0 here and hide the section being previewed.
         consecutive = if (preview) REPEAT_THRESHOLD else CrashRecovery.consecutiveCount(this)
+        hasQuarantine = if (preview) true else CrashRecovery.hasRecoverableData(this)
 
         val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
@@ -415,10 +417,11 @@ class CrashRecoveryActivity : Activity() {
             },
         )
 
-        // Loop-gated reset — only once the crash has actually recurred (Continue already
-        // failed). Kept in the full report, never on the calm main screen, and confirm-gated,
-        // so a one-off crash never exposes a data-wiping footgun.
-        if (consecutive >= REPEAT_THRESHOLD) col.addView(resetSection())
+        // Loop-gated recovery — offered once the crash has actually recurred (Continue already
+        // failed), or whenever set-aside data is waiting to be restored. Kept in the full report,
+        // never on the calm main screen. The reset here is non-destructive (data is moved aside),
+        // so there is no data-wiping footgun to guard against.
+        if (consecutive >= REPEAT_THRESHOLD || hasQuarantine) col.addView(recoverySection())
 
         val scroll = ScrollView(this).apply {
             isFillViewport = false
@@ -446,60 +449,130 @@ class CrashRecoveryActivity : Activity() {
         return outer
     }
 
-    /** Shown only after a repeat crash: an explanation and a confirm-gated, data-wiping reset. */
-    private fun resetSection(): View =
+    /**
+     * Shown after a repeat crash, or whenever set-aside data is waiting to be restored. Offers,
+     * in order of safety: save a copy off-device (if the host provided a salvager), reset by
+     * moving data ASIDE (never deleting it), and restore data set aside by an earlier reset.
+     * There is deliberately no "erase everything" here — a bare wipe is never the answer.
+     */
+    private fun recoverySection(): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = Look.Space.XL.dp }
             addView(sectionHeader("Still happening?"))
             addView(
                 text(
-                    "$appLabel has now crashed more than once in a row, so continuing may just " +
-                        "hit the same problem. As a last resort you can reset its data — this wipes " +
-                        "everything $appLabel has stored on this device and can't be undone.",
+                    "$appLabel has crashed more than once in a row, so continuing may just hit the " +
+                        "same problem. You can reset it to a clean start — your data isn't deleted, " +
+                        "it's set aside, and you can put it back at any point before $appLabel is " +
+                        "working again.",
                     Look.Type.SECONDARY,
                     pal.inkSoft,
                 ).apply { setLineSpacing(0f, Look.Type.LEADING_BODY) },
             )
+
+            // 1) Save a portable copy off-device — the real safety net for data-heavy apps.
+            val salv = CrashRecovery.salvager()
+            if (salv != null) {
+                salv.describe(this@CrashRecoveryActivity)?.let { summary ->
+                    addView(
+                        text("Backup contains: $summary", Look.Type.EYEBROW, pal.inkSoft)
+                            .apply { withTopMargin(Look.Space.M) },
+                    )
+                }
+                addView(
+                    pillButton("Save a copy of my data", pal.ink, pal.paper, filled = false) { exportData() }
+                        .withTopMargin(Look.Space.M),
+                )
+            }
+
+            // 2) Reset by setting data aside (non-destructive).
             addView(
-                // Danger-tinted outlined pill. The post-construction re-styling that used to
-                // live here was a workaround for pillButton painting outlined labels in the
-                // fill colour; the variant handles its own tint now.
-                pillButton("Reset $appLabel's data", pal.danger, pal.paper, filled = false) { confirmReset() }
-                    .withTopMargin(Look.Space.M),
+                pillButton("Reset & set my data aside", pal.accent, pal.onAccent, filled = true) {
+                    confirmQuarantineReset()
+                }.withTopMargin(Look.Space.M),
             )
+
+            // 3) Restore data set aside by an earlier reset (if any is waiting).
+            if (hasQuarantine) {
+                val size = CrashRecovery.recoverableSizeBytes(this@CrashRecoveryActivity)
+                val label = if (size > 0) "Restore the data I set aside (${humanBytes(size)})" else "Restore the data I set aside"
+                addView(
+                    pillButton(label, pal.ink, pal.paper, filled = false) { restoreData() }
+                        .withTopMargin(Look.Space.M),
+                )
+                if (salv?.canImport() == true) {
+                    addView(
+                        pillButton("Import a backup file", pal.ink, pal.paper, filled = false) { importData() }
+                            .withTopMargin(Look.Space.S),
+                    )
+                }
+            }
         }
 
-    private fun confirmReset() {
+    private fun confirmQuarantineReset() {
         android.app.AlertDialog.Builder(this)
-            .setTitle("Reset $appLabel's data?")
+            .setTitle("Reset $appLabel?")
             .setMessage(
-                "This wipes everything $appLabel has stored on this device and restarts it. " +
-                    "This cannot be undone.",
+                "$appLabel will start fresh. Your existing data is moved aside — not deleted — so " +
+                    "you can restore it right after if the reset doesn't help. It's cleared only " +
+                    "once $appLabel is working again.",
             )
-            .setPositiveButton("Reset") { _, _ -> performReset() }
+            .setPositiveButton("Reset") { _, _ -> performQuarantineReset() }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun performReset() {
-        // Inert in preview — previewing the screen must never be able to wipe app data.
+    private fun performQuarantineReset() {
+        // Inert in preview — previewing the screen must never touch real app data.
         if (preview) {
-            showToast("Preview — no data was reset")
+            showToast("Preview — no data was changed")
             return
         }
-        CrashRecovery.clear(this)
-        CrashRecovery.clearStreak(this)
-        // The zero-arg self-clear is API 29+ only; several consumers have a lower minSdk
-        // (Animalcules 24, Horizkeeb 28), so guiding to Settings is the honest fallback.
-        if (Build.VERSION.SDK_INT >= 29) {
-            runCatching {
-                (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
-                    .clearApplicationUserData()
-            }
-        } else {
-            showToast("Clear $appLabel's storage in Android Settings, then reopen it.")
+        val moved = CrashRecovery.quarantineAndReset(this)
+        showToast(if (moved) "Data set aside — restarting clean" else "Restarting clean")
+        paneMain.postDelayed({ relaunchApp() }, 500)
+    }
+
+    private fun restoreData() {
+        if (preview) {
+            showToast("Preview — nothing to restore")
+            return
         }
+        val ok = CrashRecovery.restoreQuarantine(this)
+        showToast(if (ok) "Data restored — restarting" else "Nothing to restore")
+        if (ok) paneMain.postDelayed({ relaunchApp() }, 500)
+    }
+
+    /** Stream the host salvager's backup to a user-picked file (survives any on-device reset). */
+    private fun exportData() {
+        if (preview || CrashRecovery.salvager() == null) return
+        val name = "${packageName}-backup-${System.currentTimeMillis()}.bak"
+        val create = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/octet-stream"
+            putExtra(Intent.EXTRA_TITLE, name)
+        }
+        runCatching { startActivityForResult(create, REQ_EXPORT) }
+            .onFailure { showToast("No place to save the backup") }
+    }
+
+    /** Pick a backup file and hand its stream to the host salvager to restore. */
+    private fun importData() {
+        if (preview || CrashRecovery.salvager()?.canImport() != true) return
+        val open = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        runCatching { startActivityForResult(open, REQ_IMPORT) }
+            .onFailure { showToast("Couldn't open a file picker") }
+    }
+
+    private fun humanBytes(n: Long): String = when {
+        n >= 1_000_000_000L -> String.format("%.1f GB", n / 1_000_000_000.0)
+        n >= 1_000_000L -> String.format("%.0f MB", n / 1_000_000.0)
+        n >= 1_000L -> "${n / 1000} KB"
+        else -> "$n B"
     }
 
     private fun section(title: String, rows: List<Pair<String, String>>): View =
@@ -586,10 +659,34 @@ class CrashRecoveryActivity : Activity() {
             return
         }
         CrashRecovery.clear(this)
-        runCatching { packageManager.getLaunchIntentForPackage(packageName) }
-            .getOrNull()
-            ?.let { startActivity(it) }
+        relaunchApp()
+    }
+
+    /**
+     * Relaunch the host app cleanly. The naive `startActivity(getLaunchIntentForPackage())`
+     * + `finish()` failed in practice: [CrashRecovery.maybeShowRecovery] already finished the
+     * launcher, so this recovery screen is the task's only activity; the launch intent's
+     * `NEW_TASK` reuses that same task (shared affinity), and finishing here tears the task
+     * down before the launcher appears — the app just closes. Build a proper restart task
+     * (`NEW_TASK | CLEAR_TASK`) instead, then drop this process so the app comes up fresh
+     * rather than layered on whatever the crash left half-initialized.
+     */
+    private fun relaunchApp() {
+        val launch = runCatching { packageManager.getLaunchIntentForPackage(packageName) }.getOrNull()
+        val component = launch?.component
+        runCatching {
+            when {
+                component != null -> startActivity(Intent.makeRestartActivityTask(component))
+                launch != null -> startActivity(
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                )
+                // No resolvable launcher (rare) — nothing to relaunch; just leave.
+            }
+        }
         finish()
+        // The launch is already queued with the system, so ending our own process here does not
+        // cancel it — it guarantees the app restarts in a brand-new process.
+        Runtime.getRuntime().exit(0)
     }
 
     private fun discard() {
@@ -636,6 +733,30 @@ class CrashRecoveryActivity : Activity() {
                     showToast("Report saved")
                 }.onFailure { showToast("Couldn't save the file") }
             }
+        } else if (requestCode == REQ_EXPORT && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            val salv = CrashRecovery.salvager() ?: return
+            // Stream off the main thread — a real backup can be large.
+            showToast("Saving a copy…")
+            Thread {
+                val ok = runCatching {
+                    contentResolver.openOutputStream(uri)?.use { salv.exportTo(this, it) }
+                }.isSuccess
+                runOnUiThread { showToast(if (ok) "Backup saved" else "Couldn't save the backup") }
+            }.start()
+        } else if (requestCode == REQ_IMPORT && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            val salv = CrashRecovery.salvager()?.takeIf { it.canImport() } ?: return
+            showToast("Restoring from backup…")
+            Thread {
+                val ok = runCatching {
+                    contentResolver.openInputStream(uri)?.use { salv.importFrom(this, it) }
+                }.isSuccess
+                runOnUiThread {
+                    showToast(if (ok) "Backup restored — restarting" else "Couldn't read that backup")
+                    if (ok) paneMain.postDelayed({ relaunchApp() }, 500)
+                }
+            }.start()
         }
     }
 
@@ -941,8 +1062,10 @@ class CrashRecoveryActivity : Activity() {
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
         private const val REQ_SAVE = 4471
+        private const val REQ_EXPORT = 4472
+        private const val REQ_IMPORT = 4473
 
-        /** Offer the data-wiping reset only once a crash has recurred (Continue already failed). */
+        /** Offer the recovery affordances only once a crash has recurred (Continue already failed). */
         private const val REPEAT_THRESHOLD = 2
 
         private const val EXTRA_APP_LABEL = "dev.aarso.crashrecovery.APP_LABEL"
