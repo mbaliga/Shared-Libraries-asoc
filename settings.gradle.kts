@@ -56,6 +56,10 @@ include(":crash-recovery")
 // renders its own prompt.
 include(":feedback")
 
+// Portable JSON schemas shared by Baseline, Crocodyl and Ebbflow. Pure JVM/resources;
+// implementations remain in their owning products.
+include(":evidence-schema")
+
 // NOTE: `word-graph/` is intentionally absent from this file.
 //
 // It is a plain asset package (graph.html + vendored AntV G6 + WordNet-derived TSVs), not a

@@ -44,6 +44,9 @@ jobs:
       - name: Search testkit tests (:search-testkit:test)
         run: ./gradlew --no-daemon :search-testkit:test
 
+      - name: Evidence schema tests (:evidence-schema:test)
+        run: ./gradlew --no-daemon :evidence-schema:test
+
       - name: Crash-recovery tests (:crash-recovery:test)
         run: ./gradlew --no-daemon :crash-recovery:test
 

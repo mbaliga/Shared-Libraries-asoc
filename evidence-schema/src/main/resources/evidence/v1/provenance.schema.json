@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aarso.dev/evidence/v1/provenance.schema.json",
+  "title": "Evidence provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sourceId", "sourceKind"],
+  "properties": {
+    "sourceId": { "type": "string", "minLength": 1 },
+    "sourceKind": { "enum": ["APP", "DEVICE", "IMPORT", "PERSON", "MODEL"] },
+    "appVersion": { "type": ["string", "null"] },
+    "deviceModel": { "type": ["string", "null"] },
+    "deviceVersion": { "type": ["string", "null"] },
+    "calibrationState": { "type": ["string", "null"] },
+    "clockUncertaintyMs": { "type": ["number", "null"], "minimum": 0 }
+  }
+}
