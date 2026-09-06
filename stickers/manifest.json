@@ -13,21 +13,32 @@
        "file": "bao/00-originals/01-garland.png",
        "name": "Garland",
        "keywords": [
-        "garland"
+        "garland",
+        "flowers",
+        "decoration",
+        "festive"
        ]
       },
       {
        "file": "bao/00-originals/02-victory.png",
        "name": "Victory",
        "keywords": [
-        "victory"
+        "victory",
+        "win",
+        "winner",
+        "celebrate",
+        "yay"
        ]
       },
       {
        "file": "bao/00-originals/03-laughing.png",
        "name": "Laughing",
        "keywords": [
-        "laughing"
+        "laughing",
+        "laugh",
+        "haha",
+        "lol",
+        "funny"
        ]
       },
       {
@@ -35,21 +46,33 @@
        "name": "Prayer love",
        "keywords": [
         "prayer",
-        "love"
+        "love",
+        "pray",
+        "thanks",
+        "namaste",
+        "gratitude"
        ]
       },
       {
        "file": "bao/00-originals/05-wave.png",
        "name": "Wave",
        "keywords": [
-        "wave"
+        "wave",
+        "hello",
+        "hi",
+        "bye",
+        "hey"
        ]
       },
       {
        "file": "bao/00-originals/06-namaste.png",
        "name": "Namaste",
        "keywords": [
-        "namaste"
+        "namaste",
+        "hello",
+        "greeting",
+        "respect",
+        "hi"
        ]
       },
       {
@@ -57,7 +80,12 @@
        "name": "Thumbs up",
        "keywords": [
         "thumbs",
-        "up"
+        "up",
+        "good",
+        "yes",
+        "ok",
+        "approve",
+        "nice"
        ]
       },
       {
@@ -65,70 +93,105 @@
        "name": "Bird friend",
        "keywords": [
         "bird",
-        "friend"
+        "friend",
+        "pet"
        ]
       },
       {
        "file": "bao/00-originals/09-thinking.png",
        "name": "Thinking",
        "keywords": [
-        "thinking"
+        "thinking",
+        "hmm",
+        "ponder",
+        "idea",
+        "thought"
        ]
       },
       {
        "file": "bao/00-originals/10-shrug.png",
        "name": "Shrug",
        "keywords": [
-        "shrug"
+        "shrug",
+        "dunno",
+        "idk",
+        "whatever",
+        "unsure"
        ]
       },
       {
        "file": "bao/00-originals/11-surprised.png",
        "name": "Surprised",
        "keywords": [
-        "surprised"
+        "surprised",
+        "shock",
+        "wow",
+        "omg",
+        "surprise"
        ]
       },
       {
        "file": "bao/00-originals/12-pondering.png",
        "name": "Pondering",
        "keywords": [
-        "pondering"
+        "pondering",
+        "think",
+        "hmm",
+        "consider"
        ]
       },
       {
        "file": "bao/00-originals/13-angry.png",
        "name": "Angry",
        "keywords": [
-        "angry"
+        "angry",
+        "mad",
+        "furious",
+        "upset",
+        "annoyed"
        ]
       },
       {
        "file": "bao/00-originals/14-sad.png",
        "name": "Sad",
        "keywords": [
-        "sad"
+        "sad",
+        "unhappy",
+        "down",
+        "cry",
+        "blue"
        ]
       },
       {
        "file": "bao/00-originals/15-crying.png",
        "name": "Crying",
        "keywords": [
-        "crying"
+        "crying",
+        "cry",
+        "tears",
+        "sad",
+        "sob"
        ]
       },
       {
        "file": "bao/00-originals/16-bashful.png",
        "name": "Bashful",
        "keywords": [
-        "bashful"
+        "bashful",
+        "shy",
+        "blush",
+        "embarrassed"
        ]
       },
       {
        "file": "bao/00-originals/17-facepalm.png",
        "name": "Facepalm",
        "keywords": [
-        "facepalm"
+        "facepalm",
+        "oops",
+        "fail",
+        "ugh",
+        "smh"
        ]
       },
       {
@@ -136,28 +199,40 @@
        "name": "Spa day",
        "keywords": [
         "spa",
-        "day"
+        "day",
+        "relax",
+        "selfcare",
+        "pamper"
        ]
       },
       {
        "file": "bao/00-originals/19-sleeping.png",
        "name": "Sleeping",
        "keywords": [
-        "sleeping"
+        "sleeping",
+        "sleep",
+        "tired",
+        "zzz",
+        "nap"
        ]
       },
       {
        "file": "bao/00-originals/20-reading.png",
        "name": "Reading",
        "keywords": [
-        "reading"
+        "reading",
+        "book",
+        "study"
        ]
       },
       {
        "file": "bao/00-originals/21-daydreaming.png",
        "name": "Daydreaming",
        "keywords": [
-        "daydreaming"
+        "daydreaming",
+        "dream",
+        "imagine",
+        "daydream"
        ]
       },
       {
@@ -165,14 +240,19 @@
        "name": "Self love",
        "keywords": [
         "self",
-        "love"
+        "love",
+        "selfcare"
        ]
       },
       {
        "file": "bao/00-originals/23-peaceful.png",
        "name": "Peaceful",
        "keywords": [
-        "peaceful"
+        "peaceful",
+        "calm",
+        "zen",
+        "relax",
+        "peace"
        ]
       },
       {
@@ -180,7 +260,11 @@
        "name": "Fist pump",
        "keywords": [
         "fist",
-        "pump"
+        "pump",
+        "yes",
+        "win",
+        "excited",
+        "yeah"
        ]
       }
      ]
@@ -194,7 +278,11 @@
        "name": "Delighted grin",
        "keywords": [
         "delighted",
-        "grin"
+        "grin",
+        "happy",
+        "smile",
+        "joy",
+        "grinning"
        ]
       },
       {
@@ -202,7 +290,10 @@
        "name": "Laughing tears",
        "keywords": [
         "laughing",
-        "tears"
+        "tears",
+        "lol",
+        "haha",
+        "funny"
        ]
       },
       {
@@ -210,7 +301,10 @@
        "name": "Finger guns",
        "keywords": [
         "finger",
-        "guns"
+        "guns",
+        "cool",
+        "nice",
+        "awesome"
        ]
       },
       {
@@ -218,7 +312,9 @@
        "name": "Side eye",
        "keywords": [
         "side",
-        "eye"
+        "eye",
+        "suspicious",
+        "skeptical"
        ]
       },
       {
@@ -226,7 +322,10 @@
        "name": "Eye roll",
        "keywords": [
         "eye",
-        "roll"
+        "roll",
+        "annoyed",
+        "whatever",
+        "ugh"
        ]
       },
       {
@@ -234,105 +333,145 @@
        "name": "Awkward smile",
        "keywords": [
         "awkward",
-        "smile"
+        "smile",
+        "nervous",
+        "cringe"
        ]
       },
       {
        "file": "bao/01-core-emotions/07-startled.png",
        "name": "Startled",
        "keywords": [
-        "startled"
+        "startled",
+        "shocked",
+        "surprised",
+        "scared"
        ]
       },
       {
        "file": "bao/01-core-emotions/08-scared.png",
        "name": "Scared",
        "keywords": [
-        "scared"
+        "scared",
+        "afraid",
+        "fear"
        ]
       },
       {
        "file": "bao/01-core-emotions/09-panicking.png",
        "name": "Panicking",
        "keywords": [
-        "panicking"
+        "panicking",
+        "panic",
+        "scared",
+        "stressed"
        ]
       },
       {
        "file": "bao/01-core-emotions/10-worried.png",
        "name": "Worried",
        "keywords": [
-        "worried"
+        "worried",
+        "anxious",
+        "nervous",
+        "concerned"
        ]
       },
       {
        "file": "bao/01-core-emotions/11-frustrated.png",
        "name": "Frustrated",
        "keywords": [
-        "frustrated"
+        "frustrated",
+        "annoyed",
+        "upset",
+        "mad"
        ]
       },
       {
        "file": "bao/01-core-emotions/12-furious.png",
        "name": "Furious",
        "keywords": [
-        "furious"
+        "furious",
+        "angry",
+        "mad",
+        "rage"
        ]
       },
       {
        "file": "bao/01-core-emotions/13-sulking.png",
        "name": "Sulking",
        "keywords": [
-        "sulking"
+        "sulking",
+        "pouty",
+        "upset",
+        "moody",
+        "sad"
        ]
       },
       {
        "file": "bao/01-core-emotions/14-heartbroken.png",
        "name": "Heartbroken",
        "keywords": [
-        "heartbroken"
+        "heartbroken",
+        "sad",
+        "heartbreak",
+        "crying"
        ]
       },
       {
        "file": "bao/01-core-emotions/15-relieved.png",
        "name": "Relieved",
        "keywords": [
-        "relieved"
+        "relieved",
+        "relief",
+        "phew"
        ]
       },
       {
        "file": "bao/01-core-emotions/16-exhausted.png",
        "name": "Exhausted",
        "keywords": [
-        "exhausted"
+        "exhausted",
+        "tired",
+        "sleepy",
+        "drained"
        ]
       },
       {
        "file": "bao/01-core-emotions/17-feverish.png",
        "name": "Feverish",
        "keywords": [
-        "feverish"
+        "feverish",
+        "sick",
+        "ill",
+        "fever"
        ]
       },
       {
        "file": "bao/01-core-emotions/18-dizzy.png",
        "name": "Dizzy",
        "keywords": [
-        "dizzy"
+        "dizzy",
+        "woozy",
+        "confused"
        ]
       },
       {
        "file": "bao/01-core-emotions/19-pleading.png",
        "name": "Pleading",
        "keywords": [
-        "pleading"
+        "pleading",
+        "please",
+        "beg"
        ]
       },
       {
        "file": "bao/01-core-emotions/20-smug.png",
        "name": "Smug",
        "keywords": [
-        "smug"
+        "smug",
+        "proud",
+        "confident"
        ]
       }
      ]
@@ -366,14 +505,19 @@
        "file": "bao/02-conversation/04-sorry.png",
        "name": "Sorry",
        "keywords": [
-        "sorry"
+        "sorry",
+        "apology",
+        "oops"
        ]
       },
       {
        "file": "bao/02-conversation/05-grateful.png",
        "name": "Grateful",
        "keywords": [
-        "grateful"
+        "grateful",
+        "thanks",
+        "thank you",
+        "gratitude"
        ]
       },
       {
@@ -388,7 +532,9 @@
        "name": "One moment",
        "keywords": [
         "one",
-        "moment"
+        "moment",
+        "wait",
+        "brb"
        ]
       },
       {
@@ -418,7 +564,10 @@
        "file": "bao/02-conversation/11-shh.png",
        "name": "Shh",
        "keywords": [
-        "shh"
+        "shh",
+        "quiet",
+        "silence",
+        "hush"
        ]
       },
       {
@@ -426,14 +575,18 @@
        "name": "Call me",
        "keywords": [
         "call",
-        "me"
+        "me",
+        "phone"
        ]
       },
       {
        "file": "bao/02-conversation/13-messaging.png",
        "name": "Messaging",
        "keywords": [
-        "messaging"
+        "messaging",
+        "text",
+        "chat",
+        "message"
        ]
       },
       {
@@ -448,21 +601,26 @@
        "name": "On it",
        "keywords": [
         "on",
-        "it"
+        "it",
+        "working",
+        "busy"
        ]
       },
       {
        "file": "bao/02-conversation/16-done.png",
        "name": "Done",
        "keywords": [
-        "done"
+        "done",
+        "finished",
+        "complete"
        ]
       },
       {
        "file": "bao/02-conversation/17-idea.png",
        "name": "Idea",
        "keywords": [
-        "idea"
+        "idea",
+        "lightbulb"
        ]
       },
       {
@@ -476,14 +634,19 @@
        "file": "bao/02-conversation/19-choosing.png",
        "name": "Choosing",
        "keywords": [
-        "choosing"
+        "choosing",
+        "decide",
+        "choice"
        ]
       },
       {
        "file": "bao/02-conversation/20-peeking.png",
        "name": "Peeking",
        "keywords": [
-        "peeking"
+        "peeking",
+        "peek",
+        "spy",
+        "shy"
        ]
       }
      ]
@@ -511,7 +674,8 @@
        "name": "Hand heart",
        "keywords": [
         "hand",
-        "heart"
+        "heart",
+        "love"
        ]
       },
       {
@@ -520,14 +684,19 @@
        "keywords": [
         "heart",
         "to",
-        "chest"
+        "chest",
+        "love",
+        "grateful"
        ]
       },
       {
        "file": "bao/03-affection-support/05-smitten.png",
        "name": "Smitten",
        "keywords": [
-        "smitten"
+        "smitten",
+        "love",
+        "crush",
+        "infatuated"
        ]
       },
       {
@@ -535,21 +704,29 @@
        "name": "Sending hearts",
        "keywords": [
         "sending",
-        "hearts"
+        "hearts",
+        "love",
+        "kisses"
        ]
       },
       {
        "file": "bao/03-affection-support/07-comforting.png",
        "name": "Comforting",
        "keywords": [
-        "comforting"
+        "comforting",
+        "support",
+        "hug",
+        "there for you"
        ]
       },
       {
        "file": "bao/03-affection-support/08-reassuring.png",
        "name": "Reassuring",
        "keywords": [
-        "reassuring"
+        "reassuring",
+        "support",
+        "comfort",
+        "there for you"
        ]
       },
       {
@@ -557,14 +734,18 @@
        "name": "Proud applause",
        "keywords": [
         "proud",
-        "applause"
+        "applause",
+        "clap"
        ]
       },
       {
        "file": "bao/03-affection-support/10-celebration.png",
        "name": "Celebration",
        "keywords": [
-        "celebration"
+        "celebration",
+        "party",
+        "celebrate",
+        "yay"
        ]
       },
       {
@@ -587,7 +768,9 @@
        "file": "bao/03-affection-support/13-peace.png",
        "name": "Peace",
        "keywords": [
-        "peace"
+        "peace",
+        "peace sign",
+        "victory"
        ]
       },
       {
@@ -609,21 +792,27 @@
        "file": "bao/03-affection-support/16-congratulations.png",
        "name": "Congratulations",
        "keywords": [
-        "congratulations"
+        "congratulations",
+        "congrats",
+        "well done"
        ]
       },
       {
        "file": "bao/03-affection-support/17-gift.png",
        "name": "Gift",
        "keywords": [
-        "gift"
+        "gift",
+        "present"
        ]
       },
       {
        "file": "bao/03-affection-support/18-birthday.png",
        "name": "Birthday",
        "keywords": [
-        "birthday"
+        "birthday",
+        "bday",
+        "cake",
+        "party"
        ]
       },
       {
@@ -637,7 +826,9 @@
        "file": "bao/03-affection-support/20-goodbye.png",
        "name": "Goodbye",
        "keywords": [
-        "goodbye"
+        "goodbye",
+        "bye",
+        "farewell"
        ]
       },
       {
@@ -645,7 +836,9 @@
        "name": "Finger heart",
        "keywords": [
         "finger",
-        "heart"
+        "heart",
+        "love",
+        "korean heart"
        ]
       }
      ]
@@ -659,7 +852,9 @@
        "name": "Sipping chai",
        "keywords": [
         "sipping",
-        "chai"
+        "chai",
+        "tea",
+        "drink"
        ]
       },
       {
@@ -667,84 +862,113 @@
        "name": "Offering chai",
        "keywords": [
         "offering",
-        "chai"
+        "chai",
+        "tea",
+        "share"
        ]
       },
       {
        "file": "bao/04-everyday-life/03-hungry.png",
        "name": "Hungry",
        "keywords": [
-        "hungry"
+        "hungry",
+        "hunger",
+        "food"
        ]
       },
       {
        "file": "bao/04-everyday-life/04-eating.png",
        "name": "Eating",
        "keywords": [
-        "eating"
+        "eating",
+        "food",
+        "meal"
        ]
       },
       {
        "file": "bao/04-everyday-life/05-hydrate.png",
        "name": "Hydrate",
        "keywords": [
-        "hydrate"
+        "hydrate",
+        "water",
+        "drink",
+        "thirsty"
        ]
       },
       {
        "file": "bao/04-everyday-life/06-working.png",
        "name": "Working",
        "keywords": [
-        "working"
+        "working",
+        "work",
+        "job",
+        "busy"
        ]
       },
       {
        "file": "bao/04-everyday-life/07-studying.png",
        "name": "Studying",
        "keywords": [
-        "studying"
+        "studying",
+        "study",
+        "school",
+        "homework"
        ]
       },
       {
        "file": "bao/04-everyday-life/08-music.png",
        "name": "Music",
        "keywords": [
-        "music"
+        "music",
+        "song",
+        "listening",
+        "headphones"
        ]
       },
       {
        "file": "bao/04-everyday-life/09-dancing.png",
        "name": "Dancing",
        "keywords": [
-        "dancing"
+        "dancing",
+        "dance",
+        "party"
        ]
       },
       {
        "file": "bao/04-everyday-life/10-stretch.png",
        "name": "Stretch",
        "keywords": [
-        "stretch"
+        "stretch",
+        "exercise",
+        "stretching"
        ]
       },
       {
        "file": "bao/04-everyday-life/11-workout.png",
        "name": "Workout",
        "keywords": [
-        "workout"
+        "workout",
+        "gym",
+        "exercise",
+        "fitness"
        ]
       },
       {
        "file": "bao/04-everyday-life/12-shopping.png",
        "name": "Shopping",
        "keywords": [
-        "shopping"
+        "shopping",
+        "shop",
+        "buy"
        ]
       },
       {
        "file": "bao/04-everyday-life/13-cooking.png",
        "name": "Cooking",
        "keywords": [
-        "cooking"
+        "cooking",
+        "cook",
+        "kitchen"
        ]
       },
       {
@@ -752,7 +976,8 @@
        "name": "Plant care",
        "keywords": [
         "plant",
-        "care"
+        "care",
+        "garden"
        ]
       },
       {
@@ -760,7 +985,9 @@
        "name": "Rainy day",
        "keywords": [
         "rainy",
-        "day"
+        "day",
+        "rain",
+        "weather"
        ]
       },
       {
@@ -768,7 +995,8 @@
        "name": "Summer heat",
        "keywords": [
         "summer",
-        "heat"
+        "heat",
+        "hot"
        ]
       },
       {
@@ -776,28 +1004,36 @@
        "name": "Winter cold",
        "keywords": [
         "winter",
-        "cold"
+        "cold",
+        "snow"
        ]
       },
       {
        "file": "bao/04-everyday-life/18-commuting.png",
        "name": "Commuting",
        "keywords": [
-        "commuting"
+        "commuting",
+        "travel",
+        "commute"
        ]
       },
       {
        "file": "bao/04-everyday-life/19-diya.png",
        "name": "Diya",
        "keywords": [
-        "diya"
+        "diya",
+        "festival",
+        "light",
+        "diwali"
        ]
       },
       {
        "file": "bao/04-everyday-life/20-holi.png",
        "name": "Holi",
        "keywords": [
-        "holi"
+        "holi",
+        "festival",
+        "colors"
        ]
       }
      ]
@@ -818,7 +1054,8 @@
        "keywords": [
         "leaf",
         "footed",
-        "bug"
+        "bug",
+        "insect"
        ]
       },
       {
@@ -826,14 +1063,18 @@
        "name": "Bocydium treehopper",
        "keywords": [
         "bocydium",
-        "treehopper"
+        "treehopper",
+        "bug",
+        "insect"
        ]
       },
       {
        "file": "fauna/03-lanternfly.png",
        "name": "Lanternfly",
        "keywords": [
-        "lanternfly"
+        "lanternfly",
+        "bug",
+        "insect"
        ]
       },
       {
@@ -842,7 +1083,9 @@
        "keywords": [
         "curl",
         "horn",
-        "treehopper"
+        "treehopper",
+        "bug",
+        "insect"
        ]
       },
       {
@@ -850,7 +1093,9 @@
        "name": "Horned hopper",
        "keywords": [
         "horned",
-        "hopper"
+        "hopper",
+        "bug",
+        "insect"
        ]
       },
       {
@@ -858,7 +1103,8 @@
        "name": "Shield bug",
        "keywords": [
         "shield",
-        "bug"
+        "bug",
+        "insect"
        ]
       },
       {
@@ -866,7 +1112,9 @@
        "name": "Spiny caterpillar",
        "keywords": [
         "spiny",
-        "caterpillar"
+        "caterpillar",
+        "bug",
+        "insect"
        ]
       },
       {
@@ -874,7 +1122,8 @@
        "name": "Pink frog",
        "keywords": [
         "pink",
-        "frog"
+        "frog",
+        "animal"
        ]
       },
       {
@@ -883,7 +1132,8 @@
        "keywords": [
         "bird",
         "of",
-        "paradise"
+        "paradise",
+        "animal"
        ]
       },
       {
@@ -892,7 +1142,9 @@
        "keywords": [
         "deep",
         "sea",
-        "drifter"
+        "drifter",
+        "jellyfish",
+        "animal"
        ]
       }
      ]
@@ -902,13 +1154,7 @@
   {
    "id": "flora",
    "label": "Flora",
-   "categories": [
-    {
-     "id": "flora",
-     "label": "Flora",
-     "stickers": []
-    }
-   ]
+   "categories": []
   }
  ]
 }

@@ -28,8 +28,7 @@ stickers/
     sheets/*.png                 master sheets the individual stickers were cut from
     preview-*.png                 contact sheets, not part of the sticker set
   fauna/
-    NN-name.png                  10 die-cut illustrations
-    preview.png                   contact sheet, not part of the sticker set
+    NN-name.png                  10 die-cut illustrations (no contact sheet yet)
   flora/                          reserved, empty
   android-assets/                GENERATED — see below, never hand-edited
     default_stickers/

@@ -7,14 +7,15 @@ colour; crop to content; scale to fit; add the white die-cut border with a faint
 """
 import sys, os, numpy as np
 from PIL import Image, ImageDraw, ImageFilter
+from scipy import ndimage
 
 TOL = 14          # max per-channel distance from paper colour that still counts as paper
 FRINGE_LO, FRINGE_HI = 8, 30
 MIN_POCKET = 2000 # px^2 at source resolution: enclosed paper pockets at least this big go transparent
 OUT = 512
-BORDER = 13       # white die-cut border, px at OUT
-RIM = 1.6         # grey rim outside the white border
-CONTENT_MAX = OUT - 2 * (BORDER + 6)
+BORDER = 13       # white die-cut border, px at OUT (a Euclidean distance-transform offset -- see finish())
+RIM_EXTRA = 2     # grey rim's extra reach past BORDER, px at OUT
+CONTENT_MAX = 442
 
 def paper_colour(rgb):
     f = 12
@@ -93,13 +94,19 @@ def finish(cut):
     cut = cut.resize((max(1, round(cut.width * scale)), max(1, round(cut.height * scale))), Image.LANCZOS)
     canvas = Image.new('RGBA', (OUT, OUT), (0, 0, 0, 0))
     ox, oy = (OUT - cut.width) // 2, (OUT - cut.height) // 2
-    layer = Image.new('RGBA', (OUT, OUT), (0, 0, 0, 0)); layer.paste(cut, (ox, oy), cut)
+    layer = Image.new('RGBA', (OUT, OUT), (0, 0, 0, 0))
+    # alpha_composite, not paste(cut, box, cut): pasting an RGBA image using its own alpha band
+    # as the mask composites alpha as alpha^2/255 (mask and source share the band), crushing
+    # semi-transparent edge pixels well below their true value.
+    layer.alpha_composite(cut, (ox, oy))
     mask = layer.getchannel('A')
-    # white border = dilated alpha; MaxFilter needs an odd size
-    k = 2 * BORDER + 1
-    hard = mask.point(lambda v: 255 if v > 24 else 0)
-    white = hard.filter(ImageFilter.MaxFilter(k)).filter(ImageFilter.GaussianBlur(0.8))
-    rim = hard.filter(ImageFilter.MaxFilter(k + 4)).filter(ImageFilter.GaussianBlur(1.2))
+    hard = np.array(mask.point(lambda v: 255 if v > 24 else 0)) > 0
+    # Euclidean offset instead of a square-kernel MaxFilter dilation: distance_transform_edt
+    # gives every border/rim pixel its true distance to the nearest content pixel, so corners
+    # come out round instead of stair-stepped.
+    d = ndimage.distance_transform_edt(~hard)
+    white = Image.fromarray((d <= BORDER).astype(np.uint8) * 255).filter(ImageFilter.GaussianBlur(0.8))
+    rim = Image.fromarray((d <= BORDER + RIM_EXTRA).astype(np.uint8) * 255).filter(ImageFilter.GaussianBlur(1.2))
     out = Image.new('RGBA', (OUT, OUT), (0, 0, 0, 0))
     rim_layer = Image.new('RGBA', (OUT, OUT), (150, 150, 150, 0)); rim_layer.putalpha(rim.point(lambda v: int(v * 0.55)))
     white_layer = Image.new('RGBA', (OUT, OUT), (255, 255, 255, 0)); white_layer.putalpha(white)

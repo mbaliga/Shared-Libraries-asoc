@@ -4,7 +4,7 @@ the checker is removed, speckle remnants are dropped by area, the edge is de-fri
 the checker tone, and the result is re-fitted to the pack's scale (max content extent FIT px)."""
 import sys, numpy as np
 from PIL import Image, ImageDraw, ImageFilter
-OUT = 512; FIT = 274; MIN_BLOB = 300   # px^2 at source: smaller foreground islands are compression specks
+OUT = 512; FIT = 480; MIN_BLOB = 300   # px^2 at source: smaller foreground islands are compression specks
 
 def label_fill(mask):
     """4-connected flood from the image border over `mask`; returns bool of border-connected pixels."""
@@ -57,7 +57,11 @@ def fit(cut):
     cut = cut.crop((xs.min(), ys.min(), xs.max()+1, ys.max()+1))
     s = FIT / max(cut.width, cut.height)
     cut = cut.resize((max(1, round(cut.width*s)), max(1, round(cut.height*s))), Image.LANCZOS)
-    canvas = Image.new('RGBA', (OUT, OUT), (0,0,0,0)); canvas.paste(cut, ((OUT-cut.width)//2, (OUT-cut.height)//2), cut)
+    canvas = Image.new('RGBA', (OUT, OUT), (0,0,0,0))
+    # canvas.paste(cut, box, cut) would use cut's own alpha band as both the blend weight AND
+    # the mask, compositing alpha as alpha^2/255 and crushing semi-transparent edge pixels well
+    # below their true value; alpha_composite does real RGBA-over-RGBA compositing instead.
+    canvas.alpha_composite(cut, ((OUT-cut.width)//2, (OUT-cut.height)//2))
     return canvas
 
 if __name__ == '__main__':
