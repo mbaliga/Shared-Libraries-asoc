@@ -80,3 +80,10 @@ include(":modelbench")
 // "no runnable app module in this repo" posture as :cell-shell/:diagnostics-* — a host app
 // embeds these composables rather than this repo shipping one of its own.
 include(":modelbench-ui")
+
+// The shared Regular/asoc interaction-mode choice (2026-09-15 ruling): a small,
+// dependency-free API — InteractionMode enum, InteractionModeStore + PrefsInteractionModeStore,
+// and the pure ModeDefaults policy — that every constellation app reads/writes the same way.
+// Same posture as :crash-recovery: plain android.content.SharedPreferences, no other deps, and
+// deliberately no UI — the mode-picker itself lives in Hyle (dev.aarso.hyle).
+include(":interaction-mode")
