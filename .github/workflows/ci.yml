@@ -29,7 +29,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          # v3 AND v4 default to installing the legacy 'tools' package, which
+          # Google's repo no longer serves (sdkmanager exit 1 at SDK setup,
+          # 2026-09-15 - see core CLAUDE.md's CI caveat, third infra class).
+          packages: platform-tools
 
       - name: Install platform + build-tools
         run: |
