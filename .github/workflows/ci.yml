@@ -51,6 +51,10 @@ jobs:
 
       - name: Crash-recovery tests (:crash-recovery:test)
         run: ./gradlew --no-daemon :crash-recovery:test
+      # The Regular/asoc mode module's policy + store tests (2026-09-15 gap fix: the module
+      # landed with tests that were never wired into this step list).
+      - name: Interaction-mode tests (:interaction-mode:test)
+        run: ./gradlew --no-daemon :interaction-mode:test
 
       # The navigation shell. Its unit tests are the pure motion/mapping maths — the settle
       # curve, the rail's focus falloff, the scrubber's index mapping — which is exactly the

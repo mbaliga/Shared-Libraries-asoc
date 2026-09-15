@@ -14,6 +14,8 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:diagnostics-overlay` | `dev.aarso:diagnostics-overlay` | Android library | The profile-aware floating bubble/panel. Plain Views, zero Compose/Material — same reasoning as `:crash-recovery`. |
 | `:diagnostics-noop` | `dev.aarso:diagnostics-noop` | Android library | Release-variant substitute with an identical API surface to `:diagnostics-android`, every call a no-op. Parity enforced by `scripts/check-noop-parity.py`. |
 | `:interaction-mode` | `dev.aarso:interaction-mode` | Android library | The shared "Regular" vs "asoc" interaction-mode choice — `InteractionMode`, `InteractionModeStore` + `PrefsInteractionModeStore`, and the pure `ModeDefaults` policy. No UI — the picker lives in Hyle. |
+| `:modelbench` | `dev.aarso:modelbench` | pure JVM | Local-model benchmarking domain: TTFT, prompt/decode tok/s, RSS delta, thermal hooks, `modelbench-report.v1` schema. No native code (engine adapters live with the engines). |
+| `:modelbench-ui` | `dev.aarso:modelbench-ui` | Android library | Two host-agnostic Compose screens (run list, run detail) over `:modelbench` reports. No material3, no navigation, no mode-reading — the embedding host owns all chrome. No consumer is wired yet. |
 
 ## Why this repo exists
 
@@ -56,6 +58,22 @@ and a legacy signal can never override an explicit choice the user has since mad
 implementation, no other dependency) is the whole surface. **This module is deliberately
 UI-free** — no Compose, no Views, no picker screen. The affordance that actually lets a user
 choose "Regular" vs "asoc" lives in Hyle (`dev.aarso.hyle`) and calls through this interface.
+
+### Adoption boundary (decision record, 2026-09-15)
+
+The mode is a property of a **host app's top-level chrome** — it belongs to whatever owns
+navigation, and nowhere else:
+
+- **Libraries never read the mode themselves.** A shared UI module that silently changed shape
+  from a preference it read behind the host's back would be the exact anti-pattern this module
+  exists to avoid. Hosts read the store once and pass anything relevant down. (`:modelbench-ui`
+  is the worked example: two navigation-free screens, host owns all chrome — mode N/A inside it.)
+- **An app with one interaction style does not get a fake toggle.** Assay's Android console is
+  Regular-only by its own information architecture (one activity, conventional taps, a planned
+  conventional five-destination v2) — offering Regular/asoc there would switch between one
+  option. Recorded: assay defers adoption until its v2 Settings surface exists, if ever; the
+  AGP lockstep (this repo pins 8.9.1; assay is on 9.3.0) makes premature adoption doubly wrong.
+- **Adopters today:** Fonebrew core (both shells real) and, through core's shell, Studio.
 
 ## Consuming a module
 
