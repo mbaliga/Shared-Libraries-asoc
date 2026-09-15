@@ -40,6 +40,29 @@ object CrashRecovery {
     private const val EXIT_SEEN_FILE_NAME = "crash_recovery_exit_seen.txt"
     // A historical exit older than this is stale context, not news — don't resurface it.
     private const val EXIT_MAX_AGE_MILLIS = 7L * 24 * 60 * 60 * 1000
+    // Quarantine (non-destructive reset): the app's state is moved into this dir under dataDir
+    // instead of being wiped, and a tiny meta file tracks it so it can be restored or purged.
+    private const val QUARANTINE_DIR = "cr_quarantine"
+    private const val QUARANTINE_META_FILE = "crash_recovery_quarantine.txt"
+    // Clean launches after a quarantine before its set-aside copy is auto-purged. Two clean
+    // opens ≈ "the app works again" — enough to reclaim the disk without dropping the safety net
+    // during the crash-loop window.
+    private const val HEALTHY_LAUNCHES = 2
+
+    /**
+     * Optional host bridge for saving/restoring the app's real data off-device (see
+     * [CrashSalvager]). Volatile: set from the app's main thread, read from the recovery screen.
+     */
+    @Volatile
+    private var salvager: CrashSalvager? = null
+
+    /** Register (or clear) the app's data salvager. Call once, e.g. from `Application.onCreate`. */
+    fun setSalvager(salvager: CrashSalvager?) {
+        this.salvager = salvager
+    }
+
+    /** The registered salvager, if any — the recovery screen uses it to offer backup/restore. */
+    fun salvager(): CrashSalvager? = salvager
 
     /** Installs the handler. Chains to any previously-installed handler so this composes. */
     fun install(app: Application, appLabel: String) {
@@ -101,6 +124,95 @@ object CrashRecovery {
     fun clearStreak(context: Context) {
         runCatching { streakFile(context).delete() }
     }
+
+    // --- non-destructive reset: quarantine the app's data instead of wiping it ---
+
+    /**
+     * Reset the app to a clean state WITHOUT deleting anything: move its on-disk state aside
+     * (see [Quarantine]) so the next launch boots fresh, while every byte stays recoverable via
+     * [restoreQuarantine]. The set-aside copy auto-purges once the app has run healthy (see
+     * [notifyHealthyLaunch]). This is the reset the recovery screen performs — never a bare wipe.
+     *
+     * Returns true if data was set aside. The caller should relaunch the app afterwards.
+     */
+    fun quarantineAndReset(context: Context): Boolean = runCatching {
+        val app = context.applicationContext
+        clear(app)        // drop the report + advance the exit watermark
+        clearStreak(app)
+        val dataDir = app.dataDir
+        val root = File(dataDir, QUARANTINE_DIR)
+        val stamp = System.currentTimeMillis().toString()
+        // Keep our own bookkeeping dir out of the move so recovery state survives the reset.
+        val dest = Quarantine.stash(dataDir, root, stamp, keep = emptySet()) ?: return false
+        // `files/` (which held our report/streak/watermark) was just stashed; recreate the fresh
+        // bookkeeping so the clean boot isn't immediately re-flagged as a crash to recover from.
+        app.filesDir.mkdirs()
+        runCatching { exitSeenFile(app).writeText(System.currentTimeMillis().toString()) }
+        quarantineMetaFile(app).writeText("${dest.name}\t${System.currentTimeMillis()}\t0")
+        true
+    }.getOrDefault(false)
+
+    /** True if a recoverable set-aside copy exists from a prior [quarantineAndReset]. */
+    fun hasRecoverableData(context: Context): Boolean {
+        val meta = readQuarantineMeta(context) ?: return false
+        return File(File(context.applicationContext.dataDir, QUARANTINE_DIR), meta.stamp).exists()
+    }
+
+    /** Total bytes currently held in quarantine (for a human-readable summary), or 0. */
+    fun recoverableSizeBytes(context: Context): Long = runCatching {
+        Quarantine.sizeBytes(File(context.applicationContext.dataDir, QUARANTINE_DIR))
+    }.getOrDefault(0L)
+
+    /**
+     * Put the set-aside data back where it was, replacing the clean state, and clear the
+     * quarantine. Returns true on success. The caller should relaunch the app afterwards.
+     */
+    fun restoreQuarantine(context: Context): Boolean = runCatching {
+        val app = context.applicationContext
+        val root = File(app.dataDir, QUARANTINE_DIR)
+        val stamp = Quarantine.latest(root) ?: return false
+        val ok = Quarantine.restore(stamp, app.dataDir)
+        Quarantine.purge(root)
+        runCatching { quarantineMetaFile(app).delete() }
+        ok
+    }.getOrDefault(false)
+
+    /** Permanently drop the set-aside copy (the user chose not to keep it). */
+    fun discardQuarantine(context: Context) {
+        val app = context.applicationContext
+        Quarantine.purge(File(app.dataDir, QUARANTINE_DIR))
+        runCatching { quarantineMetaFile(app).delete() }
+    }
+
+    /**
+     * Record that the app launched cleanly. After [HEALTHY_LAUNCHES] such launches following a
+     * quarantine, its set-aside copy is auto-purged to reclaim disk — the app is evidently
+     * working again. Called automatically from [maybeShowRecovery] when there's nothing to
+     * recover; a host can also call it from a known-good point.
+     */
+    fun notifyHealthyLaunch(context: Context) {
+        runCatching {
+            val meta = readQuarantineMeta(context) ?: return
+            val next = meta.cleanLaunches + 1
+            if (next >= HEALTHY_LAUNCHES) {
+                discardQuarantine(context)
+            } else {
+                quarantineMetaFile(context).writeText("${meta.stamp}\t${meta.created}\t$next")
+            }
+        }
+    }
+
+    private data class QMeta(val stamp: String, val created: Long, val cleanLaunches: Int)
+
+    private fun readQuarantineMeta(context: Context): QMeta? = runCatching {
+        val parts = quarantineMetaFile(context).takeIf { it.exists() }?.readText()?.split('\t')
+            ?: return null
+        QMeta(
+            stamp = parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return null,
+            created = parts.getOrNull(1)?.toLongOrNull() ?: 0L,
+            cleanLaunches = parts.getOrNull(2)?.toIntOrNull() ?: 0,
+        )
+    }.getOrNull()
 
     @Suppress("DEPRECATION")
     private fun legacyVersionCode(info: android.content.pm.PackageInfo): Long = info.versionCode.toLong()
@@ -226,6 +338,11 @@ object CrashRecovery {
 
     fun clear(context: Context) {
         runCatching { file(context).delete() }
+        // Mark every death up to now as already seen. A JVM crash also leaves an OS exit record
+        // (REASON_CRASH); without this, the next launch's captureExitDeath would rediscover the
+        // very crash the user just dismissed and re-show recovery in a loop. Advancing the
+        // watermark on dismissal (Continue / Discard / reset) is what makes "Continue" stick.
+        runCatching { exitSeenFile(context).writeText(System.currentTimeMillis().toString()) }
     }
 
     /**
@@ -247,8 +364,14 @@ object CrashRecovery {
             // No JVM report — check whether the OS recorded a death the handler couldn't see
             // (native crash, ANR). If it did, this synthesizes and persists a report through
             // the same store, and recovery proceeds identically.
-            if (!captureExitDeath(activity, appLabel)) return false
-            if (pending(activity) == null) return false
+            if (!captureExitDeath(activity, appLabel)) {
+                notifyHealthyLaunch(activity) // a clean launch counts toward auto-purging any quarantine
+                return false
+            }
+            if (pending(activity) == null) {
+                notifyHealthyLaunch(activity)
+                return false
+            }
         }
         activity.startActivity(CrashRecoveryActivity.intent(activity, appLabel, style, contactEmail))
         activity.finish()
@@ -275,4 +398,7 @@ object CrashRecovery {
     private fun file(context: Context): File = File(context.applicationContext.filesDir, FILE_NAME)
 
     private fun streakFile(context: Context): File = File(context.applicationContext.filesDir, STREAK_FILE_NAME)
+
+    private fun quarantineMetaFile(context: Context): File =
+        File(context.applicationContext.filesDir, QUARANTINE_META_FILE)
 }
