@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  NOTE THE ABSENCE.
+
+  There is no <uses-permission android:name="android.permission.INTERNET" /> in this file, and there
+  never will be. That absence is the enforcement of "this module cannot transmit anything" — not a
+  comment, not a code-review convention. It is verifiable after the fact by inspecting the merged
+  debug manifest, which is the point: a sovereignty claim that can be checked beats one that has to
+  be trusted.
+
+  This manifest ships only in the debugImplementation artifact. Release builds resolve
+  diagnostics-noop, which contributes no manifest at all.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.diagnostics.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/diagnostics_file_paths" />
+        </provider>
+        <!--
+          The ADB trigger is registered in CODE (DiagnosticsReceiver.register), not declared here,
+          so a host app can decline it via Config.registerAdbReceiver = false. A launcher, IME or
+          wallpaper may not want a broadcast arriving mid-measurement.
+        -->
+    </application>
+</manifest>

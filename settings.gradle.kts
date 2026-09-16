@@ -59,3 +59,13 @@ include(":feedback")
 // Portable JSON schemas shared by Baseline, Crocodyl and Ebbflow. Pure JVM/resources;
 // implementations remain in their owning products.
 include(":evidence-schema")
+
+// On-device evidence collection across all seven app types in the constellation (ui / ime /
+// wallpaper / audio / vision-pipeline / stream / service) — timing, memory, thermal, start-up,
+// environment facts, and structural invariants, exported to one shareable Markdown report. Same
+// zero-Compose, zero-Material posture as :crash-recovery, for the same reason (D-L apps).
+// See docs/DIAGNOSTICS_MODULE_SPEC.md.
+include(":diagnostics-core")
+include(":diagnostics-android")
+include(":diagnostics-overlay")
+include(":diagnostics-noop")
