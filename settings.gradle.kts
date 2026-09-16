@@ -59,3 +59,45 @@ include(":feedback")
 // Portable JSON schemas shared by Baseline, Crocodyl and Ebbflow. Pure JVM/resources;
 // implementations remain in their owning products.
 include(":evidence-schema")
+
+// On-device evidence collection across all seven app types in the constellation (ui / ime /
+// wallpaper / audio / vision-pipeline / stream / service) — timing, memory, thermal, start-up,
+// environment facts, and structural invariants, exported to one shareable Markdown report. Same
+// zero-Compose, zero-Material posture as :crash-recovery, for the same reason (D-L apps).
+// See docs/DIAGNOSTICS_MODULE_SPEC.md.
+include(":diagnostics-core")
+include(":diagnostics-android")
+include(":diagnostics-overlay")
+include(":diagnostics-noop")
+
+// v1 scaffolding for local-model benchmarking: EngineAdapter seam + BenchmarkSuite metrics +
+// the modelbench-report.v1 JSON grammar, so the constellation's apps (Fonebrew, Studio, the
+// future asystemofmodels router) can pick models per device. Pure `kotlin("jvm")` — no
+// llama.cpp, no native code; that lands with the asystemofmodels router, in that repo.
+include(":modelbench")
+
+// Minimal Compose UI over :modelbench's report model (run list + run detail). Same
+// "no runnable app module in this repo" posture as :cell-shell/:diagnostics-* — a host app
+// embeds these composables rather than this repo shipping one of its own.
+include(":modelbench-ui")
+
+// The shared Regular/asoc interaction-mode choice (2026-09-15 ruling): a small,
+// dependency-free API — InteractionMode enum, InteractionModeStore + PrefsInteractionModeStore,
+// and the pure ModeDefaults policy — that every constellation app reads/writes the same way.
+// Same posture as :crash-recovery: plain android.content.SharedPreferences, no other deps, and
+// deliberately no UI — the mode-picker itself lives in Hyle (dev.aarso.hyle).
+include(":interaction-mode")
+
+// NOTE: `word-graph/`, `multilang-dict/` and `stickers/` are intentionally absent from this
+// file.
+//
+// Each is a plain asset package — graph.html + vendored AntV G6 + WordNet-derived TSVs;
+// bundled multilingual dictionary + KanjiVG data; die-cut sticker PNGs + manifest.json —
+// not a Gradle project, and consumers take each by pointing an asset source-set at its
+// directory rather than by `includeBuild` + a dev.aarso coordinate. That is deliberate: an
+// Android library module would put THIS build's AGP into every consumer's composite build
+// graph and force the lockstep above (currently 8.9.1). Clackpad, their first consumer, is
+// pinned to AGP 8.13.2 — the floor for compileSdk 36, which Play requires for updates from
+// 2026-08-31 — so under the lockstep it could not take any of these at all. Shipping no
+// plugin sidesteps the whole constraint. See word-graph/README.md for the full reasoning,
+// which applies unchanged to the other two.

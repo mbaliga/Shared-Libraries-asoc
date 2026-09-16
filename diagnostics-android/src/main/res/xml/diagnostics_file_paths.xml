@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!--
+      Scoped to the diagnostics directory only. The provider must not be able to hand out anything
+      else the app owns: a share intent grants a capability to another app, and it should cover
+      exactly the file the user chose to send.
+
+      The journal directory is deliberately NOT exposed — it is working state, not a deliverable.
+    -->
+    <external-files-path name="diagnostics" path="diagnostics/" />
+</paths>

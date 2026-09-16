@@ -12,10 +12,25 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:cell-shell` | `dev.aarso:cell-shell` | Android library (Compose) | The constellation's shared navigation and motion shell — spatial layout, edge timeline scrubber, shake-to-refresh. |
 | `:feedback` | `dev.aarso:feedback` | Android library | Opt-in feedback for experimental features: a fully user-readable draft, delivered only by a share/mail chooser the user launches. No telemetry, no network, ever. |
 | `:evidence-schema` | `dev.aarso:evidence-schema` | pure JVM/resources | Versioned portable JSON schemas for evidence/event exchange across Baseline, Crocodyl, and Ebbflow. |
+| `:diagnostics-core` | `dev.aarso:diagnostics-core` | pure JVM | On-device evidence: percentiles, verdicts, invariants, redaction, and Markdown report rendering — the source-agnostic engine every app-type profile shares. |
+| `:diagnostics-android` | `dev.aarso:diagnostics-android` | Android library | MetricSource plugins, session lifecycle, export, crash link, ADB trigger. No network permission, ever — verifiable in the merged manifest. |
+| `:diagnostics-overlay` | `dev.aarso:diagnostics-overlay` | Android library | The profile-aware floating bubble/panel. Plain Views, zero Compose/Material — same reasoning as `:crash-recovery`. |
+| `:diagnostics-noop` | `dev.aarso:diagnostics-noop` | Android library | Release-variant substitute with an identical API surface to `:diagnostics-android`, every call a no-op. Parity enforced by `scripts/check-noop-parity.py`. |
+| `:interaction-mode` | `dev.aarso:interaction-mode` | Android library | The shared "Regular" vs "asoc" interaction-mode choice — `InteractionMode`, `InteractionModeStore` + `PrefsInteractionModeStore`, and the pure `ModeDefaults` policy. No UI — the picker lives in Hyle. |
+| `:modelbench` | `dev.aarso:modelbench` | pure JVM | Local-model benchmarking domain: TTFT, prompt/decode tok/s, RSS delta, thermal hooks, `modelbench-report.v1` schema. No native code (engine adapters live with the engines). |
+| `:modelbench-ui` | `dev.aarso:modelbench-ui` | Android library | Two host-agnostic Compose screens (run list, run detail) over `:modelbench` reports. No material3, no navigation, no mode-reading — the embedding host owns all chrome. No consumer is wired yet. |
 
 `local-session-core` is the reserved home for Bocal's local multiplayer/session transport. It is
 not scaffolded here: the concurrent Bocal session remains authoritative, and its implementation
 should land once rather than be duplicated by a placeholder.
+
+One shared unit here is **not** a Gradle module and has no coordinate:
+
+| Package | Platform | What it is |
+|---|---|---|
+| [`word-graph/`](word-graph/) | assets only (JS + data) | Offline word-relationship graph — an ego-network of synonyms/antonyms/hypernyms rendered with vendored AntV G6 over WordNet-derived TSVs. Consumed as an **asset source-set directory**, not `includeBuild`, so it carries no AGP constraint. See [its README](word-graph/README.md). |
+| [`multilang-dict/`](multilang-dict/) | assets only (data) | Bundled, offline dictionary data for multilingual lookup and stroke-order display (German, French, Italian, Spanish, Japanese, Korean, Chinese Simplified, Arabic, plus KanjiVG geometry). Same asset-source-set consumption as `word-graph/`. See [its README](multilang-dict/README.md). |
+| [`stickers/`](stickers/) | assets only (images + manifest) | Die-cut sticker artwork — Bao (104 stickers, five categories), Fauna (10), Flora (reserved). `android-assets/` is a generated, pngquant-optimised copy laid out for consumption; the pack folders are the source of truth. Same asset-source-set consumption as `word-graph/`. See [its README](stickers/README.md). |
 
 ## Why this repo exists
 
@@ -25,6 +40,55 @@ depend on Hyle (D-L: Animalcules, Clackpad) to carry the entire Hyle submodule t
 that has nothing to do with Hyle. This is the neutral home for that category.
 
 `:crash-recovery` moved here from Hyle-Design-System. See [MIGRATION.md](MIGRATION.md).
+
+`:diagnostics-*` landed here directly (not relocated) for the same D-L reason `:crash-recovery`
+moved: it is deliberately zero-Compose/zero-Material, so it belongs in the neutral repo, not in
+the design system. See [docs/DIAGNOSTICS_MODULE_SPEC.md](docs/DIAGNOSTICS_MODULE_SPEC.md) for the
+full design rationale and [docs/samples/](docs/samples/) for one example report per profile.
+
+## `:interaction-mode`
+
+The constellation-wide choice between two top-level interaction patterns (2026-09-15 ruling: the
+rooms model remains somewhat experimental while it's being perfected, so every app offers the
+choice rather than forcing everyone onto whichever is newest). UI-facing naming is exactly
+**"Regular"** and **"asoc"** (lowercase) — do not use other casing or a synonym at the UI layer.
+
+- **`InteractionMode.REGULAR`** — conventional navigation chrome: a traditional layout with
+  visible tabs, buttons and menus. A screen may still offer gestures, but only as a supplement;
+  everything reachable by gesture must also be reachable through a visible control.
+- **`InteractionMode.ASOC`** — the spatial-rooms layout and its gesture grammar (edge scrub,
+  word-wheel rail, room transitions, …). Experimental and evolving — expect its shape to shift
+  between releases in ways `REGULAR` deliberately does not.
+
+**Defaults policy** (`ModeDefaults`, pure and exhaustively tested): a fresh install with no
+explicit choice and no legacy signal defaults to `REGULAR`. An app may pass `legacySignal = true`
+to `PrefsInteractionModeStore` when an install predates the Regular/asoc bifurcation — i.e. the
+user was already living in the rooms model without ever having "chosen" it — so that install
+continues into `ASOC` instead of silently dropping an existing rooms user into an unfamiliar
+layout. What counts as "predates the bifurcation" is entirely the calling app's judgment (e.g.
+its own pre-existing first-run marker); `ModeDefaults` only encodes what to do with that answer,
+and a legacy signal can never override an explicit choice the user has since made.
+
+`InteractionModeStore` (interface) + `PrefsInteractionModeStore` (the `SharedPreferences`-backed
+implementation, no other dependency) is the whole surface. **This module is deliberately
+UI-free** — no Compose, no Views, no picker screen. The affordance that actually lets a user
+choose "Regular" vs "asoc" lives in Hyle (`dev.aarso.hyle`) and calls through this interface.
+
+### Adoption boundary (decision record, 2026-09-15)
+
+The mode is a property of a **host app's top-level chrome** — it belongs to whatever owns
+navigation, and nowhere else:
+
+- **Libraries never read the mode themselves.** A shared UI module that silently changed shape
+  from a preference it read behind the host's back would be the exact anti-pattern this module
+  exists to avoid. Hosts read the store once and pass anything relevant down. (`:modelbench-ui`
+  is the worked example: two navigation-free screens, host owns all chrome — mode N/A inside it.)
+- **An app with one interaction style does not get a fake toggle.** Assay's Android console is
+  Regular-only by its own information architecture (one activity, conventional taps, a planned
+  conventional five-destination v2) — offering Regular/asoc there would switch between one
+  option. Recorded: assay defers adoption until its v2 Settings surface exists, if ever; the
+  AGP lockstep (this repo pins 8.9.1; assay is on 9.3.0) makes premature adoption doubly wrong.
+- **Adopters today:** Fonebrew core (both shells real) and, through core's shell, Studio.
 
 ## Consuming a module
 
@@ -36,7 +100,16 @@ includeBuild("shared-libraries")
 ```kotlin
 // app/build.gradle.kts
 implementation("dev.aarso:search-core:0.2.0")
-implementation("dev.aarso:crash-recovery:1.4.0")
+implementation("dev.aarso:crash-recovery:1.5.0")
+
+// diagnostics: debug-only collector + overlay, release-only no-op, plus the safety guard that
+// fails a release build if it ever resolves a real collector instead of the no-op.
+debugImplementation("dev.aarso:diagnostics-android:0.3.0")
+debugImplementation("dev.aarso:diagnostics-overlay:0.3.0")
+releaseImplementation("dev.aarso:diagnostics-noop:0.3.0")
+apply(from = "$rootDir/gradle/release-safety.gradle.kts")
+
+implementation("dev.aarso:interaction-mode:0.1.0")
 ```
 
 Gradle substitutes any `dev.aarso:<name>` dependency with the matching project in the included

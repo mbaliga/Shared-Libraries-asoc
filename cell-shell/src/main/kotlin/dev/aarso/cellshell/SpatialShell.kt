@@ -414,6 +414,11 @@ fun SpatialShell(
                         )
                         // Card parked DOWN (top room open): the sliver still visible along the
                         // screen's bottom is the card's TOP edge, and the grip belongs on it.
+                        // These two branches were once the other way round, which put both
+                        // vertical grips a whole screen height outside the viewport -- the top
+                        // and bottom rooms parked a card carrying no grab marker at all.
+                        // Reading the edge off [bandEdge], rather than re-deriving it here, is
+                        // what keeps that from coming back.
                         vBand == BandEdge.START -> Box(
                             Modifier.align(Alignment.TopCenter).padding(top = GRIP_INSET_DP.dp)
                                 .size(width = 48.dp, height = 4.dp).then(grip),
