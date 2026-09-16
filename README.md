@@ -24,6 +24,14 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 not scaffolded here: the concurrent Bocal session remains authoritative, and its implementation
 should land once rather than be duplicated by a placeholder.
 
+One shared unit here is **not** a Gradle module and has no coordinate:
+
+| Package | Platform | What it is |
+|---|---|---|
+| [`word-graph/`](word-graph/) | assets only (JS + data) | Offline word-relationship graph — an ego-network of synonyms/antonyms/hypernyms rendered with vendored AntV G6 over WordNet-derived TSVs. Consumed as an **asset source-set directory**, not `includeBuild`, so it carries no AGP constraint. See [its README](word-graph/README.md). |
+| [`multilang-dict/`](multilang-dict/) | assets only (data) | Bundled, offline dictionary data for multilingual lookup and stroke-order display (German, French, Italian, Spanish, Japanese, Korean, Chinese Simplified, Arabic, plus KanjiVG geometry). Same asset-source-set consumption as `word-graph/`. See [its README](multilang-dict/README.md). |
+| [`stickers/`](stickers/) | assets only (images + manifest) | Die-cut sticker artwork — Bao (104 stickers, five categories), Fauna (10), Flora (reserved). `android-assets/` is a generated, pngquant-optimised copy laid out for consumption; the pack folders are the source of truth. Same asset-source-set consumption as `word-graph/`. See [its README](stickers/README.md). |
+
 ## Why this repo exists
 
 Hyle-Design-System is the *design system*. Things that are shared but are **not** design-system
