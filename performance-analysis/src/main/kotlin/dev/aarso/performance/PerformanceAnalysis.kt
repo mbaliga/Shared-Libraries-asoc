@@ -3,7 +3,7 @@ package dev.aarso.performance
 import kotlin.math.ceil
 
 /** A monotonic clock seam keeps reports deterministic in tests and safe across wall-clock changes. */
-fun fun interface NanoClock {
+fun interface NanoClock {
     fun nowNanos(): Long
 }
 

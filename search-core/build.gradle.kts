@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.compile.JavaCompile
+
 // :search-core — the app-agnostic heart of on-device search.
 //
 // Deliberately plain `kotlin("jvm")`: no Android, no coroutines, no storage engine. That is a
@@ -24,8 +26,9 @@ group = searchCoreGroup
 version = searchCoreVersion
 
 kotlin {
-    jvmToolchain(17)
     compilerOptions {
+        // Emit Java 17-compatible bytecode while allowing CI hosts with only JDK 21 to build.
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         // This is a library others compile against; an accidental unstable-API leak here
         // becomes a compile error in five downstream repos.
         allWarningsAsErrors.set(false)
@@ -50,3 +53,5 @@ publishing {
 dependencies {
     testImplementation(libs.junit)
 }
+
+tasks.withType<JavaCompile>().configureEach { options.release.set(17) }

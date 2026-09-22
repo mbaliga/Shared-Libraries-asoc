@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.compile.JavaCompile
+
 // Platform-neutral local multiplayer protocol/state core. Discovery and sockets stay in hosts.
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -7,7 +9,7 @@ plugins {
 group = "dev.aarso"
 version = "0.1.0"
 
-kotlin { jvmToolchain(17) }
+kotlin { compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 java { withSourcesJar() }
 
 publishing {
@@ -22,3 +24,5 @@ publishing {
 }
 
 dependencies { testImplementation(libs.junit) }
+
+tasks.withType<JavaCompile>().configureEach { options.release.set(17) }

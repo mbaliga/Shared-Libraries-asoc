@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.compile.JavaCompile
+
 // Shared, dependency-free performance measurement contracts for beta verification.
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -8,7 +10,7 @@ group = "dev.aarso"
 version = "0.1.0"
 
 kotlin {
-    jvmToolchain(17)
+    compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
 }
 
 java { withSourcesJar() }
@@ -27,3 +29,5 @@ publishing {
 dependencies {
     testImplementation(libs.junit)
 }
+
+tasks.withType<JavaCompile>().configureEach { options.release.set(17) }
