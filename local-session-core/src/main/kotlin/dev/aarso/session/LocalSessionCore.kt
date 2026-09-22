@@ -2,6 +2,7 @@ package dev.aarso.session
 
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.util.Base64
 import kotlin.concurrent.thread
 
@@ -113,9 +114,20 @@ fun interface SessionPacketListener {
     fun onPacket(packet: SessionPacket)
 }
 
+/** A short-lived human-readable join code for an explicitly paired local session. */
+@JvmInline
+value class SessionPairingCode(val value: String) {
+    init {
+        require(value.length == 6 && value.all(Char::isDigit)) {
+            "pairing code must be exactly six digits"
+        }
+    }
+}
+
 /**
- * Small line-framed TCP transport for beta/local-network sessions. It has no discovery or trust
- * policy: hosts must show the address/port through an explicit pairing UI before connecting.
+ * Small line-framed TCP transport for beta/local-network sessions. An optional six-digit pairing
+ * code gates the socket before packet readers are exposed. Discovery, code display/entry, TLS or
+ * platform identity remain responsibilities of the consuming app.
  */
 class TcpLocalSessionTransport private constructor(
     private val socket: Socket,
@@ -143,11 +155,66 @@ class TcpLocalSessionTransport private constructor(
     }
 
     companion object {
-        fun connect(host: String, port: Int, listener: SessionPacketListener): TcpLocalSessionTransport =
-            TcpLocalSessionTransport(Socket(host, port), listener)
+        fun connect(
+            host: String,
+            port: Int,
+            listener: SessionPacketListener,
+            pairingCode: SessionPairingCode? = null,
+        ): TcpLocalSessionTransport {
+            val socket = Socket(host, port)
+            if (pairingCode != null) performClientHandshake(socket, pairingCode)
+            return TcpLocalSessionTransport(socket, listener)
+        }
 
-        internal fun from(socket: Socket, listener: SessionPacketListener): TcpLocalSessionTransport =
-            TcpLocalSessionTransport(socket, listener)
+        internal fun from(
+            socket: Socket,
+            listener: SessionPacketListener,
+            pairingCode: SessionPairingCode? = null,
+        ): TcpLocalSessionTransport {
+            if (pairingCode != null) performHostHandshake(socket, pairingCode)
+            return TcpLocalSessionTransport(socket, listener)
+        }
+
+        private fun performClientHandshake(socket: Socket, pairingCode: SessionPairingCode) {
+            socket.soTimeout = 5_000
+            val writer = socket.getOutputStream().bufferedWriter()
+            writer.appendLine("AUTH|${encodePart(pairingCode.value)}")
+            writer.flush()
+            val response = socket.getInputStream().bufferedReader().readLine()
+            socket.soTimeout = 0
+            if (response != "AUTH_OK") {
+                socket.close()
+                throw SecurityException("local session pairing was rejected")
+            }
+        }
+
+        private fun performHostHandshake(socket: Socket, pairingCode: SessionPairingCode) {
+            try {
+                socket.soTimeout = 5_000
+                val request = socket.getInputStream().bufferedReader().readLine()
+                val supplied = request?.takeIf { it.startsWith("AUTH|") }
+                    ?.substringAfter("AUTH|")
+                    ?.let(::decodePart)
+                val writer = socket.getOutputStream().bufferedWriter()
+                if (supplied != pairingCode.value) {
+                    writer.appendLine("AUTH_REJECT")
+                    writer.flush()
+                    socket.close()
+                    throw SecurityException("local session pairing was rejected")
+                }
+                writer.appendLine("AUTH_OK")
+                writer.flush()
+                socket.soTimeout = 0
+            } catch (timeout: SocketTimeoutException) {
+                socket.close()
+                throw timeout
+            }
+        }
+
+        private fun encodePart(value: String): String = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(value.toByteArray(Charsets.UTF_8))
+
+        private fun decodePart(value: String): String = String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8)
     }
 }
 
@@ -155,6 +222,7 @@ class TcpLocalSessionHost(
     private val serverSocket: ServerSocket,
     private val listener: SessionPacketListener,
     private val onConnection: (LocalSessionTransport) -> Unit,
+    private val pairingCode: SessionPairingCode?,
 ) : AutoCloseable {
     val port: Int get() = serverSocket.localPort
 
@@ -162,7 +230,10 @@ class TcpLocalSessionHost(
         thread(name = "aarso-session-acceptor", isDaemon = true) {
             runCatching {
                 while (!serverSocket.isClosed) {
-                    onConnection(TcpLocalSessionTransport.from(serverSocket.accept(), listener))
+                    val socket = serverSocket.accept()
+                    runCatching {
+                        onConnection(TcpLocalSessionTransport.from(socket, listener, pairingCode))
+                    }.onFailure { socket.close() }
                 }
             }
         }
@@ -178,7 +249,8 @@ class TcpLocalSessionHost(
             port: Int = 0,
             listener: SessionPacketListener,
             onConnection: (LocalSessionTransport) -> Unit,
-        ): TcpLocalSessionHost = TcpLocalSessionHost(ServerSocket(port), listener, onConnection)
+            pairingCode: SessionPairingCode? = null,
+        ): TcpLocalSessionHost = TcpLocalSessionHost(ServerSocket(port), listener, onConnection, pairingCode)
     }
 }
 

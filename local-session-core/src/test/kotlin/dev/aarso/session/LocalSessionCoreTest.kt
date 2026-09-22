@@ -51,4 +51,35 @@ class LocalSessionCoreTest {
         host.close()
         assertEquals("hello", packet.get()?.payload)
     }
+
+    @Test
+    fun tcpTransportRequiresTheConfiguredPairingCode() {
+        val received = CountDownLatch(1)
+        val host = TcpLocalSessionHost.bind(
+            listener = SessionPacketListener { received.countDown() },
+            onConnection = { },
+            pairingCode = SessionPairingCode("123456"),
+        ).start()
+
+        val rejected = runCatching {
+            TcpLocalSessionTransport.connect(
+                "127.0.0.1",
+                host.port,
+                SessionPacketListener { },
+                SessionPairingCode("654321"),
+            )
+        }.exceptionOrNull()
+        assertTrue(rejected is SecurityException)
+
+        val client = TcpLocalSessionTransport.connect(
+            "127.0.0.1",
+            host.port,
+            SessionPacketListener { },
+            SessionPairingCode("123456"),
+        )
+        client.send(SessionPacket(SessionId("paired"), ParticipantId("peer"), SessionPacketType.EVENT, 1, "e1", "ok"))
+        assertTrue(received.await(2, java.util.concurrent.TimeUnit.SECONDS))
+        client.close()
+        host.close()
+    }
 }

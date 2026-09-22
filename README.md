@@ -16,8 +16,9 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:local-session-core` | `dev.aarso:local-session-core` | pure JVM | Shared local-multiplayer session identity, event ledger, deduplication and transport boundary. |
 
 `local-session-core` is the authoritative home for Bocal/Crocodyl local multiplayer contracts.
-It includes a small line-framed TCP transport for beta LAN sessions. Discovery, pairing/trust UI,
-reconnect policy and product event mapping remain host-owned; the shared module owns session identity,
+It includes a small line-framed TCP transport for beta LAN sessions and an optional six-digit
+pairing-code handshake. Discovery, code display/entry, reconnect policy, encryption/platform
+identity and product event mapping remain host-owned; the shared module owns session identity,
 packet vocabulary, monotonic event ordering and duplicate suppression so the two apps cannot drift
 into incompatible protocols.
 
