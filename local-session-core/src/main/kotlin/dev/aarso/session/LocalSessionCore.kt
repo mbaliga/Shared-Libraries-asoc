@@ -6,6 +6,8 @@ import java.net.SocketTimeoutException
 import java.util.Base64
 import kotlin.concurrent.thread
 
+private const val MAX_SESSION_FRAME_CHARS = 64 * 1024
+
 /** A short-lived, user-started local session. No account or server identity is implied. */
 @JvmInline
 value class SessionId(val value: String) {
@@ -138,14 +140,21 @@ class TcpLocalSessionTransport private constructor(
     init {
         thread(name = "aarso-session-reader", isDaemon = true) {
             runCatching {
-                socket.getInputStream().bufferedReader().forEachLine { listener.onPacket(SessionPacketCodec.decode(it)) }
+                val reader = socket.getInputStream().bufferedReader()
+                generateSequence { reader.readLine() }
+                    .forEach { line ->
+                        require(line.length <= MAX_SESSION_FRAME_CHARS) { "session packet is too large" }
+                        listener.onPacket(SessionPacketCodec.decode(line))
+                    }
             }
         }
     }
 
     override fun send(packet: SessionPacket) {
         synchronized(writer) {
-            writer.appendLine(SessionPacketCodec.encode(packet))
+            val frame = SessionPacketCodec.encode(packet)
+            require(frame.length <= MAX_SESSION_FRAME_CHARS) { "session packet is too large" }
+            writer.appendLine(frame)
             writer.flush()
         }
     }

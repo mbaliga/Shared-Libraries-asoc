@@ -82,4 +82,28 @@ class LocalSessionCoreTest {
         client.close()
         host.close()
     }
+
+    @Test
+    fun tcpTransportRejectsOversizedFramesBeforeWriting() {
+        val host = TcpLocalSessionHost.bind(
+            listener = SessionPacketListener { },
+            onConnection = { },
+        ).start()
+        val client = TcpLocalSessionTransport.connect("127.0.0.1", host.port, SessionPacketListener { })
+        val failure = runCatching {
+            client.send(
+                SessionPacket(
+                    SessionId("large"),
+                    ParticipantId("peer"),
+                    SessionPacketType.EVENT,
+                    1,
+                    "large-event",
+                    "x".repeat(70 * 1024),
+                ),
+            )
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
+        client.close()
+        host.close()
+    }
 }

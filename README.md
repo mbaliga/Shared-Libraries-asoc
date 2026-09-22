@@ -19,8 +19,8 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 It includes a small line-framed TCP transport for beta LAN sessions and an optional six-digit
 pairing-code handshake. Discovery, code display/entry, reconnect policy, encryption/platform
 identity and product event mapping remain host-owned; the shared module owns session identity,
-packet vocabulary, monotonic event ordering and duplicate suppression so the two apps cannot drift
-into incompatible protocols.
+packet vocabulary, monotonic event ordering, duplicate suppression and a 64 KiB frame limit so the
+two apps cannot drift into incompatible or unbounded transport behavior.
 
 ## Why this repo exists
 
