@@ -16,9 +16,10 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:local-session-core` | `dev.aarso:local-session-core` | pure JVM | Shared local-multiplayer session identity, event ledger, deduplication and transport boundary. |
 
 `local-session-core` is the authoritative home for Bocal/Crocodyl local multiplayer contracts.
-Discovery and the platform transport (Nearby/Bluetooth/LAN) remain host-owned; the shared module
-owns session identity, packet vocabulary, monotonic event ordering and duplicate suppression so the
-two apps cannot drift into incompatible protocols.
+It includes a small line-framed TCP transport for beta LAN sessions. Discovery, pairing/trust UI,
+reconnect policy and product event mapping remain host-owned; the shared module owns session identity,
+packet vocabulary, monotonic event ordering and duplicate suppression so the two apps cannot drift
+into incompatible protocols.
 
 ## Why this repo exists
 
@@ -49,6 +50,10 @@ build, so no Maven registry is involved.
 git submodule add https://github.com/mbaliga/Shared-Libraries-asoc.git shared-libraries
 git submodule update --init    # a plain clone will not populate it
 ```
+
+Pure-JVM consumers can also run the beta modules directly with a pinned checkout; the module
+coordinates are `dev.aarso:performance-analysis:0.1.0` and
+`dev.aarso:local-session-core:0.1.0`.
 
 ## The AGP lockstep — read before adding a consumer
 
