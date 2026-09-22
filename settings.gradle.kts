@@ -39,6 +39,8 @@ rootProject.name = "AsocSharedLibraries"
 // coroutines, no storage engine — so it is testable on the JVM and reusable by any host.
 include(":search-core")
 include(":search-testkit")
+include(":performance-analysis")
+include(":local-session-core")
 
 // The constellation's navigation + motion shell: the fonebrew spatial pattern, the
 // word-wheel rail and the edge scrubber, so every app moves the same way rather than each

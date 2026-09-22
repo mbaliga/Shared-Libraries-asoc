@@ -12,10 +12,13 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:cell-shell` | `dev.aarso:cell-shell` | Android library (Compose) | The constellation's shared navigation and motion shell — spatial layout, edge timeline scrubber, shake-to-refresh. |
 | `:feedback` | `dev.aarso:feedback` | Android library | Opt-in feedback for experimental features: a fully user-readable draft, delivered only by a share/mail chooser the user launches. No telemetry, no network, ever. |
 | `:evidence-schema` | `dev.aarso:evidence-schema` | pure JVM/resources | Versioned portable JSON schemas for evidence/event exchange across Baseline, Crocodyl, and Ebbflow. |
+| `:performance-analysis` | `dev.aarso:performance-analysis` | pure JVM | Deterministic beta measurements with warmup, percentile, throughput and JSON report output. |
+| `:local-session-core` | `dev.aarso:local-session-core` | pure JVM | Shared local-multiplayer session identity, event ledger, deduplication and transport boundary. |
 
-`local-session-core` is the reserved home for Bocal's local multiplayer/session transport. It is
-not scaffolded here: the concurrent Bocal session remains authoritative, and its implementation
-should land once rather than be duplicated by a placeholder.
+`local-session-core` is the authoritative home for Bocal/Crocodyl local multiplayer contracts.
+Discovery and the platform transport (Nearby/Bluetooth/LAN) remain host-owned; the shared module
+owns session identity, packet vocabulary, monotonic event ordering and duplicate suppression so the
+two apps cannot drift into incompatible protocols.
 
 ## Why this repo exists
 
