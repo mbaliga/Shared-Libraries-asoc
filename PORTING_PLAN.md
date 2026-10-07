@@ -281,3 +281,56 @@ writing): `Personal-Tracker/DECISIONS.md` (D-A, D-L, D-O, D-P, D-Q), `STATE.md`,
 `.gitmodules`); `Clackpad` (`.gitmodules`, `clackpad/app/build.gradle.kts`); `Android-IDE-core`
 (`core-engine/build.gradle.kts`, `settings.gradle.kts`); `Android-IDE-Studio/settings.gradle.kts`;
 `Hyle-Design-System/README.md` (crash-recovery section); `nooz/app/src/main/kotlin/xyz/mdhv/riverwip/RiverApplication.kt`.
+
+## Owner rulings and the proposed line (added 2026-10-07)
+
+Status: PLAN. Nothing here is built, run on a device, signed or submitted. The program-level plan is Personal-Tracker `PORTING_PROGRAM.md` ([PR #10](https://github.com/mbaliga/Personal-Tracker/pull/10)), which holds the owner's rulings and section 5A, the proposed port / no-port line. The cells, estimates and open questions above are this repo's original plan and are unedited. Where the owner has since answered a question, the answer is below. Section 5A is a proposal; the owner has not yet confirmed it.
+
+### Where Shared-Libraries-asoc sits in the proposed line (program section 5A.3, a proposal)
+
+| Target       | Verdict | Weeks and flags |
+| ------------ | ------- | --------------- |
+| Ubuntu Touch | follows | 2w              |
+| Linux        | follows | 4.5w            |
+| iOS/iPadOS   | follows | 4.5w            |
+| macOS        | follows | 1w              |
+| Windows      | follows | 1w              |
+
+Key: `follows` means it ports only as far as the products that depend on it; `exists` means the program reads it as already running there, unverified (finish, verify and sign); flags: `g` gated on a prerequisite, `r` re-estimate or floor, `o` its own program, `s` scope note. The program's P4, P8, P12 and P13 gate whole columns or repos and are not flagged per cell. A port verdict counts the deliverable in the line; where this repo's plan calls a deliverable a reframe (program rule R12) it keeps that label. Tests cited in the reason: (a) the owner said it is needed there; (b) its job is really done on that OS by real users; (c) that OS is where it is sold or its audience is; it has no reason to exist if (x) its surface is absent or untouchable, (y) the capability is forbidden or impossible, or (z) the only form is a thin wrapper or a different product nobody asked for. P-numbers and OQ-numbers refer to the program plan (Personal-Tracker `PORTING_PROGRAM.md`, sections 5A.5 and 8).
+
+Reason: A shared library has no end-user reason of its own: it ports only as far as the products that depend on it (verdict follows). Re-costed by dropping search-core and feedback until an adopter ships: iOS 7 to 4.5 weeks and Linux 5 to 4.5.
+
+### Owner rulings that apply here
+
+- **OQ-17 toolchain (2026-10-06):** "B: staged pin (Recommended)": Kotlin 2.1.20 and Compose Multiplatform 1.8.2 for the first wave, 2.4.x deferred. This repo moves only together with Hyle (PT:D-Q lockstep; its catalog rule and plan PD-2). The OQ-17 "Also" approvals are not answered: converting :cell-shell and :crash-recovery to kotlin("multiplatform") (this plan's PD-1) stays an open owner decision, so the ruling clears the pin and not this repo's conversion gate.
+- **OQ-38 iOS pin (2026-10-07):** "Move iOS to Kotlin 2.2.21 + CMP 1.9.3 (Recommended)", with the first iOS proof on an explicitly selected Xcode 26.x. The program plan reads this as moving a repo that ships an iOS target as a whole (a Gradle build has one Kotlin version); that reading is not researched, and the bump cost for repos pinned lower is in no figure. This repo moves only together with Hyle (PT:D-Q lockstep; its catalog rule and plan PD-2).
+- **OQ-22 key custody (2026-10-06):** "OS keystore, weaker fallback shown (Recommended)": Keychain, Credential Manager (DPAPI), Secret Service, a passphrase-protected file or an app-private file on Ubuntu Touch, each with the weaker guarantee stated in the UI. F6 (platform-ports) lives in this repo and was waiting on this ruling.
+- **Ubuntu Touch device:** the owner owns one and says it is a OnePlus 6; research reads it as 20.04-only while the program plan targets 24.04. On 2026-10-07 the owner chose "OnePlus 6 pre-spike now, decide later" (OQ-37): a labelled "S-UT1 (focal)" headless-JVM pre-spike, no 24.04 flashing, a 24.04 device decision afterwards. Every Ubuntu Touch device gate stays NDV until then.
+- **OQ-31 Mac (2026-10-06 and 2026-10-07):** "Buy a Mac", and on 2026-10-07 an Apple-silicon Mac mini, not yet bought; no Apple device gate is called checkable before then.
+- **OQ-5 hardware (2026-10-06):** the owner's answer changes which of their other machines can serve as device gates, so a gate this plan names on specific hardware may be moved or dropped. Which machine carries which device gate is not decided (OQ-33).
+- **OQ-20 CI (2026-10-06):** "Linux-only CI when private (Recommended)": this repo is public, so the ruling does not limit its macOS and Windows lanes; going private would stop them. Actions artifact storage is still exhausted (program rule R6).
+- **Directives (2026-10-06):** "Draft amendments for approval": program directives I-1 to I-12 and rules R1 to R12 are unchanged; PROPOSED-1 to PROPOSED-4 in Personal-Tracker `DECISIONS.md` are drafts awaiting the owner.
+
+### Prerequisites and open questions that touch this repo (program sections 5A.5 and 8)
+
+Prerequisites (program-level; not costed here):
+
+- program P3: S-UT1: one headless jlinked-JVM-in-a-click spike driven from QML (not run)
+- program P4: A device that can run the 24.04 Ubuntu Touch the program plan targets (the owner's OnePlus 6 is read as 20.04-only)
+- program P8: An Apple-silicon Mac (OQ-31: a Mac mini chosen on 2026-10-07, not yet bought)
+- program P12: The iOS toolchain pin (OQ-38, ruled 2026-10-07); this repo moves only together with Hyle (PT:D-Q lockstep; its catalog rule and plan PD-2)
+
+Owner questions in the program register that concern this repo (status as of 2026-10-07):
+
+- OQ-5 (ruled): Hardware stance
+- OQ-17 (ruled): Toolchain pins: the pin is ruled; the approval to convert :cell-shell and :crash-recovery to kotlin("multiplatform") (plan PD-1) is unanswered
+- OQ-20 (ruled): CI minutes, storage and repo visibility
+- OQ-22 (ruled): Secret custody per platform
+- OQ-24 (open): Sharing mechanism for non-Gradle artefacts and prebuilt binaries
+- OQ-27 (open): Recovery-screen toolkit per platform
+- OQ-31 (ruled): CI for App Store builds; which Mac
+- OQ-33 (open): Hardware details still open
+- OQ-37 (answered in part): A second Ubuntu Touch device
+- OQ-38 (ruled): iOS toolchain pin
+
+When the owner confirms or changes the line, this repo's original cells above stay as the engineering detail; only the verdicts and re-costs in program section 5A change.
