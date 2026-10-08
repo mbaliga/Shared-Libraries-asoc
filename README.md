@@ -44,7 +44,7 @@ includeBuild("shared-libraries")
 ```kotlin
 // app/build.gradle.kts
 implementation("dev.aarso:search-core:0.2.0")
-implementation("dev.aarso:crash-recovery:1.4.0")
+implementation("dev.aarso:crash-recovery:1.5.0")
 ```
 
 Gradle substitutes any `dev.aarso:<name>` dependency with the matching project in the included

@@ -1,6 +1,8 @@
 package dev.aarso.crashrecovery
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -237,5 +239,69 @@ class CrashReportTest {
         )
         assertEquals("Crash", report.headline)
         assertTrue(report.trace.contains("(none recorded)"))
+    }
+
+    // ---- nextAttemptCount / attemptCeilingExceeded / identityOf -------------------------
+    // The pure loop-breaking rule behind maybeShowRecovery()'s hard N-attempt ceiling: the
+    // SAME pending report must not survive more than CrashReport.MAX_RECOVERY_ATTEMPTS launches
+    // unresolved, independent of the (much tighter) STREAK_WINDOW_MS used for the Reset button.
+
+    @Test
+    fun `attempt count restarts at 1 for a brand-new identity`() {
+        assertEquals(1, CrashReport.nextAttemptCount(prevIdentity = null, prevCount = 0, identity = "a"))
+        assertEquals(1, CrashReport.nextAttemptCount(prevIdentity = "a", prevCount = 5, identity = "b"))
+    }
+
+    @Test
+    fun `attempt count accumulates across launches while the identity is unchanged`() {
+        assertEquals(2, CrashReport.nextAttemptCount(prevIdentity = "a", prevCount = 1, identity = "a"))
+        assertEquals(3, CrashReport.nextAttemptCount(prevIdentity = "a", prevCount = 2, identity = "a"))
+        assertEquals(4, CrashReport.nextAttemptCount(prevIdentity = "a", prevCount = 3, identity = "a"))
+    }
+
+    @Test
+    fun `attempt ceiling is not exceeded within the default budget but is past it`() {
+        assertFalse(CrashReport.attemptCeilingExceeded(1))
+        assertFalse(CrashReport.attemptCeilingExceeded(CrashReport.MAX_RECOVERY_ATTEMPTS))
+        assertTrue(CrashReport.attemptCeilingExceeded(CrashReport.MAX_RECOVERY_ATTEMPTS + 1))
+    }
+
+    @Test
+    fun `attempt ceiling honours a custom maxAttempts`() {
+        assertFalse(CrashReport.attemptCeilingExceeded(attemptCount = 2, maxAttempts = 2))
+        assertTrue(CrashReport.attemptCeilingExceeded(attemptCount = 3, maxAttempts = 2))
+    }
+
+    @Test
+    fun `a simulated maybeShowRecovery loop shows recovery up to the ceiling, then stops`() {
+        // The same report (one identity) hits maybeShowRecovery() four times in a row without
+        // ever being resolved -- the real app itself is what's persistently broken.
+        val identity = CrashReport.identityOf(whenMillis = 1_000L, rawText = "trace")
+        var prevIdentity: String? = null
+        var prevCount = 0
+        val wouldShowRecovery = (1..4).map {
+            val next = CrashReport.nextAttemptCount(prevIdentity, prevCount, identity)
+            prevIdentity = identity
+            prevCount = next
+            !CrashReport.attemptCeilingExceeded(next)
+        }
+        assertEquals(listOf(true, true, true, false), wouldShowRecovery)
+    }
+
+    @Test
+    fun `identity prefers whenMillis over the report text`() {
+        // Two reports captured at the exact same instant are the same crash as far as the
+        // ceiling cares, even if (hypothetically) their text differed downstream.
+        val idA = CrashReport.identityOf(whenMillis = 1_000L, rawText = "one report")
+        val idB = CrashReport.identityOf(whenMillis = 1_000L, rawText = "a totally different report")
+        assertEquals(idA, idB)
+    }
+
+    @Test
+    fun `identity falls back to hashing the report text when whenMillis is unavailable`() {
+        val idA = CrashReport.identityOf(whenMillis = null, rawText = "report A")
+        val idB = CrashReport.identityOf(whenMillis = null, rawText = "report B")
+        assertNotEquals(idA, idB)
+        assertEquals(idA, CrashReport.identityOf(whenMillis = null, rawText = "report A"))
     }
 }

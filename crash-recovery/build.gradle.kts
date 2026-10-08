@@ -18,6 +18,19 @@ plugins {
 val crashRecoveryGroup = "dev.aarso"
 val crashRecoveryArtifact = "crash-recovery"
 
+// 1.5.0 — closes the crash-loop trap: a broken recovery screen (its own onCreate throwing)
+// used to become a PERMANENT loop, since maybeShowRecovery() had no attempt budget and the
+// one escape hatch (Reset) lived inside the very onCreate call that was failing. Three
+// independent backstops now exist, none of which replace each other: (1) onCreate's own
+// buildRoot()/setContentView() call is runCatching-guarded, falling back to clearing the
+// report and relaunching the real app exactly like Continue does; (2) a durable
+// SharedPreferences marker set at the top of onCreate and cleared once it succeeds catches
+// even a death runCatching couldn't (e.g. a native crash during inflation) on the NEXT
+// launch; (3) a hard N-attempt ceiling (MAX_RECOVERY_ATTEMPTS, independent of
+// STREAK_WINDOW_MS) auto-clears a report that stays pending across repeated launches even
+// when the recovery screen itself renders fine every time. The streak-gated Reset button is
+// unchanged — a secondary, user-facing option now, not the only one.
+//
 // 1.4.0 — the look-and-feel pass the owner asked for after device testing, plus the two
 // display bugs that pass turned up: an outlined pill that painted its label in the fill colour
 // (an empty-looking button, now pinned by PillColorsTest) and no window-inset handling at all
@@ -32,7 +45,7 @@ val crashRecoveryArtifact = "crash-recovery"
 // crash loop where the OS showed "keeps stopping" and our recovery screen never could.
 // (1.2.0 was the first release from this home: hyle-design-system@c586f8f + previewIntent
 // merged forward from the never-merged 33b0faa. See MIGRATION.md.)
-val crashRecoveryVersion = "1.4.0"
+val crashRecoveryVersion = "1.5.0"
 
 // Project coordinate — required for Gradle composite-build (`includeBuild`) dependency
 // substitution, which is how every consumer resolves this module.

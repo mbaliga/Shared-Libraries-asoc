@@ -40,6 +40,18 @@ object CrashRecovery {
     private const val EXIT_SEEN_FILE_NAME = "crash_recovery_exit_seen.txt"
     // A historical exit older than this is stale context, not news — don't resurface it.
     private const val EXIT_MAX_AGE_MILLIS = 7L * 24 * 60 * 60 * 1000
+    // Bookkeeping for the hard N-attempt ceiling on a single pending report (see
+    // bumpAttemptAndCheckCeiling) — separate from the streak file, which counts something
+    // different (consecutive crashes close together in time, not repeated recovery launches
+    // for the same unresolved report).
+    private const val ATTEMPT_FILE_NAME = "crash_recovery_attempts.txt"
+    // The durable "recovery screen started building its own UI and hasn't finished" marker
+    // (see markRecoveryEntryStarted). SharedPreferences + commit() rather than a plain file:
+    // this has to survive a death that happens WHILE it's being written far more reliably than
+    // this module's other files need to, since it exists specifically to detect that kind of
+    // death on the next launch.
+    private const val ENTRY_PREFS_NAME = "dev.aarso.crashrecovery.entry"
+    private const val ENTRY_KEY = "recovery_entry_in_progress"
 
     /** Installs the handler. Chains to any previously-installed handler so this composes. */
     fun install(app: Application, appLabel: String) {
@@ -226,6 +238,102 @@ object CrashRecovery {
 
     fun clear(context: Context) {
         runCatching { file(context).delete() }
+        // A cleared report has nothing left to count attempts against — forget it too, so a
+        // genuinely new crash later starts its own ceiling at 1 rather than inheriting this
+        // one's count (identityOf would already prevent that, but there's no reason to keep
+        // the file around either).
+        clearAttemptCeiling(context)
+    }
+
+    // --- durable "recovery screen started its own onCreate" marker ---
+
+    private fun entryPrefs(context: Context) =
+        context.applicationContext.getSharedPreferences(ENTRY_PREFS_NAME, Context.MODE_PRIVATE)
+
+    /**
+     * Call at the very top of [CrashRecoveryActivity.onCreate], before anything that could
+     * throw. `commit()`, not `apply()`, on purpose: this marker only earns its keep if it is
+     * actually on disk before the risky UI-building work below it runs, even if the process
+     * dies immediately after — an `apply()` write can still be queued, not yet persisted, when
+     * that happens.
+     */
+    fun markRecoveryEntryStarted(context: Context) {
+        runCatching { entryPrefs(context).edit().putBoolean(ENTRY_KEY, true).commit() }
+    }
+
+    /**
+     * Call once [CrashRecoveryActivity]'s own UI has actually finished — `setContentView`
+     * succeeded, or the user resolved the report via Continue/Discard/Reset.
+     */
+    fun clearRecoveryEntryMarker(context: Context) {
+        runCatching { entryPrefs(context).edit().putBoolean(ENTRY_KEY, false).commit() }
+    }
+
+    /**
+     * True when a PRIOR launch set [markRecoveryEntryStarted] and never reached
+     * [clearRecoveryEntryMarker] — proof the recovery screen itself didn't even finish starting
+     * up last time (e.g. a native crash during view inflation that no `runCatching` inside it
+     * could catch). Showing it again would just repeat the same failure.
+     */
+    fun recoveryEntryMarkerIsStale(context: Context): Boolean =
+        runCatching { entryPrefs(context).getBoolean(ENTRY_KEY, false) }.getOrDefault(false)
+
+    // --- hard N-attempt ceiling for a single pending report ---
+
+    private fun attemptFile(context: Context): File = File(context.applicationContext.filesDir, ATTEMPT_FILE_NAME)
+
+    private fun readAttempt(context: Context): Pair<String?, Int> = runCatching {
+        val parts = attemptFile(context).takeIf { it.exists() }?.readText()?.split('\t') ?: return null to 0
+        (parts.getOrNull(0)?.takeIf { it.isNotEmpty() }) to (parts.getOrNull(1)?.toIntOrNull() ?: 0)
+    }.getOrDefault(null to 0)
+
+    /**
+     * Bumps the attempt count for [identity] (the currently pending report — see
+     * [CrashReport.identityOf]) and returns whether the ceiling is now exceeded. See
+     * [CrashReport.nextAttemptCount] / [CrashReport.attemptCeilingExceeded] for the pure rule.
+     */
+    private fun bumpAttemptAndCheckCeiling(context: Context, identity: String): Boolean = runCatching {
+        val (prevIdentity, prevCount) = readAttempt(context)
+        val next = CrashReport.nextAttemptCount(prevIdentity, prevCount, identity)
+        attemptFile(context).writeText("$identity\t$next")
+        CrashReport.attemptCeilingExceeded(next)
+    }.getOrDefault(false)
+
+    /** Forget the attempt ceiling bookkeeping — folded into [clear] since it tracks attempts
+     * against a specific pending report, and a cleared report has none left to track. */
+    fun clearAttemptCeiling(context: Context) {
+        runCatching { attemptFile(context).delete() }
+    }
+
+    /** A stable identity for whatever report is currently pending on disk, or null if none. */
+    private fun pendingIdentity(context: Context): String? = runCatching {
+        val text = file(context).takeIf { it.exists() }?.readText() ?: return null
+        CrashReport.identityOf(CrashReport.decode(text).whenMillis, text)
+    }.getOrNull()
+
+    // --- shared "give up on recovery" remediation ---
+
+    /**
+     * The one remediation shared by every loop-breaker below: clear the pending report, clear
+     * the streak, clear the entry marker, optionally relaunch the real app, and always run
+     * [then] last. Plain function references rather than Android types on purpose, so the
+     * sequencing — and its failure tolerance — is unit-testable without a device: a crash
+     * INSIDE the remediation itself (any one of these throwing) must never be able to stop the
+     * rest of it, matching this module's own "every operation is runCatching-guarded" rule. If
+     * this fix's own cleanup became a new crash-loop surface, it would defeat the entire point.
+     */
+    internal fun giveUpOnRecovery(
+        clearReport: () -> Unit,
+        clearStreak: () -> Unit,
+        clearEntryMarker: () -> Unit,
+        relaunch: (() -> Unit)? = null,
+        then: () -> Unit = {},
+    ) {
+        runCatching { clearReport() }
+        runCatching { clearStreak() }
+        runCatching { clearEntryMarker() }
+        if (relaunch != null) runCatching { relaunch() }
+        then()
     }
 
     /**
@@ -236,6 +344,15 @@ object CrashRecovery {
      * recovery screen relaunches a clean instance instead of returning to a blank one.
      * Returns `true` when recovery was shown (the caller should `return` immediately without
      * building its real UI), `false` when there's nothing to recover from.
+     *
+     * Two independent loop-breakers can also make this return `false` even though a report
+     * *is* pending, each giving up on recovery and clearing the report so the real app loads
+     * instead:
+     *  - [recoveryEntryMarkerIsStale] — the recovery screen's own `onCreate` didn't even finish
+     *    on the prior launch, so showing it again would repeat that same failure.
+     *  - the N-attempt ceiling — the SAME report is still pending after
+     *    [CrashReport.MAX_RECOVERY_ATTEMPTS] calls to this function, so the real app itself is
+     *    assumed to be what's persistently broken, not this screen.
      */
     fun maybeShowRecovery(
         activity: Activity,
@@ -250,6 +367,34 @@ object CrashRecovery {
             if (!captureExitDeath(activity, appLabel)) return false
             if (pending(activity) == null) return false
         }
+
+        // The recovery screen itself didn't even finish starting up last time (see
+        // markRecoveryEntryStarted) — showing it again would just repeat the SAME failure on a
+        // loop with no in-app escape, since its own Reset button is built by the very onCreate
+        // call that's failing. Fall through to the real app instead.
+        if (recoveryEntryMarkerIsStale(activity)) {
+            giveUpOnRecovery(
+                clearReport = { clear(activity) },
+                clearStreak = { clearStreak(activity) },
+                clearEntryMarker = { clearRecoveryEntryMarker(activity) },
+            )
+            return false
+        }
+
+        // Hard ceiling, independent of CrashReport.STREAK_WINDOW_MS: the SAME report still
+        // unresolved after repeated launches means the real app itself keeps crashing, not just
+        // this screen — the streak window alone can't catch that (a user reopening minutes
+        // apart never re-enters a 60s window at all).
+        val identity = pendingIdentity(activity)
+        if (identity != null && bumpAttemptAndCheckCeiling(activity, identity)) {
+            giveUpOnRecovery(
+                clearReport = { clear(activity) },
+                clearStreak = { clearStreak(activity) },
+                clearEntryMarker = { clearRecoveryEntryMarker(activity) },
+            )
+            return false
+        }
+
         activity.startActivity(CrashRecoveryActivity.intent(activity, appLabel, style, contactEmail))
         activity.finish()
         return true

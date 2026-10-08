@@ -116,6 +116,45 @@ data class CrashReport(
             1
         }
 
+        /**
+         * Hard ceiling on `CrashRecovery.maybeShowRecovery()` re-attempts for the SAME pending
+         * report, independent of [STREAK_WINDOW_MS]. The streak window alone can't catch a
+         * persistently-broken real app: a user who reopens it minutes apart, outside that 60s
+         * window, never accumulates a streak at all, yet "Continue -> relaunch -> crash ->
+         * recovery -> Continue" can still repeat forever. After this many consecutive
+         * `maybeShowRecovery()` calls still find the identical report pending, it is
+         * auto-cleared and the real app is let through instead.
+         */
+        const val MAX_RECOVERY_ATTEMPTS = 3
+
+        /**
+         * The next `maybeShowRecovery()` attempt count for [identity], given the [prevIdentity] /
+         * [prevCount] last recorded. A different identity is a genuinely new crash, not a
+         * continuation of the last one, so it restarts the count at 1 rather than inheriting an
+         * unrelated (already-resolved) report's ceiling. Pure and side-effect-free, mirroring
+         * [nextStreakCount], so the ceiling rule itself is unit-testable without Android.
+         */
+        fun nextAttemptCount(prevIdentity: String?, prevCount: Int, identity: String): Int =
+            if (prevIdentity != null && prevIdentity == identity) prevCount + 1 else 1
+
+        /**
+         * True once [attemptCount] has outlived [maxAttempts] — the SAME report has now exceeded
+         * its budget of recovery attempts and must be auto-cleared rather than shown again.
+         */
+        fun attemptCeilingExceeded(attemptCount: Int, maxAttempts: Int = MAX_RECOVERY_ATTEMPTS): Boolean =
+            attemptCount > maxAttempts
+
+        /**
+         * A stable identity for a persisted report, used only to tell "the same crash, still
+         * unresolved" apart from "a new one just landed" across repeated `maybeShowRecovery()`
+         * calls. [whenMillis] is preferred when present — cheap, stable, and already unique per
+         * capture — and a decode that doesn't carry one (a legacy or foreign-format file) falls
+         * back to hashing the raw persisted text, so this never throws and a differently-worded
+         * report is never mistaken for the same one.
+         */
+        fun identityOf(whenMillis: Long?, rawText: String): String =
+            whenMillis?.toString() ?: rawText.hashCode().toString()
+
         /** First line worth reading: `ExceptionType: message` (message omitted if blank). */
         fun headlineOf(throwable: Throwable): String {
             val type = throwable.javaClass.simpleName.ifBlank { throwable.javaClass.name }

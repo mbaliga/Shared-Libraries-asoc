@@ -79,6 +79,13 @@ class CrashRecoveryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Advance the durable marker BEFORE any of this screen's own risky UI-building work
+        // below, matching captureExitDeath's "advance watermark before risky work" discipline:
+        // if building this screen's UI crashes in a way the runCatching below can't even catch
+        // (e.g. a native crash during view inflation), the NEXT launch's maybeShowRecovery()
+        // must be able to tell that THIS screen is what's broken, not the real app.
+        CrashRecovery.markRecoveryEntryStarted(this)
+
         appLabel = intent.getStringExtra(EXTRA_APP_LABEL) ?: "App"
         contactEmail = intent.getStringExtra(EXTRA_CONTACT_EMAIL)
         preview = intent.getBooleanExtra(EXTRA_PREVIEW, false)
@@ -90,6 +97,7 @@ class CrashRecoveryActivity : Activity() {
         // Nothing to recover from (e.g. launched directly for testing, or cleared between the
         // check in maybeShowRecovery and here) — don't strand the user on a blank screen.
         if (decoded == null) {
+            CrashRecovery.clearRecoveryEntryMarker(this)
             finish()
             return
         }
@@ -102,7 +110,44 @@ class CrashRecoveryActivity : Activity() {
             Configuration.UI_MODE_NIGHT_YES
         pal = readStyle().resolve(night)
 
-        setContentView(buildRoot())
+        // Everything from here on is this screen's OWN UI construction — the thing this
+        // module's own kdoc (see CrashRecoveryLook.kt's PillColors) admits has already shipped
+        // at least one real rendering defect. Left unguarded, a throw here is caught by the
+        // SAME global uncaught-exception handler CrashRecovery.install() set up, which would
+        // overwrite the pending report with THIS crash and turn a broken recovery screen into a
+        // permanent loop with no in-app escape — its own Reset button lives inside the very
+        // buildDetailsPane() call that just failed. Fail toward the real app instead.
+        if (runCatching { setContentView(buildRoot()) }.isFailure) {
+            recoverFromOwnFailure()
+            return
+        }
+
+        CrashRecovery.clearRecoveryEntryMarker(this)
+    }
+
+    /**
+     * This screen's own `onCreate` failed to build its UI. Give up on recovery exactly the way
+     * Continue would — clear the pending report and the streak — then relaunch the real app the
+     * same way [continueToApp] does, so a broken recovery screen fails toward the app it exists
+     * to recover, not toward itself. See [CrashRecovery.giveUpOnRecovery] for why every step
+     * here survives any of the others throwing.
+     */
+    private fun recoverFromOwnFailure() {
+        if (preview) {
+            // Inert in preview, like every other action with real consequences on this screen
+            // (see continueToApp, performReset): a broken PREVIEW build must never touch real
+            // crash state or relaunch the host app.
+            CrashRecovery.clearRecoveryEntryMarker(this)
+            finish()
+            return
+        }
+        CrashRecovery.giveUpOnRecovery(
+            clearReport = { CrashRecovery.clear(this) },
+            clearStreak = { CrashRecovery.clearStreak(this) },
+            clearEntryMarker = { CrashRecovery.clearRecoveryEntryMarker(this) },
+            relaunch = { packageManager.getLaunchIntentForPackage(packageName)?.let { startActivity(it) } },
+            then = { finish() },
+        )
     }
 
     private fun buildRoot(): View {
@@ -490,6 +535,7 @@ class CrashRecoveryActivity : Activity() {
         }
         CrashRecovery.clear(this)
         CrashRecovery.clearStreak(this)
+        CrashRecovery.clearRecoveryEntryMarker(this)
         // The zero-arg self-clear is API 29+ only; several consumers have a lower minSdk
         // (Animalcules 24, Horizkeeb 28), so guiding to Settings is the honest fallback.
         if (Build.VERSION.SDK_INT >= 29) {
@@ -586,6 +632,7 @@ class CrashRecoveryActivity : Activity() {
             return
         }
         CrashRecovery.clear(this)
+        CrashRecovery.clearRecoveryEntryMarker(this)
         runCatching { packageManager.getLaunchIntentForPackage(packageName) }
             .getOrNull()
             ?.let { startActivity(it) }
@@ -594,6 +641,7 @@ class CrashRecoveryActivity : Activity() {
 
     private fun discard() {
         CrashRecovery.clear(this)
+        CrashRecovery.clearRecoveryEntryMarker(this)
         showToast("Report deleted from device")
         paneMain.postDelayed({ continueToApp() }, 650)
     }
