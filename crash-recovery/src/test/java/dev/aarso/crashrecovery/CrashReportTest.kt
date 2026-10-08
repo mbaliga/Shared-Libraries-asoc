@@ -304,4 +304,51 @@ class CrashReportTest {
         assertNotEquals(idA, idB)
         assertEquals(idA, CrashReport.identityOf(whenMillis = null, rawText = "report A"))
     }
+
+    // ---- historyFileName / historyWhenMillisOf / historyEntriesToPrune -------------------
+    // The pure rules behind CrashRecovery.history()/appendHistory() — a bounded, newest-first
+    // list of every crash ever captured (crash_recovery_history/), distinct from the single
+    // "pending" slot the rest of this module manages. No Android Context is involved in any
+    // of these, which is exactly why CrashRecovery delegates the file-naming and pruning
+    // decisions here rather than inlining them next to the disk I/O.
+
+    @Test
+    fun `history file name and its reverse round-trip a capture time`() {
+        val name = CrashReport.historyFileName(1_722_800_000_000L)
+        assertEquals("1722800000000.txt", name)
+        assertEquals(1_722_800_000_000L, CrashReport.historyWhenMillisOf(name))
+    }
+
+    @Test
+    fun `historyWhenMillisOf rejects anything that is not one of our own file names`() {
+        assertNull(CrashReport.historyWhenMillisOf("not-a-timestamp.txt"))
+        assertNull(CrashReport.historyWhenMillisOf("1722800000000.json"))
+        assertNull(CrashReport.historyWhenMillisOf(".txt"))
+        assertNull(CrashReport.historyWhenMillisOf(""))
+    }
+
+    @Test
+    fun `nothing is pruned while at or under the cap`() {
+        val atCap = (1L..CrashReport.HISTORY_CAP.toLong()).toList()
+        assertTrue(CrashReport.historyEntriesToPrune(emptyList(), cap = 3).isEmpty())
+        assertTrue(CrashReport.historyEntriesToPrune(atCap, cap = CrashReport.HISTORY_CAP).isEmpty())
+    }
+
+    @Test
+    fun `prune keeps the newest entries and drops the oldest past the cap`() {
+        // Deliberately out of order -- appendHistory reads a directory listing, which makes
+        // no ordering guarantee of its own.
+        val whenMillisList = listOf(500L, 100L, 400L, 300L, 200L)
+        val pruned = CrashReport.historyEntriesToPrune(whenMillisList, cap = 3)
+        assertEquals(setOf(200L, 100L), pruned.toSet())
+        assertEquals(2, pruned.size)
+    }
+
+    @Test
+    fun `prune honours the default cap when none is passed explicitly`() {
+        val oneOverCap = (1L..(CrashReport.HISTORY_CAP + 1).toLong()).toList()
+        val pruned = CrashReport.historyEntriesToPrune(oneOverCap)
+        // Oldest (smallest) capture time is the one entry past the default cap.
+        assertEquals(listOf(1L), pruned)
+    }
 }

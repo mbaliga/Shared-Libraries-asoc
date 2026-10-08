@@ -155,6 +155,46 @@ data class CrashReport(
         fun identityOf(whenMillis: Long?, rawText: String): String =
             whenMillis?.toString() ?: rawText.hashCode().toString()
 
+        // --- crash history (CrashRecovery.history / clearHistory / removeHistoryEntry) ---
+
+        /**
+         * How many past crashes `CrashRecovery.history` remembers before the oldest ones are
+         * pruned on every new capture — a crash-reporting feature must never become its own
+         * unbounded-storage leak.
+         */
+        const val HISTORY_CAP = 50
+
+        /**
+         * The on-disk file name for one crash-history entry — named by its capture time so a
+         * newest-first listing is just a numeric sort over file names, and the format needs no
+         * changes to [decode]: each history file holds the exact same [encode] text already
+         * used for the single "pending" slot.
+         */
+        fun historyFileName(whenMillis: Long): String = "$whenMillis.txt"
+
+        /**
+         * The reverse of [historyFileName]. Null for anything that doesn't match that shape — a
+         * foreign file dropped into the same directory, say — so a listing can filter those out
+         * instead of crashing on them.
+         */
+        fun historyWhenMillisOf(fileName: String): Long? =
+            fileName.takeIf { it.endsWith(".txt") }
+                ?.removeSuffix(".txt")
+                ?.takeIf { it.isNotEmpty() }
+                ?.toLongOrNull()
+
+        /**
+         * Which capture times among [whenMillisList] (every file currently in the history
+         * directory) should be pruned once there are more than [cap] of them — the oldest ones
+         * beyond the cap. Pure and side-effect-free, mirroring [nextStreakCount] /
+         * [nextAttemptCount], so the bounding rule itself is unit-testable without touching
+         * disk; `CrashRecovery.appendHistory` is the only caller, and it just deletes whatever
+         * file names these capture times map to.
+         */
+        fun historyEntriesToPrune(whenMillisList: List<Long>, cap: Int = HISTORY_CAP): List<Long> =
+            if (whenMillisList.size <= cap) emptyList()
+            else whenMillisList.sortedDescending().drop(cap)
+
         /** First line worth reading: `ExceptionType: message` (message omitted if blank). */
         fun headlineOf(throwable: Throwable): String {
             val type = throwable.javaClass.simpleName.ifBlank { throwable.javaClass.name }

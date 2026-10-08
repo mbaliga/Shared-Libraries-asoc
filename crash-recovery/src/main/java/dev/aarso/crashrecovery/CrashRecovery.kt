@@ -45,6 +45,10 @@ object CrashRecovery {
     // different (consecutive crashes close together in time, not repeated recovery launches
     // for the same unresolved report).
     private const val ATTEMPT_FILE_NAME = "crash_recovery_attempts.txt"
+    // Bounded per-crash history (see history/clearHistory/removeHistoryEntry): one file per
+    // capture in this subdirectory of filesDir, named by CrashReport.historyFileName so the
+    // newest-first listing is a plain numeric sort and decode() needs no changes.
+    private const val HISTORY_DIR_NAME = "crash_recovery_history"
     // The durable "recovery screen started building its own UI and hasn't finished" marker
     // (see markRecoveryEntryStarted). SharedPreferences + commit() rather than a plain file:
     // this has to survive a death that happens WHILE it's being written far more reliably than
@@ -83,6 +87,7 @@ object CrashRecovery {
         )
         file(context).writeText(report.encode())
         bumpStreak(context, now)
+        appendHistory(context, report, now)
         android.util.Log.e("CrashRecovery", "captured crash for $appLabel", throwable)
     }
 
@@ -230,6 +235,7 @@ object CrashRecovery {
         // (show, share, copy, clear, streak-gated reset) works for these deaths unchanged.
         file(context).writeText(report.encode())
         bumpStreak(context, death.timestamp)
+        appendHistory(context, report, death.timestamp)
         true
     }.getOrDefault(false)
 
@@ -310,6 +316,63 @@ object CrashRecovery {
         val text = file(context).takeIf { it.exists() }?.readText() ?: return null
         CrashReport.identityOf(CrashReport.decode(text).whenMillis, text)
     }.getOrNull()
+
+    // --- bounded per-crash history (a crash-history screen, distinct from the single
+    // --- "pending" slot above: every capture lands here too, and stays until pruned or
+    // --- explicitly cleared, regardless of whether the pending report was resolved) ---
+
+    private fun historyDir(context: Context): File =
+        File(context.applicationContext.filesDir, HISTORY_DIR_NAME)
+
+    /**
+     * Append [report] (captured at [whenMillis]) to the bounded crash history. Called from
+     * inside [capture]/[captureExitDeath] — i.e. from the uncaught-exception handler path
+     * itself — so this stays `runCatching`-guarded end to end and cheap: one directory
+     * listing, one write, and a prune of whatever [CrashReport.historyEntriesToPrune] says is
+     * past the cap.
+     */
+    private fun appendHistory(context: Context, report: CrashReport, whenMillis: Long) {
+        runCatching {
+            val dir = historyDir(context)
+            dir.mkdirs()
+            File(dir, CrashReport.historyFileName(whenMillis)).writeText(report.encode())
+            val byWhen = (dir.listFiles() ?: return)
+                .mapNotNull { f -> CrashReport.historyWhenMillisOf(f.name)?.let { it to f } }
+            val prune = CrashReport.historyEntriesToPrune(byWhen.map { it.first }).toSet()
+            if (prune.isEmpty()) return
+            byWhen.filter { it.first in prune }.forEach { it.second.delete() }
+        }
+    }
+
+    /**
+     * Every crash captured on this device, newest first, up to [CrashReport.HISTORY_CAP]
+     * entries — a superset of [pending] (the one still-unresolved report) meant for a
+     * user-facing crash-history screen. Each file decodes independently (`runCatching` per
+     * entry) so one unreadable/corrupt file can never hide the rest of the list.
+     */
+    fun history(context: Context): List<CrashReport.Decoded> = runCatching {
+        val files = historyDir(context).listFiles()?.toList() ?: return emptyList()
+        files
+            .mapNotNull { f -> CrashReport.historyWhenMillisOf(f.name)?.let { it to f } }
+            .sortedByDescending { it.first }
+            .mapNotNull { (_, f) -> runCatching { CrashReport.decode(f.readText()) }.getOrNull() }
+    }.getOrDefault(emptyList())
+
+    /** Forget every entry in the crash history — the "Clear all" action on a crash-history
+     *  screen. Does not touch [pending]/the streak/the attempt ceiling; those are a separate,
+     *  single-slot concern (see [clear]). */
+    fun clearHistory(context: Context) {
+        runCatching { historyDir(context).listFiles()?.forEach { it.delete() } }
+    }
+
+    /**
+     * Forget one crash history entry by its capture time (see [CrashReport.Decoded.whenMillis])
+     * — the per-row "remove" action on a crash-history screen. A no-op, not an error, when no
+     * entry has that timestamp.
+     */
+    fun removeHistoryEntry(context: Context, whenMillis: Long) {
+        runCatching { File(historyDir(context), CrashReport.historyFileName(whenMillis)).delete() }
+    }
 
     // --- shared "give up on recovery" remediation ---
 

@@ -18,6 +18,17 @@ plugins {
 val crashRecoveryGroup = "dev.aarso"
 val crashRecoveryArtifact = "crash-recovery"
 
+// 1.6.0 — adds a bounded crash HISTORY, distinct from the single "pending" slot the rest
+// of this module manages: every capture (JVM crash or captureExitDeath) now also lands in
+// a crash_recovery_history/ subdirectory of filesDir, one file per crash, so a consuming
+// app can offer a "crash history" screen (newest-first, up to CrashReport.HISTORY_CAP
+// entries) instead of only ever seeing the one still-unresolved report. history() decodes
+// each entry independently so one corrupt file can't hide the rest; clearHistory() and
+// removeHistoryEntry(whenMillis) back a "clear all" / per-row remove action. Pruning (the
+// oldest entries once the cap is exceeded) is the pure, unit-tested
+// CrashReport.historyEntriesToPrune. Every new file name is CrashReport.historyFileName, so
+// CrashReport.decode needed no changes at all.
+//
 // 1.5.0 — closes the crash-loop trap: a broken recovery screen (its own onCreate throwing)
 // used to become a PERMANENT loop, since maybeShowRecovery() had no attempt budget and the
 // one escape hatch (Reset) lived inside the very onCreate call that was failing. Three
@@ -45,7 +56,7 @@ val crashRecoveryArtifact = "crash-recovery"
 // crash loop where the OS showed "keeps stopping" and our recovery screen never could.
 // (1.2.0 was the first release from this home: hyle-design-system@c586f8f + previewIntent
 // merged forward from the never-merged 33b0faa. See MIGRATION.md.)
-val crashRecoveryVersion = "1.5.0"
+val crashRecoveryVersion = "1.6.0"
 
 // Project coordinate — required for Gradle composite-build (`includeBuild`) dependency
 // substitution, which is how every consumer resolves this module.
