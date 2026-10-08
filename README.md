@@ -75,3 +75,7 @@ a search change must not force a crash-recovery bump. Versions are declared in e
 Because composite-build substitution matches on `group:name` and **ignores the version**, the
 declared version is documentation, not enforcement: consumers compile against whatever the
 submodule pin contains. Keep the pin and the declared version honest with each other.
+
+## Licence
+
+Source-available, free for noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE). If you make money with it, you need a commercial licence: see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
