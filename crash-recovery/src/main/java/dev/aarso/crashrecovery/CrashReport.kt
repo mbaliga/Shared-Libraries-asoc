@@ -116,6 +116,85 @@ data class CrashReport(
             1
         }
 
+        /**
+         * Hard ceiling on `CrashRecovery.maybeShowRecovery()` re-attempts for the SAME pending
+         * report, independent of [STREAK_WINDOW_MS]. The streak window alone can't catch a
+         * persistently-broken real app: a user who reopens it minutes apart, outside that 60s
+         * window, never accumulates a streak at all, yet "Continue -> relaunch -> crash ->
+         * recovery -> Continue" can still repeat forever. After this many consecutive
+         * `maybeShowRecovery()` calls still find the identical report pending, it is
+         * auto-cleared and the real app is let through instead.
+         */
+        const val MAX_RECOVERY_ATTEMPTS = 3
+
+        /**
+         * The next `maybeShowRecovery()` attempt count for [identity], given the [prevIdentity] /
+         * [prevCount] last recorded. A different identity is a genuinely new crash, not a
+         * continuation of the last one, so it restarts the count at 1 rather than inheriting an
+         * unrelated (already-resolved) report's ceiling. Pure and side-effect-free, mirroring
+         * [nextStreakCount], so the ceiling rule itself is unit-testable without Android.
+         */
+        fun nextAttemptCount(prevIdentity: String?, prevCount: Int, identity: String): Int =
+            if (prevIdentity != null && prevIdentity == identity) prevCount + 1 else 1
+
+        /**
+         * True once [attemptCount] has outlived [maxAttempts] — the SAME report has now exceeded
+         * its budget of recovery attempts and must be auto-cleared rather than shown again.
+         */
+        fun attemptCeilingExceeded(attemptCount: Int, maxAttempts: Int = MAX_RECOVERY_ATTEMPTS): Boolean =
+            attemptCount > maxAttempts
+
+        /**
+         * A stable identity for a persisted report, used only to tell "the same crash, still
+         * unresolved" apart from "a new one just landed" across repeated `maybeShowRecovery()`
+         * calls. [whenMillis] is preferred when present — cheap, stable, and already unique per
+         * capture — and a decode that doesn't carry one (a legacy or foreign-format file) falls
+         * back to hashing the raw persisted text, so this never throws and a differently-worded
+         * report is never mistaken for the same one.
+         */
+        fun identityOf(whenMillis: Long?, rawText: String): String =
+            whenMillis?.toString() ?: rawText.hashCode().toString()
+
+        // --- crash history (CrashRecovery.history / clearHistory / removeHistoryEntry) ---
+
+        /**
+         * How many past crashes `CrashRecovery.history` remembers before the oldest ones are
+         * pruned on every new capture — a crash-reporting feature must never become its own
+         * unbounded-storage leak.
+         */
+        const val HISTORY_CAP = 50
+
+        /**
+         * The on-disk file name for one crash-history entry — named by its capture time so a
+         * newest-first listing is just a numeric sort over file names, and the format needs no
+         * changes to [decode]: each history file holds the exact same [encode] text already
+         * used for the single "pending" slot.
+         */
+        fun historyFileName(whenMillis: Long): String = "$whenMillis.txt"
+
+        /**
+         * The reverse of [historyFileName]. Null for anything that doesn't match that shape — a
+         * foreign file dropped into the same directory, say — so a listing can filter those out
+         * instead of crashing on them.
+         */
+        fun historyWhenMillisOf(fileName: String): Long? =
+            fileName.takeIf { it.endsWith(".txt") }
+                ?.removeSuffix(".txt")
+                ?.takeIf { it.isNotEmpty() }
+                ?.toLongOrNull()
+
+        /**
+         * Which capture times among [whenMillisList] (every file currently in the history
+         * directory) should be pruned once there are more than [cap] of them — the oldest ones
+         * beyond the cap. Pure and side-effect-free, mirroring [nextStreakCount] /
+         * [nextAttemptCount], so the bounding rule itself is unit-testable without touching
+         * disk; `CrashRecovery.appendHistory` is the only caller, and it just deletes whatever
+         * file names these capture times map to.
+         */
+        fun historyEntriesToPrune(whenMillisList: List<Long>, cap: Int = HISTORY_CAP): List<Long> =
+            if (whenMillisList.size <= cap) emptyList()
+            else whenMillisList.sortedDescending().drop(cap)
+
         /** First line worth reading: `ExceptionType: message` (message omitted if blank). */
         fun headlineOf(throwable: Throwable): String {
             val type = throwable.javaClass.simpleName.ifBlank { throwable.javaClass.name }
