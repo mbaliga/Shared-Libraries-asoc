@@ -1,0 +1,412 @@
+{
+  "spec": "crash-report-format",
+  "version": 1,
+  "source": "crash-recovery 1.5.0: CrashReport.kt; vectors from CrashReportTest and MIGRATION.md (PREVIEW safety properties)",
+  "constants": {
+    "magic": "CRASHv2",
+    "trace_marker": "---TRACE---",
+    "streak_window_ms": 60000
+  },
+  "devices": {
+    "full": {
+      "app_version_name": "1.2.3",
+      "app_version_code": 42,
+      "os_sdk_int": 34,
+      "device_manufacturer": "Nubia",
+      "device_model": "RedMagic 11 Pro",
+      "package_name": "org.example.app",
+      "install_source": "Play Store",
+      "free_mem_mb": 212,
+      "total_mem_mb": 12288
+    },
+    "minimal": {
+      "app_version_name": null,
+      "app_version_code": null,
+      "os_sdk_int": 0,
+      "device_manufacturer": "?",
+      "device_model": "?",
+      "package_name": "",
+      "install_source": null,
+      "free_mem_mb": null,
+      "total_mem_mb": null
+    }
+  },
+  "headline": [
+    {
+      "name": "type and message",
+      "exc_type": "IllegalStateException",
+      "exc_message": "container not ready",
+      "expect": "IllegalStateException: container not ready"
+    },
+    {
+      "name": "no message",
+      "exc_type": "RuntimeException",
+      "exc_message": null,
+      "expect": "RuntimeException"
+    },
+    {
+      "name": "empty message is omitted",
+      "exc_type": "RuntimeException",
+      "exc_message": "",
+      "expect": "RuntimeException"
+    },
+    {
+      "name": "blank message is omitted",
+      "exc_type": "RuntimeException",
+      "exc_message": "   ",
+      "expect": "RuntimeException"
+    }
+  ],
+  "plain_language": [
+    {
+      "name": "out of memory",
+      "kind": "OutOfMemoryError",
+      "wrappers": [],
+      "expect": "The app needed more memory than your device could give it, and Android had to stop it."
+    },
+    {
+      "name": "stack overflow",
+      "kind": "StackOverflowError",
+      "wrappers": [],
+      "expect": "The app got stuck repeating itself until it ran out of room, so Android stopped it."
+    },
+    {
+      "name": "null pointer",
+      "kind": "NullPointerException",
+      "wrappers": [],
+      "expect": "The app expected something to be there that wasn't, and had to close."
+    },
+    {
+      "name": "timeout",
+      "kind": "TimeoutException",
+      "wrappers": [],
+      "expect": "Part of the app took too long to respond, so it was stopped."
+    },
+    {
+      "name": "io",
+      "kind": "IOException",
+      "wrappers": [],
+      "expect": "The app had trouble reading or writing data and had to close."
+    },
+    {
+      "name": "security",
+      "kind": "SecurityException",
+      "wrappers": [],
+      "expect": "The app tried to do something it didn't have permission for, and had to close."
+    },
+    {
+      "name": "other error",
+      "kind": "AssertionError",
+      "wrappers": [],
+      "expect": "The app hit a low-level error it couldn't recover from and had to close."
+    },
+    {
+      "name": "anything else falls back generically",
+      "kind": "IllegalStateException",
+      "wrappers": [],
+      "expect": "The app ran into an unexpected error and had to close."
+    },
+    {
+      "name": "a bare RuntimeException wrapper is unwrapped",
+      "kind": "OutOfMemoryError",
+      "wrappers": [
+        "RuntimeException"
+      ],
+      "expect": "The app needed more memory than your device could give it, and Android had to stop it."
+    },
+    {
+      "name": "nested bare RuntimeException wrappers are all unwrapped",
+      "kind": "IOException",
+      "wrappers": [
+        "RuntimeException",
+        "RuntimeException"
+      ],
+      "expect": "The app had trouble reading or writing data and had to close."
+    },
+    {
+      "name": "a RuntimeException subclass is NOT unwrapped",
+      "kind": "OutOfMemoryError",
+      "wrappers": [
+        "IllegalStateException"
+      ],
+      "expect": "The app ran into an unexpected error and had to close."
+    }
+  ],
+  "streak": [
+    {
+      "name": "first crash ever",
+      "prev_count": 0,
+      "prev_millis": 0,
+      "now_millis": 1000,
+      "expect": 1
+    },
+    {
+      "name": "inside the window (inclusive boundary) continues",
+      "prev_count": 1,
+      "prev_millis": 1000,
+      "now_millis": 61000,
+      "expect": 2
+    },
+    {
+      "name": "a rapid third repeat",
+      "prev_count": 2,
+      "prev_millis": 5000,
+      "now_millis": 5010,
+      "expect": 3
+    },
+    {
+      "name": "just outside the window is a fresh incident",
+      "prev_count": 5,
+      "prev_millis": 1000,
+      "now_millis": 61001,
+      "expect": 1
+    },
+    {
+      "name": "a clock that went backwards is never a continuation",
+      "prev_count": 3,
+      "prev_millis": 10000,
+      "now_millis": 5000,
+      "expect": 1
+    }
+  ],
+  "report": [
+    {
+      "name": "fully populated report",
+      "timezone": "UTC",
+      "input": {
+        "app_label": "Example App",
+        "when_millis": 1700000000000,
+        "thread_name": "GLThread 482",
+        "exc_type": "NullPointerException",
+        "exc_message": "keymap missing",
+        "plain_language": "The app expected something to be there that wasn't, and had to close.",
+        "device": "full",
+        "trace": "java.lang.NullPointerException: keymap missing\n\tat example.Keymap.load(Keymap.kt:10)\n\tat example.Main.main(Main.kt:3)\n"
+      },
+      "expect": {
+        "encoded": "CRASHv2\nappLabel\tExample App\nwhenMillis\t1700000000000\nthreadName\tGLThread 482\nexcType\tNullPointerException\nexcMessage\tkeymap missing\nplainLanguage\tThe app expected something to be there that wasn't, and had to close.\nversionName\t1.2.3\nversionCode\t42\npackageName\torg.example.app\ninstallSource\tPlay Store\nosSdkInt\t34\nmanufacturer\tNubia\nmodel\tRedMagic 11 Pro\nfreeMemMb\t212\ntotalMemMb\t12288\n---TRACE---\njava.lang.NullPointerException: keymap missing\n\tat example.Keymap.load(Keymap.kt:10)\n\tat example.Main.main(Main.kt:3)\n",
+        "rendered": "=== Crash report — Example App ===\nGenerated on-device. No identifiers included.\n\nWhat happened: The app expected something to be there that wasn't, and had to close.\n\nError:   NullPointerException\nMessage: keymap missing\nThread:  GLThread 482\nWhen:    2023-11-14 22:13:20 (device time)\n\nApp:     Example App 1.2.3 (42)\nPackage: org.example.app\nSource:  Play Store\n\nDevice:  Nubia RedMagic 11 Pro, Android SDK 34\nMemory:  212 MB free of 12288 MB at crash\n\njava.lang.NullPointerException: keymap missing\n\tat example.Keymap.load(Keymap.kt:10)\n\tat example.Main.main(Main.kt:3)\n",
+        "decoded": {
+          "headline": "NullPointerException: keymap missing",
+          "app_label": "Example App",
+          "exc_type": "NullPointerException",
+          "exc_message": "keymap missing",
+          "thread_name": "GLThread 482",
+          "when_millis": 1700000000000,
+          "version_name": "1.2.3",
+          "version_code": 42,
+          "package_name": "org.example.app",
+          "install_source": "Play Store",
+          "os_sdk_int": 34,
+          "device_manufacturer": "Nubia",
+          "device_model": "RedMagic 11 Pro",
+          "free_mem_mb": 212,
+          "total_mem_mb": 12288
+        }
+      }
+    },
+    {
+      "name": "unknown timestamp, no message, nothing known about the device",
+      "timezone": "UTC",
+      "input": {
+        "app_label": "Example Minimal",
+        "when_millis": 0,
+        "thread_name": "",
+        "exc_type": "RuntimeException",
+        "exc_message": null,
+        "plain_language": "The app ran into an unexpected error and had to close.",
+        "device": "minimal",
+        "trace": "RuntimeException\n"
+      },
+      "expect": {
+        "encoded": "CRASHv2\nappLabel\tExample Minimal\nwhenMillis\t0\nthreadName\t\nexcType\tRuntimeException\nexcMessage\t\nplainLanguage\tThe app ran into an unexpected error and had to close.\nversionName\t\nversionCode\t\npackageName\t\ninstallSource\t\nosSdkInt\t0\nmanufacturer\t?\nmodel\t?\nfreeMemMb\t\ntotalMemMb\t\n---TRACE---\nRuntimeException\n",
+        "rendered": "=== Crash report — Example Minimal ===\nGenerated on-device. No identifiers included.\n\nWhat happened: The app ran into an unexpected error and had to close.\n\nError:   RuntimeException\nMessage: (none)\nThread:  ?\nWhen:    unknown (device time)\n\nApp:     Example Minimal ? (?)\nPackage: ?\nSource:  Unknown\n\nDevice:  ? ?, Android SDK 0\n\nRuntimeException\n",
+        "decoded": {
+          "headline": "RuntimeException",
+          "app_label": "Example Minimal",
+          "exc_type": "RuntimeException",
+          "exc_message": null,
+          "thread_name": "",
+          "when_millis": 0,
+          "version_name": null,
+          "version_code": null,
+          "package_name": null,
+          "install_source": null,
+          "os_sdk_int": null,
+          "device_manufacturer": "?",
+          "device_model": "?",
+          "free_mem_mb": null,
+          "total_mem_mb": null
+        }
+      }
+    }
+  ],
+  "exit_death": [
+    {
+      "name": "native crash with a signal",
+      "app_label": "Example App",
+      "reason_label": "Native crash",
+      "description": "SIGSEGV",
+      "when_millis": 1722800000000,
+      "device": "full",
+      "expect": {
+        "headline": "Native crash: SIGSEGV",
+        "plain_language": "Example App was stopped by a crash inside one of its native components — the kind Android records but apps cannot catch in the moment.",
+        "thread_name": "?",
+        "trace": "No Java stack trace exists for this kind of death.\nRecorded by Android (ApplicationExitInfo):\n  reason: Native crash\n  detail: SIGSEGV"
+      }
+    },
+    {
+      "name": "application not responding",
+      "app_label": "Example App",
+      "reason_label": "App not responding (ANR)",
+      "description": "Input dispatching timed out",
+      "when_millis": 1722800000000,
+      "device": "full",
+      "expect": {
+        "headline": "App not responding (ANR): Input dispatching timed out",
+        "plain_language": "Example App stopped responding and Android closed it.",
+        "thread_name": "?",
+        "trace": "No Java stack trace exists for this kind of death.\nRecorded by Android (ApplicationExitInfo):\n  reason: App not responding (ANR)\n  detail: Input dispatching timed out"
+      }
+    },
+    {
+      "name": "a plain crash with no recorded description",
+      "app_label": "App",
+      "reason_label": "Crash",
+      "description": null,
+      "when_millis": 1722800000000,
+      "device": "full",
+      "expect": {
+        "headline": "Crash",
+        "plain_language": "App was closed by a crash.",
+        "thread_name": "?",
+        "trace": "No Java stack trace exists for this kind of death.\nRecorded by Android (ApplicationExitInfo):\n  reason: Crash\n  detail: (none recorded)"
+      }
+    },
+    {
+      "name": "a blank description counts as none",
+      "app_label": "App",
+      "reason_label": "Crash",
+      "description": "   ",
+      "when_millis": 1722800000000,
+      "device": "full",
+      "expect": {
+        "headline": "Crash",
+        "plain_language": "App was closed by a crash.",
+        "thread_name": "?",
+        "trace": "No Java stack trace exists for this kind of death.\nRecorded by Android (ApplicationExitInfo):\n  reason: Crash\n  detail: (none recorded)"
+      }
+    }
+  ],
+  "decode_fallback": [
+    {
+      "name": "foreign text with no separator",
+      "persisted": "just some text with no separator",
+      "expect": {
+        "app_label": "App",
+        "headline": "just some text with no separator",
+        "plain_language": "The app ran into an unexpected error and had to close.",
+        "exc_type": "just some text with no separator",
+        "exc_message": null,
+        "when_millis": null,
+        "full_report": "just some text with no separator"
+      }
+    },
+    {
+      "name": "empty input does not throw",
+      "persisted": "",
+      "expect": {
+        "app_label": "App",
+        "headline": "",
+        "plain_language": "The app ran into an unexpected error and had to close.",
+        "exc_type": "",
+        "exc_message": null,
+        "when_millis": null,
+        "full_report": ""
+      }
+    },
+    {
+      "name": "legacy headline, blank line, body",
+      "persisted": "IllegalStateException: old\n\nIllegalStateException: old\nsome older body text",
+      "expect": {
+        "app_label": "App",
+        "headline": "IllegalStateException: old",
+        "plain_language": "The app ran into an unexpected error and had to close.",
+        "exc_type": "IllegalStateException",
+        "exc_message": "old",
+        "when_millis": null,
+        "full_report": "IllegalStateException: old\nsome older body text"
+      }
+    }
+  ],
+  "preview": {
+    "app_labels": [
+      "Example App",
+      "Another Example"
+    ],
+    "headline": "IllegalStateException: this is a PREVIEW — no real crash occurred",
+    "plain_language": "PREVIEW — nothing actually went wrong.",
+    "exc_type": "java.lang.IllegalStateException",
+    "exc_message": "this is a PREVIEW — no real crash occurred",
+    "thread_name": "main",
+    "required_markers": {
+      "headline": [
+        "PREVIEW"
+      ],
+      "plain_language": [
+        "PREVIEW"
+      ],
+      "full_report": [
+        "PREVIEW",
+        "No crash occurred"
+      ]
+    },
+    "null_fields": [
+      "when_millis",
+      "version_name",
+      "version_code",
+      "package_name",
+      "install_source",
+      "os_sdk_int",
+      "device_manufacturer",
+      "device_model",
+      "free_mem_mb",
+      "total_mem_mb"
+    ],
+    "trace_template": "java.lang.IllegalStateException: this is a PREVIEW — no real crash occurred\n\tat dev.aarso.crashrecovery.CrashRecovery.previewIntent(CrashRecovery.kt)\n\tat {app_label} (preview trigger — not an actual stack trace)\n",
+    "full_report_template": "=== Crash report — {app_label} — PREVIEW ===\nThis is a PREVIEW of the recovery screen. No crash occurred, and no\nreal device information is included.\n\nWhat happened: PREVIEW — nothing actually went wrong.\n\nError:   java.lang.IllegalStateException\nMessage: this is a PREVIEW — no real crash occurred\nThread:  main\nWhen:    (preview — no timestamp)\n\nApp:     {app_label} (preview)\nPackage: (preview)\nSource:  (preview)\n\nDevice:  (preview)\n\n{trace}",
+    "properties": [
+      {
+        "id": "P1",
+        "statement": "PREVIEW appears in the headline, the plain-language summary and the shareable full report, and the full report states that no crash occurred",
+        "machine_checked": true,
+        "evidence": "fixture (this file)"
+      },
+      {
+        "id": "P2",
+        "statement": "Every device and app metadata field is null",
+        "machine_checked": true,
+        "evidence": "fixture (this file)"
+      },
+      {
+        "id": "P3",
+        "statement": "Reset is inert in a preview: previewing can never wipe app data",
+        "machine_checked": false,
+        "evidence": "NEEDS-DEVICE-VALIDATION: behaviour of the recovery screen, not of the pure report"
+      },
+      {
+        "id": "P4",
+        "statement": "Continue is inert beyond closing the screen: previewing never relaunches the app",
+        "machine_checked": false,
+        "evidence": "NEEDS-DEVICE-VALIDATION: behaviour of the recovery screen, not of the pure report"
+      },
+      {
+        "id": "P5",
+        "statement": "The preview report is synthesized from literals and the caller's label only, never read from disk",
+        "machine_checked": true,
+        "evidence": "fixture checks purity (same label, identical value); that a real pending report cannot be consumed is NEEDS-DEVICE-VALIDATION"
+      }
+    ]
+  }
+}

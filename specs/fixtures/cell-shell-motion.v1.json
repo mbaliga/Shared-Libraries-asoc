@@ -1,0 +1,450 @@
+{
+  "spec": "cell-shell-motion",
+  "version": 1,
+  "source": "cell-shell 0.1.0: SpatialMotion.kt, EdgeTimelineScrubber.kt; vectors from SpatialMotionTest and ScrubberMappingTest",
+  "constants": {
+    "settle_duration_ms": 320,
+    "settle_delay_ms": 0,
+    "settle_easing_cubic_bezier": [
+      0.4,
+      0,
+      0.2,
+      1
+    ],
+    "park_scale_drop": 0.1,
+    "park_elevation": 24,
+    "park_corner_dp": 20,
+    "park_ring_alpha": 0.6,
+    "park_scrim_alpha": 0.62,
+    "settle_threshold": 0.5,
+    "flick_velocity_px": 2,
+    "vertical_travel_fraction": 0.7
+  },
+  "settle_target": [
+    {
+      "name": "slow drag past halfway completes (positive)",
+      "value": 0.6,
+      "last_delta": 0.5,
+      "expect": 1
+    },
+    {
+      "name": "slow drag past halfway completes (negative)",
+      "value": -0.6,
+      "last_delta": -0.5,
+      "expect": -1
+    },
+    {
+      "name": "slow drag short of halfway retreats (positive)",
+      "value": 0.4,
+      "last_delta": 0.5,
+      "expect": 0
+    },
+    {
+      "name": "slow drag short of halfway retreats (negative)",
+      "value": -0.4,
+      "last_delta": -0.5,
+      "expect": 0
+    },
+    {
+      "name": "exactly halfway retreats (positive)",
+      "value": 0.5,
+      "last_delta": 0,
+      "expect": 0
+    },
+    {
+      "name": "exactly halfway retreats (negative)",
+      "value": -0.5,
+      "last_delta": 0,
+      "expect": 0
+    },
+    {
+      "name": "flick outward opens from barely any travel (positive)",
+      "value": 0.05,
+      "last_delta": 3,
+      "expect": 1
+    },
+    {
+      "name": "flick outward opens from barely any travel (negative)",
+      "value": -0.05,
+      "last_delta": -3,
+      "expect": -1
+    },
+    {
+      "name": "flick back home dismisses an almost fully open room (positive)",
+      "value": 0.9,
+      "last_delta": -3,
+      "expect": 0
+    },
+    {
+      "name": "flick back home dismisses an almost fully open room (negative)",
+      "value": -0.9,
+      "last_delta": 3,
+      "expect": 0
+    },
+    {
+      "name": "the flick threshold itself is not a flick",
+      "value": 0.4,
+      "last_delta": 2,
+      "expect": 0
+    },
+    {
+      "name": "a touch that never moved stays home",
+      "value": 0,
+      "last_delta": 0,
+      "expect": 0
+    },
+    {
+      "name": "sensor noise near zero stays home (positive)",
+      "value": 5.0E-4,
+      "last_delta": 50,
+      "expect": 0
+    },
+    {
+      "name": "sensor noise near zero stays home (negative)",
+      "value": -5.0E-4,
+      "last_delta": -50,
+      "expect": 0
+    },
+    {
+      "name": "a fully open room left alone stays open (positive)",
+      "value": 1,
+      "last_delta": 0,
+      "expect": 1
+    },
+    {
+      "name": "a fully open room left alone stays open (negative)",
+      "value": -1,
+      "last_delta": 0,
+      "expect": -1
+    }
+  ],
+  "park_distance": [
+    {
+      "name": "full-size card",
+      "extent": 1080,
+      "scale": 1,
+      "band": 56,
+      "expect": 1024
+    },
+    {
+      "name": "scale 0.95",
+      "extent": 1080,
+      "scale": 0.95,
+      "band": 56,
+      "expect": 997
+    },
+    {
+      "name": "scale 0.9 (the constellation's parked scale)",
+      "extent": 1080,
+      "scale": 0.9,
+      "band": 56,
+      "expect": 970
+    },
+    {
+      "name": "scale 0.85",
+      "extent": 1080,
+      "scale": 0.85,
+      "band": 56,
+      "expect": 943
+    },
+    {
+      "name": "narrow band",
+      "extent": 1080,
+      "scale": 0.9,
+      "band": 40,
+      "expect": 986
+    },
+    {
+      "name": "wide band (20 px more band = 20 px less travel)",
+      "extent": 1080,
+      "scale": 0.9,
+      "band": 60,
+      "expect": 966
+    }
+  ],
+  "index_for_fraction": [
+    {
+      "name": "top of the strip is the first item",
+      "fraction": 0,
+      "item_count": 100,
+      "expect": 0
+    },
+    {
+      "name": "bottom of the strip is the last item",
+      "fraction": 1,
+      "item_count": 100,
+      "expect": 99
+    },
+    {
+      "name": "finger above the strip clamps",
+      "fraction": -0.4,
+      "item_count": 50,
+      "expect": 0
+    },
+    {
+      "name": "finger far above the strip clamps",
+      "fraction": -1000,
+      "item_count": 50,
+      "expect": 0
+    },
+    {
+      "name": "finger below the strip clamps",
+      "fraction": 1.4,
+      "item_count": 50,
+      "expect": 49
+    },
+    {
+      "name": "finger far below the strip clamps",
+      "fraction": 1000,
+      "item_count": 50,
+      "expect": 49
+    },
+    {
+      "name": "empty list, top",
+      "fraction": 0,
+      "item_count": 0,
+      "expect": 0
+    },
+    {
+      "name": "empty list, middle",
+      "fraction": 0.5,
+      "item_count": 0,
+      "expect": 0
+    },
+    {
+      "name": "empty list, bottom",
+      "fraction": 1,
+      "item_count": 0,
+      "expect": 0
+    },
+    {
+      "name": "empty list, finger far above",
+      "fraction": -2,
+      "item_count": 0,
+      "expect": 0
+    },
+    {
+      "name": "negative count mid-refresh",
+      "fraction": 0.5,
+      "item_count": -3,
+      "expect": 0
+    },
+    {
+      "name": "one item swallows the strip (top)",
+      "fraction": 0,
+      "item_count": 1,
+      "expect": 0
+    },
+    {
+      "name": "one item swallows the strip (middle)",
+      "fraction": 0.5,
+      "item_count": 1,
+      "expect": 0
+    },
+    {
+      "name": "one item swallows the strip (bottom)",
+      "fraction": 1,
+      "item_count": 1,
+      "expect": 0
+    },
+    {
+      "name": "four items: 0.0",
+      "fraction": 0,
+      "item_count": 4,
+      "expect": 0
+    },
+    {
+      "name": "four items: 0.24 is still the first",
+      "fraction": 0.24,
+      "item_count": 4,
+      "expect": 0
+    },
+    {
+      "name": "four items: 0.25 opens the second band",
+      "fraction": 0.25,
+      "item_count": 4,
+      "expect": 1
+    },
+    {
+      "name": "four items: 0.5",
+      "fraction": 0.5,
+      "item_count": 4,
+      "expect": 2
+    },
+    {
+      "name": "four items: 0.75",
+      "fraction": 0.75,
+      "item_count": 4,
+      "expect": 3
+    },
+    {
+      "name": "four items: 0.99",
+      "fraction": 0.99,
+      "item_count": 4,
+      "expect": 3
+    }
+  ],
+  "stop_sets": {
+    "months": [
+      {
+        "label": "Mar",
+        "item_index": 0
+      },
+      {
+        "label": "Apr",
+        "item_index": 12
+      },
+      {
+        "label": "May",
+        "item_index": 40
+      }
+    ],
+    "only_apr": [
+      {
+        "label": "Apr",
+        "item_index": 12
+      }
+    ],
+    "only_g": [
+      {
+        "label": "G",
+        "item_index": 5
+      }
+    ],
+    "lopsided": [
+      {
+        "label": "A",
+        "item_index": 0
+      },
+      {
+        "label": "B",
+        "item_index": 100
+      }
+    ],
+    "size_bands": [
+      {
+        "label": "1 MB",
+        "item_index": 0
+      },
+      {
+        "label": "10 MB",
+        "item_index": 4
+      },
+      {
+        "label": "100 MB",
+        "item_index": 4
+      }
+    ],
+    "none": []
+  },
+  "stop_for_index": [
+    {
+      "name": "no stops, index 0",
+      "stops": "none",
+      "index": 0,
+      "expect": null
+    },
+    {
+      "name": "no stops, index 900",
+      "stops": "none",
+      "index": 900,
+      "expect": null
+    },
+    {
+      "name": "before the first stop has no label (-1)",
+      "stops": "months",
+      "index": -1,
+      "expect": null
+    },
+    {
+      "name": "before the first stop has no label (11 < 12)",
+      "stops": "only_apr",
+      "index": 11,
+      "expect": null
+    },
+    {
+      "name": "a stop owns its own index",
+      "stops": "months",
+      "index": 0,
+      "expect": "Mar"
+    },
+    {
+      "name": "a stop owns up to the next one",
+      "stops": "months",
+      "index": 11,
+      "expect": "Mar"
+    },
+    {
+      "name": "next stop starts at its own index",
+      "stops": "months",
+      "index": 12,
+      "expect": "Apr"
+    },
+    {
+      "name": "containing stop wins over the nearer one (39)",
+      "stops": "months",
+      "index": 39,
+      "expect": "Apr"
+    },
+    {
+      "name": "third stop starts at 40",
+      "stops": "months",
+      "index": 40,
+      "expect": "May"
+    },
+    {
+      "name": "the last stop runs to the end (41)",
+      "stops": "months",
+      "index": 41,
+      "expect": "May"
+    },
+    {
+      "name": "the last stop runs to the end (10000)",
+      "stops": "months",
+      "index": 10000,
+      "expect": "May"
+    },
+    {
+      "name": "a single stop does not label before itself",
+      "stops": "only_g",
+      "index": 4,
+      "expect": null
+    },
+    {
+      "name": "a single stop labels its own index",
+      "stops": "only_g",
+      "index": 5,
+      "expect": "G"
+    },
+    {
+      "name": "a single stop covers everything after",
+      "stops": "only_g",
+      "index": 5000,
+      "expect": "G"
+    },
+    {
+      "name": "lopsided gap, left side",
+      "stops": "lopsided",
+      "index": 99,
+      "expect": "A"
+    },
+    {
+      "name": "lopsided gap, right side",
+      "stops": "lopsided",
+      "index": 100,
+      "expect": "B"
+    },
+    {
+      "name": "stops sharing a start index resolve to the later one",
+      "stops": "size_bands",
+      "index": 4,
+      "expect": "100 MB"
+    },
+    {
+      "name": "just before the shared start index",
+      "stops": "size_bands",
+      "index": 3,
+      "expect": "1 MB"
+    }
+  ]
+}

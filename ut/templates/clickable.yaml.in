@@ -1,0 +1,27 @@
+# DRAFT - PORTING_PLAN.md F7 enabler kit (ut/). Not built, not run, not reviewed by the owner.
+#
+# Clickable (https://clickable-ut.dev) is NOT installed in the planning container: every key below
+# was written from documentation and a UBports forum guide, and `clickable build` has never been run
+# against this file. Treat it as a starting point for S-UT1, not as a working build description.
+#
+# NO APP IDENTIFIER (rule R11): every value that would name an app is an @TOKEN@. Do not replace a
+# token with a real name until a NAMES.md row exists for it. ut/lint/ut-lint.py --templates checks this.
+#
+# Tokens filled by the consumer:  @CLICKABLE_BUILDER@  @APP_EXEC_NAME@
+# (@CLICK_NAME@ and friends belong to manifest.json.in; Clickable substitutes @CLICK_FRAMEWORK@,
+#  @CLICK_ARCH@ and @APPARMOR_POLICY@ itself when it packages the click.)
+
+# The 24.04 framework needs Clickable 8.4.0 or later to upload to OpenStore (UBports forum guide).
+clickable_minimum_required: 8.4.0
+
+# The brief's target. Applications built against 24.04-1.x do not run on 20.04 devices, and the
+# device refuses to install the click. The owner's OnePlus 6 is read as 20.04-only (OQ-37), so a
+# "S-UT1 (focal)" pre-spike would need a different framework; that is a decision, not a default here.
+framework: ubuntu-touch-24.04-1.x
+
+# Which builder packages a JVM-cored click (a prebuilt jlink runtime plus a QML front end) is exactly
+# what S-UT1 has to find out, so it is a token rather than a guess.
+builder: @CLICKABLE_BUILDER@
+
+# Process name `clickable run` kills before relaunching.
+kill: @APP_EXEC_NAME@

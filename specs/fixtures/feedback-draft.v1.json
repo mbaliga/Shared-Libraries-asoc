@@ -1,0 +1,123 @@
+{
+  "spec": "feedback-draft",
+  "version": 1,
+  "source": "feedback 0.1.0 (origin/main): FeedbackDraft.kt; vectors from FeedbackDraftTest",
+  "render": [
+    {
+      "name": "message plus two facts",
+      "input": {
+        "app_name": "Example App",
+        "app_version": "1.0.0-alpha01",
+        "feature": "Deep previews",
+        "message": "The spreadsheet grid drops the header row on tall files.",
+        "facts": [
+          {
+            "label": "Android version",
+            "value": "16"
+          },
+          {
+            "label": "Device",
+            "value": "Pixel 9"
+          }
+        ]
+      },
+      "expect": {
+        "render": "Example App 1.0.0-alpha01 — feedback on: Deep previews\n\nThe spreadsheet grid drops the header row on tall files.\n\nIncluded details:\n- Android version: 16\n- Device: Pixel 9",
+        "subject": "Example App feedback: Deep previews"
+      }
+    },
+    {
+      "name": "no facts means no details section",
+      "input": {
+        "app_name": "Example App",
+        "app_version": "1.0.0-alpha01",
+        "feature": "Deep previews",
+        "message": "The spreadsheet grid drops the header row on tall files.",
+        "facts": []
+      },
+      "expect": {
+        "render": "Example App 1.0.0-alpha01 — feedback on: Deep previews\n\nThe spreadsheet grid drops the header row on tall files.",
+        "subject": "Example App feedback: Deep previews"
+      }
+    },
+    {
+      "name": "surrounding whitespace is trimmed, content is verbatim",
+      "input": {
+        "app_name": "Example App",
+        "app_version": "1",
+        "feature": "F",
+        "message": "  keep [this] exactly & <as-is>  \n",
+        "facts": []
+      },
+      "expect": {
+        "render": "Example App 1 — feedback on: F\n\nkeep [this] exactly & <as-is>",
+        "subject": "Example App feedback: F"
+      }
+    },
+    {
+      "name": "inner newlines of the message are preserved",
+      "input": {
+        "app_name": "Example App",
+        "app_version": "1",
+        "feature": "F",
+        "message": "line one\n\nline three",
+        "facts": []
+      },
+      "expect": {
+        "render": "Example App 1 — feedback on: F\n\nline one\n\nline three",
+        "subject": "Example App feedback: F"
+      }
+    },
+    {
+      "name": "a blank message renders the header only",
+      "input": {
+        "app_name": "Example App",
+        "app_version": "1",
+        "feature": "F",
+        "message": "   ",
+        "facts": []
+      },
+      "expect": {
+        "render": "Example App 1 — feedback on: F",
+        "subject": "Example App feedback: F"
+      }
+    }
+  ],
+  "refused": [
+    {
+      "name": "a blank app name is refused",
+      "input": {
+        "app_name": " ",
+        "app_version": "1",
+        "feature": "F",
+        "message": "m",
+        "facts": []
+      }
+    },
+    {
+      "name": "an empty feature name is refused",
+      "input": {
+        "app_name": "Example App",
+        "app_version": "1",
+        "feature": "",
+        "message": "m",
+        "facts": []
+      }
+    },
+    {
+      "name": "a fact without a label is refused",
+      "input": {
+        "app_name": "Example App",
+        "app_version": "1",
+        "feature": "F",
+        "message": "m",
+        "facts": [
+          {
+            "label": " ",
+            "value": "x"
+          }
+        ]
+      }
+    }
+  ]
+}

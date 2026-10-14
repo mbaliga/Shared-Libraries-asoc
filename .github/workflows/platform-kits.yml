@@ -1,0 +1,98 @@
+name: Platform kits
+
+# Self-tests for the tooling added by the porting plan's additive phase (PORTING_PLAN.md S0.1-S0.3,
+# F5, F7): the Windows path lint, the spec-fixture helper sync, the device-checklist templates, the
+# Ubuntu Touch manifest/AppArmor lint, and the kmp-conventions pin check. All of it is plain shell and
+# Python 3 - no Gradle, no Android SDK, no network - so it runs in seconds on any runner.
+#
+# The `spec-fixtures` job exists because Gradle does not know a spec fixture is an input of a module's
+# test task: the fixtures live in specs/fixtures/, outside every module, so a change to a fixture alone
+# can leave `:cell-shell:test` / `:crash-recovery:test` UP-TO-DATE or FROM-CACHE (the repo enables the
+# build cache) and the existing ci.yml steps would then pass without re-checking it. That job forces the
+# spec tests to actually run, uncached. (It cannot be fixed inside the build: Phase 0 may not touch
+# build files.)
+#
+# CI (hosted VM) evidence only. Nothing here builds a click, runs on a device, or applies the KMP
+# conventions to a module (that conversion waits on the OQ-17 "Also" approvals).
+# New file only (R3); nothing is uploaded (R6); actions pinned by SHA.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-kits-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kits:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Windows path lint self-test
+        run: bash scripts/test-windows-path-lint.sh
+
+      - name: Windows path lint (this repository)
+        run: bash scripts/windows-path-lint.sh
+
+      - name: Spec fixture helper copies in sync
+        run: |
+          bash specs/check-json-helper-sync.sh --self-test
+          bash specs/check-json-helper-sync.sh
+
+      - name: Device checklist templates (every row NEEDS-DEVICE-VALIDATION)
+        run: bash checklists/check-templates.sh
+
+      - name: Ubuntu Touch lint self-test (ut/lint)
+        run: bash ut/lint/selftest.sh
+
+      - name: Ubuntu Touch jlink recipe argument checks (no download)
+        run: bash ut/jlink/selftest.sh
+
+      - name: KMP conventions pin check
+        run: |
+          python3 -I kmp-conventions/verify-pins.py --self-test
+          python3 -I kmp-conventions/verify-pins.py
+
+  # Forced, uncached run of the golden-fixture guards in the two modules that exist on every line of
+  # this repo (the :feedback guard is inert until that module is on this line; see specs/README.md).
+  spec-fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      # Same Android SDK setup as ci.yml (these two modules are Android libraries). The legacy 'tools'
+      # package must not be requested: see ci.yml.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+
+      - name: Install platform + build-tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Spec fixture guards, forced and uncached
+        run: >-
+          ./gradlew --no-daemon --no-build-cache
+          :cell-shell:testDebugUnitTest --rerun --tests '*SpecFixturesTest*'
+          :crash-recovery:testDebugUnitTest --rerun --tests '*SpecFixturesTest*'

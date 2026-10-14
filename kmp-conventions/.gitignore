@@ -1,0 +1,6 @@
+# Build output of the standalone harness (it is not part of the root Gradle build).
+harness/build/
+harness/*/build/
+harness/.gradle/
+harness/.kotlin/
+harness/*/.kotlin/

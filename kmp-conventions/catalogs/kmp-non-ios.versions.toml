@@ -1,0 +1,22 @@
+# KMP toolchain pin set for repos that do NOT ship an iOS target.
+#
+# Source of truth: owner ruling OQ-17 (2026-10-06), "B: staged pin": Kotlin 2.1.20 and Compose
+# Multiplatform 1.8.2 for the first wave; Kotlin 2.4.x is deferred. This file is DATA. Nothing in the
+# repository applies it: converting :cell-shell / :crash-recovery / :feedback (or Hyle) to
+# kotlin("multiplatform") needs the OQ-17 "Also" approvals, which are not answered (see ../README.md).
+#
+# Deliberately absent: AGP, Gradle, JDK. Those are carried by the D-Q lockstep (AGP 8.9.1, Gradle
+# >= 8.14.3, JDK 17 toolchain) and are not part of this ruling. Moving either is not done here.
+#
+# Consume from a settings.gradle.kts (see ../README.md):
+#   versionCatalogs { create("kmpPins") { from(files("<path>/kmp-conventions/catalogs/kmp-non-ios.versions.toml")) } }
+# A repo that also has its own default catalog (gradle/libs.versions.toml) keeps both: the name differs.
+
+[versions]
+kotlin = "2.1.20"
+compose-multiplatform = "1.8.2"
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-plugin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }

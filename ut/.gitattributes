@@ -1,0 +1,5 @@
+# The kit must stay LF on a Windows checkout (shebangs, byte-exact templates).
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.in text eol=lf

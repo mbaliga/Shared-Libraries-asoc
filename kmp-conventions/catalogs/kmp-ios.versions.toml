@@ -1,0 +1,24 @@
+# KMP toolchain pin set for repos that DO ship an iOS target.
+#
+# Source of truth: owner ruling OQ-38 (2026-10-07), "Move iOS to Kotlin 2.2.21 + CMP 1.9.3": the first
+# iOS proof runs on an explicitly selected Xcode 26.x. The program plan reads this as moving a repo
+# that ships an iOS target AS A WHOLE (a Gradle build has one Kotlin version); that reading is not
+# researched, and the bump cost for repos pinned lower is in no figure. This file is DATA. Nothing in
+# the repository applies it (see ../README.md; OQ-17 "Also" approvals are unanswered).
+#
+# `xcode-major` is not a Gradle input; it records the ruled Xcode line next to the Kotlin line so a
+# consumer's iOS CI step can read one file. It is the major only: "26" means "an explicitly selected
+# Xcode 26.x", which the iOS proof must name (e.g. via xcode-select) rather than take the runner default.
+#
+# Deliberately absent: AGP, Gradle, JDK (D-Q lockstep; not part of this ruling). Whether Android
+# targets in a repo that also builds iOS stay on this repo's AGP 8.9.1 under Kotlin 2.2.21 is UNVERIFIED.
+
+[versions]
+kotlin = "2.2.21"
+compose-multiplatform = "1.9.3"
+xcode-major = "26"
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-plugin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }

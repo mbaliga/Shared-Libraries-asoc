@@ -1,0 +1,3 @@
+# Line-ending / byte-exactness guards for the cross-platform tooling added by PORTING_PLAN S0.1.
+# (A Windows checkout with core.autocrlf would otherwise rewrite these and break the shebang.)
+*.sh text eol=lf

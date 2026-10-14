@@ -1,0 +1,6 @@
+{
+    "policy_groups": [
+        @POLICY_GROUPS@
+    ],
+    "policy_version": "@APPARMOR_POLICY@"
+}

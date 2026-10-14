@@ -1,0 +1,15 @@
+{
+    "name": "@CLICK_NAME@",
+    "title": "@APP_TITLE@",
+    "version": "@APP_VERSION@",
+    "description": "@APP_DESCRIPTION@",
+    "maintainer": "@APP_MAINTAINER@",
+    "framework": "@CLICK_FRAMEWORK@",
+    "architecture": "@CLICK_ARCH@",
+    "hooks": {
+        "@APP_HOOK@": {
+            "apparmor": "@APP_HOOK@.apparmor",
+            "desktop": "@APP_HOOK@.desktop"
+        }
+    }
+}
