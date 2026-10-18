@@ -11,7 +11,7 @@ the Kotlin modules beside it are for Android.
 | `sfx.js` | `sfx` | Console-style interface tones from a few oscillators; on/off and level through a store adapter. | 0.1.0 |
 | `rose.js` | `rose` | Twenty-four hours as a rose; stacked series on one square-root scale; segment ring; hit testing. | 0.1.0 |
 | `brands.js` | `brands` | Colours and marks of languages, libraries and platforms, generated from simple-icons (CC0 paths). | 0.1.0 |
-| `graph.js` | `Graph` | A force-directed graph in 3D or 2D with the interactions a graph owes its users (table below). | 0.2.0 |
+| `graph.js` | `Graph` | A force-directed graph in 3D or 2D with the interactions a graph owes its users (table below). | 0.3.0 |
 | `gantt.js` | `gantt` | Days as columns, dated rows, bars for the work that leads to each, swimlanes, a load row. SVG. | 0.1.0 |
 
 Consume by copying the files you need into your build (Orrery's `build.py` reads them from a sibling checkout and
@@ -80,7 +80,11 @@ The examples page groups a few more things under *behaviour* and *animation*; th
 | Animation: basic, persistence, viewport | the mode morph (`setMode`), the selection pulse (`pulse()`), animated `fit`/`focus`/`reset` |
 
 Also here, not in G6's list: a 3D ↔ 2D toggle (`setMode`), orbit in 3D, keyboard walking of the selection (arrows),
-`fit()` on double-click of empty ground, `within(x, y)` so a graph can share a canvas with other drawing.
+`fit()` on double-click of empty ground, `within(x, y)` so a graph can share a canvas with other drawing, and a
+**view that cannot lose the graph** (0.3.0): `options.keep` is the share of the graph's box that must stay on the
+ground (`options.bounds()` or the canvas). Wheel, pinch and key zoom clamp at once; a pan or orbit that drags the
+graph off rubber-bands back when released; `fit`/`focus` land inside. `viewInfo()` gives `{ zoom, box, inside }` — the
+share of the nodes on the ground — so a host can show its minimap exactly when part of the graph is out of view.
 
 ## brands.js
 

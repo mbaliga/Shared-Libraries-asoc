@@ -7,11 +7,12 @@
      draw: { node(ctx, n, s, st), link(ctx, l, sa, sb, st), label(n) → text|null },   // optional overrides
      on:   { select(ids), hover(id), focus(id), context(id, x, y, ev), link(aId, bId), change(kind), tooltip(id, x, y) },
      options: { wheel: 'zoom'|'scroll', fixSize: true, fisheye: false, edgeLens: false, grid: false, hull: true,
-                snap: true, history: true, forceDrag: false, labels: true, minZoom: .4, maxZoom: 4 }
+                snap: true, history: true, forceDrag: false, labels: true, minZoom: .4, maxZoom: 4,
+                bounds: () → {x,y,w,h}, keep: .35 }   // the view never loses the graph: a share of it stays on the ground
    });
    g.layout(iterations); g.attach(canvas); g.frame(ctx, W, H); g.fit(); g.focus(id); g.select(ids); g.setMode(mode);
    g.collapse(group); g.expand(group); g.pin(id, on); g.undo(); g.redo(); g.hitAt(x, y); g.screen(id);
-   g.hullOf(ids); g.drawMinimap(ctx, x, y, w, h); g.labelsFor(order, ctx) ; g.state; g.destroy()
+   g.hullOf(ids); g.drawMinimap(ctx, x, y, w, h); g.labelsFor(order, ctx); g.viewInfo(); g.constrain(); g.state; g.destroy()
 
    Screen positions come back as { x, y, k (scale), z (depth, 3D) }. The host draws; the engine lays out, projects,
    and turns pointer and key events into selection, focus, drags, brushes, lassos, collapses and history. */
@@ -28,7 +29,7 @@
   function create(cfg) {
     cfg = cfg || {};
     var O = Object.assign({ wheel: 'zoom', fixSize: true, fisheye: false, fisheyeR: 120, fisheyeK: 1.8, edgeLens: false, edgeLensR: 110, grid: false, hull: true,
-      snap: true, history: true, forceDrag: false, labels: true, minZoom: 0.4, maxZoom: 4, D: 3.1, within: null }, cfg.options || {});
+      snap: true, history: true, forceDrag: false, labels: true, minZoom: 0.4, maxZoom: 4, D: 3.1, within: null, bounds: null, keep: 0.35 }, cfg.options || {});
     // within(x, y): when the canvas is shared with other things, the part of it that is the graph's
     var on = cfg.on || {}, drawCb = cfg.draw || {};
     var G = {
@@ -115,6 +116,12 @@
 
     // ---------------------------------------------------------------- projection and camera
     function project(n) {
+      var s = projectRaw(n);
+      if (O.fisheye && G.pointer && !G.moving) fisheye(s);
+      n.sx = s.x; n.sy = s.y; n.sk = s.k; n.sz = s.z;
+      return s;
+    }
+    function projectRaw(n) {
       var x, y, z, k;
       if (G.mode === '2d') { x = n.x; y = n.y; z = 0; k = 1; }
       else {
@@ -123,11 +130,48 @@
         var y2 = y * cp - z * sp, z2 = y * sp + z * cp;
         k = O.D / (O.D + z2); x *= k; y = y2 * k; z = z2;
       }
-      var s = { x: G.cx + G.px + x * G.R * G.zoom, y: G.cy + G.py + y * G.R * G.zoom, k: k * G.zoom, z: z };
-      if (O.fisheye && G.pointer && !G.moving) fisheye(s);
-      n.sx = s.x; n.sy = s.y; n.sk = s.k; n.sz = s.z;
-      return s;
+      return { x: G.cx + G.px + x * G.R * G.zoom, y: G.cy + G.py + y * G.R * G.zoom, k: k * G.zoom, z: z };
     }
+    // the view can never lose the graph: the graph's box must keep a share of itself on the ground (`options.keep`,
+    // a fraction of the smaller side), whatever the pan or zoom. The ground is the canvas, or `options.bounds()`.
+    function bounds() { return O.bounds ? O.bounds() : { x: 0, y: 0, w: G.W, h: G.H }; }
+    function box() {
+      var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, any = false;
+      G.nodes.forEach(function (n) { if (n.hidden) return; var s = projectRaw(n); any = true; x0 = Math.min(x0, s.x); y0 = Math.min(y0, s.y); x1 = Math.max(x1, s.x); y1 = Math.max(y1, s.y); });
+      return any ? { x0: x0, y0: y0, x1: x1, y1: y1 } : null;
+    }
+    function overflow() {
+      var b = box(), g = bounds(); if (!b) return { dx: 0, dy: 0 };
+      var keep = Math.min(b.x1 - b.x0, b.y1 - b.y0, g.w, g.h) * (O.keep == null ? 0.35 : O.keep), dx = 0, dy = 0;
+      // 1. the graph's box keeps a share of itself on the ground
+      if (b.x1 < g.x + keep) dx = g.x + keep - b.x1; else if (b.x0 > g.x + g.w - keep) dx = g.x + g.w - keep - b.x0;
+      if (b.y1 < g.y + keep) dy = g.y + keep - b.y1; else if (b.y0 > g.y + g.h - keep) dy = g.y + g.h - keep - b.y0;
+      // 2. and at least one node is on it: zoomed into an empty stretch between nodes, the nearest one is brought in
+      var gx = g.x + g.w / 2, gy = g.y + g.h / 2, inset = Math.min(g.w, g.h) * 0.2, near = null, nd = 1e18, any = false;
+      G.nodes.forEach(function (n) {
+        if (n.hidden) return;
+        var s = projectRaw(n), x = s.x + dx, y = s.y + dy;
+        if (x >= g.x + inset && x <= g.x + g.w - inset && y >= g.y + inset && y <= g.y + g.h - inset) any = true;
+        var d = (x - gx) * (x - gx) + (y - gy) * (y - gy); if (d < nd) { nd = d; near = { x: x, y: y }; }
+      });
+      if (!any && near) {
+        if (near.x < g.x + inset) dx += g.x + inset - near.x; else if (near.x > g.x + g.w - inset) dx += g.x + g.w - inset - near.x;
+        if (near.y < g.y + inset) dy += g.y + inset - near.y; else if (near.y > g.y + g.h - inset) dy += g.y + g.h - inset - near.y;
+      }
+      return { dx: dx, dy: dy };
+    }
+    function constrain(now) {
+      var o = overflow(); if (!o.dx && !o.dy) return false;
+      if (now) { G.px += o.dx; G.py += o.dy; } else animate({ px: G.px + o.dx, py: G.py + o.dy }, 260);   // rubber-band back after a drag
+      return true;
+    }
+    self.constrain = constrain;
+    // what the view holds: the zoom, the graph's box, and how much of that box is on the ground (hosts show a minimap when it is not all there)
+    self.viewInfo = function () {
+      var b = box(), g = bounds(), n = 0, on = 0; if (!b) return { zoom: G.zoom, inside: 1, box: null };
+      G.nodes.forEach(function (d) { if (d.hidden) return; n++; var s = projectRaw(d); if (s.x >= g.x && s.x <= g.x + g.w && s.y >= g.y && s.y <= g.y + g.h) on++; });
+      return { zoom: G.zoom, box: b, inside: n ? on / n : 1 };
+    };
     function fisheye(s) {
       var dx = s.x - G.pointer.x, dy = s.y - G.pointer.y, d = Math.sqrt(dx * dx + dy * dy), R = O.fisheyeR;
       if (d >= R || d === 0) return;
@@ -188,8 +232,8 @@
     // focus: bring a node to the centre, a little closer (FocusElement)
     self.focus = function (id, zoomTo) {
       var n = G.byId[id]; if (!n) return;
-      var s = project(n), tz = zoomTo || Math.min(O.maxZoom, Math.max(G.zoom, 1.4));
-      animate({ px: G.px - (s.x - G.cx) * (tz / G.zoom), py: G.py - (s.y - G.cy) * (tz / G.zoom), zoom: tz }, 360);
+      var s = projectRaw(n), tz = zoomTo || Math.min(O.maxZoom, Math.max(G.zoom, 1.4)), f = tz / G.zoom, g = bounds(), gx = g.x + g.w / 2, gy = g.y + g.h / 2;
+      animate({ px: (gx - G.cx) - (s.x - G.cx - G.px) * f, py: (gy - G.cy) - (s.y - G.cy - G.py) * f, zoom: tz }, 360);
       emit('focus', id);
     };
     self.fit = function () {
@@ -197,9 +241,10 @@
       var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
       G.nodes.forEach(function (n) { x0 = Math.min(x0, n.sx); y0 = Math.min(y0, n.sy); x1 = Math.max(x1, n.sx); y1 = Math.max(y1, n.sy); });
       if (x1 <= x0 || y1 <= y0) return;
-      var pad = G.R * 0.18, fx = (G.W - pad * 2) / (x1 - x0), fy = (G.H - pad * 2) / (y1 - y0), f = clamp(Math.min(fx, fy), 0.2, 6);
-      var mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-      animate({ zoom: clamp(G.zoom * f, O.minZoom, O.maxZoom), px: G.px + (G.cx - mx) * f, py: G.py + (G.cy - my) * f }, 360);
+      var g = bounds(), gx = g.x + g.w / 2, gy = g.y + g.h / 2;
+      var pad = Math.min(g.w, g.h) * 0.08, fx = (g.w - pad * 2) / (x1 - x0), fy = (g.h - pad * 2) / (y1 - y0), f = clamp(Math.min(fx, fy), 0.2, 6);
+      var mx = (x0 + x1) / 2, my = (y0 + y1) / 2, z2 = clamp(G.zoom * f, O.minZoom, O.maxZoom); f = z2 / G.zoom;
+      animate({ zoom: z2, px: (gx - G.cx) - (mx - G.cx - G.px) * f, py: (gy - G.cy) - (my - G.cy - G.py) * f }, 360);
     };
     self.reset = function () { animate({ zoom: 1, px: 0, py: 0, yaw: 0.4, pitch: -0.32 }, 360); };
     function animate(to, ms) {
@@ -409,6 +454,7 @@
       var d = G.drag; G.drag = null; setMoving(false); G.snap = null;
       if (el) el.style.cursor = G.mode === '2d' ? 'default' : 'grab';
       if (!d) return;
+      if (d.kind === 'pan' || d.kind === 'rotate') constrain(false);
       var p = local(ev), x = p[0], y = p[1];
       if (d.kind === 'node') {
         if (d.on) {
@@ -448,25 +494,26 @@
       ev.preventDefault();
       var dy = ev.deltaMode === 1 ? ev.deltaY * 33 : ev.deltaY, dx = ev.deltaMode === 1 ? ev.deltaX * 33 : ev.deltaX;
       var scroll = O.wheel === 'scroll' ? !ev.ctrlKey : ev.ctrlKey && false;
-      if (O.wheel === 'scroll' && !ev.ctrlKey && !ev.metaKey) { G.px -= dx; G.py -= dy; kick(); return; }   // ScrollCanvas
-      if (ev.shiftKey && !dx) { G.px -= dy; kick(); return; }
+      if (O.wheel === 'scroll' && !ev.ctrlKey && !ev.metaKey) { G.px -= dx; G.py -= dy; constrain(true); kick(); return; }   // ScrollCanvas
+      if (ev.shiftKey && !dx) { G.px -= dy; constrain(true); kick(); return; }
       var f = Math.exp(-dy * 0.0012), z2 = clamp(G.zoom * f, O.minZoom, O.maxZoom), k = z2 / G.zoom;
       // zoom about the pointer (ZoomCanvas)
       G.px = (G.px + G.cx - p[0]) * k + p[0] - G.cx; G.py = (G.py + G.cy - p[1]) * k + p[1] - G.cy; G.zoom = z2;
       void scroll;
+      constrain(true);
       kick();
     }
     var pinch = null;
     function onTouchStart(ev) { if (ev.touches.length === 2) { pinch = { d: dist(ev), z: G.zoom }; G.drag = null; } }
-    function onTouchMove(ev) { if (ev.touches.length === 2 && pinch) { ev.preventDefault(); G.zoom = clamp(pinch.z * dist(ev) / pinch.d, O.minZoom, O.maxZoom); kick(); } }
+    function onTouchMove(ev) { if (ev.touches.length === 2 && pinch) { ev.preventDefault(); G.zoom = clamp(pinch.z * dist(ev) / pinch.d, O.minZoom, O.maxZoom); constrain(true); kick(); } }
     function dist(ev) { var a = ev.touches[0], b = ev.touches[1]; return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
     function onContext(ev) { if (!on.context) return; var p = local(ev); if (O.within && !O.within(p[0], p[1])) return; ev.preventDefault(); var h = self.hitAt(p[0], p[1]); on.context(h ? h.id : null, ev.clientX, ev.clientY, ev); }
     // keys: arrows walk the selection to the nearest node that way; Enter focuses; Escape clears; +/-; 0 fits; r resets; z/Z undo/redo; p pins
     self.key = function (ev) {
       var k = ev.key, sel = G.selected[0] && G.byId[G.selected[0]];
       if (k === 'Escape') { if (G.selected.length) { self.select([]); return true; } return false; }
-      if (k === '+' || k === '=') { G.zoom = clamp(G.zoom * 1.15, O.minZoom, O.maxZoom); kick(); return true; }
-      if (k === '-' || k === '_') { G.zoom = clamp(G.zoom / 1.15, O.minZoom, O.maxZoom); kick(); return true; }
+      if (k === '+' || k === '=') { G.zoom = clamp(G.zoom * 1.15, O.minZoom, O.maxZoom); constrain(true); kick(); return true; }
+      if (k === '-' || k === '_') { G.zoom = clamp(G.zoom / 1.15, O.minZoom, O.maxZoom); constrain(true); kick(); return true; }
       if (k === '0') { self.fit(); return true; }
       if (k === 'r' || k === 'R') { self.reset(); return true; }
       if ((k === 'z' || k === 'Z') && (ev.metaKey || ev.ctrlKey)) { if (ev.shiftKey) self.redo(); else self.undo(); kick(); return true; }
@@ -509,7 +556,7 @@
     function kick() { if (onFrame && !G.raf) G.raf = requestAnimationFrame(function (t) { G.raf = 0; if (G.anim) { G.anim(t); if (G.anim) kick(); } onFrame(t); }); }
     self.kick = kick;
     self.setOnFrame = function (fn) { onFrame = fn; };
-    self.step = function (now) { var a = false; if (G.anim) { G.anim(now); a = !!G.anim; } return a || !!G.morph || G.selected.length > 0; };
+    self.step = function (now) { var a = false; if (G.anim) { G.anim(now); a = !!G.anim; if (!G.anim && !G.drag) constrain(true); } return a || !!G.morph || G.selected.length > 0; };
     // the overlays the engine owns: a brush rectangle, a lasso, snap guides, a hull round the selection, the grid
     self.drawOverlays = function (ctx, ink) {
       ink = ink || '236,232,228';
@@ -535,5 +582,5 @@
     self.legend = function () { return Object.keys(G.groups).map(function (k) { return { group: k, n: G.groups[k].length, collapsed: !!G.collapsed[k] }; }); };
     return self;
   }
-  return { create: create, version: '0.2.0' };
+  return { create: create, version: '0.3.0' };
 });
