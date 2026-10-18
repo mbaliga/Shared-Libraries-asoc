@@ -13,6 +13,7 @@ the Kotlin modules beside it are for Android.
 | `brands.js` | `brands` | Colours and marks of languages, libraries and platforms, generated from simple-icons (CC0 paths). | 0.1.0 |
 | `graph.js` | `Graph` | A force-directed graph in 3D or 2D with the interactions a graph owes its users (table below). | 0.3.0 |
 | `gantt.js` | `gantt` | Days as columns, dated rows, bars for the work that leads to each, swimlanes, a load row. SVG. | 0.1.0 |
+| `ambience.js` | `ambience`, `muse` | The room's sound (rain, storm, fire, wind, forest, sea) from shaped noise, and music made from a prompt by rule — synthesised on the device, nothing fetched. | 0.1.0 |
 
 Consume by copying the files you need into your build (Orrery's `build.py` reads them from a sibling checkout and
 keeps a vendored snapshot), or by a submodule. No bundler is assumed; no module imports another — `graph.js` draws
