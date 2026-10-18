@@ -11,7 +11,7 @@ the Kotlin modules beside it are for Android.
 | `sfx.js` | `sfx` | Console-style interface tones from a few oscillators; on/off and level through a store adapter. | 0.1.0 |
 | `rose.js` | `rose` | Twenty-four hours as a rose; stacked series on one square-root scale; segment ring; hit testing. | 0.1.0 |
 | `brands.js` | `brands` | Colours and marks of languages, libraries and platforms, generated from simple-icons (CC0 paths). | 0.1.0 |
-| `graph.js` | `Graph` | A force-directed graph in 3D or 2D with the interactions a graph owes its users (table below). | 0.1.0 |
+| `graph.js` | `Graph` | A force-directed graph in 3D or 2D with the interactions a graph owes its users (table below). | 0.2.0 |
 | `gantt.js` | `gantt` | Days as columns, dated rows, bars for the work that leads to each, swimlanes, a load row. SVG. | 0.1.0 |
 
 Consume by copying the files you need into your build (Orrery's `build.py` reads them from a sibling checkout and
@@ -48,7 +48,7 @@ eighteen plugins (its own docs, read 2026-10-17). The engine lays out, projects 
 | Tooltip | ✓ | `on.tooltip(id, x, y)` — the host renders its own |
 | Legend | ✓ | `legend()` returns the groups with counts and folded state — the host renders |
 | Hull | ✓ | `hullOf(ids, pad)`; drawn round the selection by `drawOverlays` when `options.hull` |
-| BubbleSets | ≈ | the padded hull stands in; true bubble sets are not implemented |
+| BubbleSets | ✓ | `bubbleOf(ids)` / `drawBubble(ctx, ids, fill, stroke)`: a smooth outline round a set; Orrery draws one per group in 2D |
 | Fisheye | ✓ | `options.fisheye` distorts screen positions round the pointer (Sarkar–Brown) |
 | EdgeFilterLens | ✓ | `options.edgeLens`: `visibleLinks()` returns only edges near the pointer |
 | History | ✓ | moves, pins, folds, mode changes; `undo()`/`redo()`, ⌘Z / ⇧⌘Z through `key(ev)` |
@@ -60,8 +60,24 @@ eighteen plugins (its own docs, read 2026-10-17). The engine lays out, projects 
 | Background | host | the field colour belongs to the host |
 | Title | host | a caption belongs to the host |
 | Timebar | host | in Orrery the ring of days is the timebar; a generic one is not implemented |
-| EdgeBundling | ✗ | not implemented; a host may bundle in its own link drawing |
+| EdgeBundling | ≈ | `options.bundle` + `linkPath(l)`: links between groups bend through the groups' centroids (cheap bundling, not the force-directed kind) |
 | Watermark | ✗ | deliberately absent |
+
+The examples page groups a few more things under *behaviour* and *animation*; they map so:
+
+| G6 example group | Here |
+|---|---|
+| Intelligent tag control (AutoAdaptLabel) | `labelsFor` + `labelBoxes`; Orrery labels everything that fits in 2D and the lit set in 3D |
+| Canvas manipulation | drag, zoom, scroll, orbit, `fit`, `reset`, viewport animation |
+| Combo behaviours | groups: `collapse`/`expand`, a folded group is one draggable node, `groupMembers`, bubbles round each group |
+| Create edge | shift-drag between nodes → `on.link` |
+| Fix element size | `options.fixSize`; the host divides by zoom when drawing |
+| Focus element | double-click or `focus(id)`, animated |
+| Highlight element | hover activation (`on.hover`, `neighbours`) and the selection pulse |
+| Inner element event | `partAt(x, y)` tells a node's body from its label; the host fills `labelBoxes` |
+| Select | click, shift-click, brush, lasso; `select(ids, additive)` |
+| Update label | double-click a label → `on.rename(id, x, y)`; the host edits |
+| Animation: basic, persistence, viewport | the mode morph (`setMode`), the selection pulse (`pulse()`), animated `fit`/`focus`/`reset` |
 
 Also here, not in G6's list: a 3D ↔ 2D toggle (`setMode`), orbit in 3D, keyboard walking of the selection (arrows),
 `fit()` on double-click of empty ground, `within(x, y)` so a graph can share a canvas with other drawing.

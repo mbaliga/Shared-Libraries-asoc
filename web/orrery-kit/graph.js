@@ -136,17 +136,43 @@
     }
     // the inverse for the plane: where a screen point lands in graph space (2D)
     function unproject2(x, y) { return [(x - G.cx - G.px) / (G.R * G.zoom), (y - G.cy - G.py) / (G.R * G.zoom)]; }
-    self.project = function () { G.nodes.forEach(project); return G.nodes; };
+    self.project = function () { G.nodes.forEach(project); if (G.morph) { morphBlend(); kick(); } return G.nodes; };
+    self.morphing = function () { return !!G.morph; };
     self.screen = function (id) { var n = G.byId[id]; return n ? project(n) : null; };
     self.size = function (W, H, cx, cy, R) { G.W = W; G.H = H; G.cx = cx == null ? W / 2 : cx; G.cy = cy == null ? H / 2 : cy; G.R = R || Math.min(W, H) * 0.42; };
-    self.setMode = function (mode) {
+    // the plane is laid out on its own terms: more room between nodes, and groups kept together, so every label fits
+    function layout2d() {
+      G.nodes.forEach(function (n) { n.z = 0; n.vx = n.vy = n.vz = 0; });
+      for (var i = 0; i < 220; i++) tick(1 - i / 220, 0.011, 0.62, 0.03, 0.01);
+      normalise();
+    }
+    function layout3d() {
+      var r = rng(0.77);
+      G.nodes.forEach(function (n) { n.z = (r() - 0.5) * 0.6; n.vx = n.vy = n.vz = 0; });
+      for (var i = 0; i < 220; i++) tick(1 - i / 220, 0.0062, 0.4, 0.028, 0.012);
+      normalise();
+    }
+    // mode changes morph: every node travels from where it was drawn to where it lands (the viewport animation)
+    self.setMode = function (mode, quiet) {
       if (mode === G.mode) return;
-      push({ kind: 'mode', from: G.mode, to: mode });
+      if (!quiet) push({ kind: 'mode', from: G.mode, to: mode });
+      G.nodes.forEach(project);
+      var from = G.nodes.map(function (n) { return { n: n, sx: n.sx, sy: n.sy, k: n.sk }; });
       G.mode = mode;
-      if (mode === '2d') { G.nodes.forEach(function (n) { n.z = 0; }); settle(60); normalise(); }
-      else { var r = rng(0.77); G.nodes.forEach(function (n) { n.z = (r() - 0.5) * 0.4; }); settle(120); normalise(); }
+      if (mode === '2d') layout2d(); else layout3d();
+      if (mode === '2d') { G.pitch = 0; } else { G.pitch = -0.32; }
+      G.morph = { from: from, t0: performance.now(), ms: 520 };
       emit('change', 'mode');
+      kick();
     };
+    // morph: blend the drawn position between the old screen place and the new one
+    function morphBlend() {
+      var m = G.morph; if (!m) return false;
+      var t = clamp((performance.now() - m.t0) / m.ms, 0, 1), e = 1 - Math.pow(1 - t, 3);
+      m.from.forEach(function (f) { var n = f.n; n.sx = f.sx + (n.sx - f.sx) * e; n.sy = f.sy + (n.sy - f.sy) * e; n.sk = f.k + (n.sk - f.k) * e; });
+      if (t >= 1) G.morph = null;
+      return true;
+    }
 
     // ---------------------------------------------------------------- selection, hover, focus
     function emit(ev, a, b, c, d) { if (on[ev]) on[ev](a, b, c, d); }
@@ -214,6 +240,30 @@
       emit('change', 'expand');
     };
     self.isCollapsed = function (group) { return !!G.collapsed[group]; };
+    self.groupMembers = function (group) { return (G.groups[group] || []).filter(function (id) { var n = G.byId[id]; return n && !n.hidden; }); };
+    // a smooth outline round a set of nodes (BubbleSets stand-in): the padded hull with rounded corners
+    self.bubbleOf = function (ids, pad) {
+      var h = self.hullOf(ids, pad == null ? 18 : pad); if (h.length < 3) return h;
+      var out = [];
+      for (var i = 0; i < h.length; i++) { var a = h[i], b = h[(i + 1) % h.length]; out.push([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, b[0], b[1]]); }
+      return { mid: out, pts: h };
+    };
+    self.drawBubble = function (ctx, ids, fill, stroke, pad) {
+      var b = self.bubbleOf(ids, pad); if (!b || !b.mid || b.mid.length < 3) return false;
+      ctx.beginPath(); ctx.moveTo(b.mid[0][0], b.mid[0][1]);
+      for (var i = 1; i <= b.mid.length; i++) { var q = b.mid[i % b.mid.length], c = b.mid[i - 1]; ctx.quadraticCurveTo(c[2], c[3], q[0], q[1]); }
+      ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+      return true;
+    };
+    // cheap edge bundling: a link between two groups bends through the midpoint of the group centroids
+    self.linkPath = function (l) {
+      var a = l.a, b = l.b;
+      if (!O.bundle || !a.group || !b.group || a.group === b.group) return null;
+      var ca = centroid(a.group), cb = centroid(b.group);
+      if (!ca || !cb) return null;
+      return [(ca[0] + cb[0]) / 2 * 0.7 + (a.sx + b.sx) / 2 * 0.3, (ca[1] + cb[1]) / 2 * 0.7 + (a.sy + b.sy) / 2 * 0.3];
+    };
+    function centroid(group) { var ids = G.groups[group] || [], x = 0, y = 0, n = 0; ids.forEach(function (id) { var m = G.byId[id]; if (m && !m.hidden) { x += m.sx; y += m.sy; n++; } }); return n ? [x / n, y / n] : null; }
 
     // ---------------------------------------------------------------- pins and history (DragElement, History)
     self.pin = function (id, on2) { var n = G.byId[id]; if (!n) return; var was = n.pinned; n.pinned = on2 == null ? !n.pinned : !!on2; if (was !== n.pinned) push({ kind: 'pin', id: id, from: was, to: n.pinned, x: n.x, y: n.y, z: n.z }); };
@@ -231,6 +281,13 @@
     self.canRedo = function () { return G.histAt < G.hist.length - 1; };
 
     // ---------------------------------------------------------------- hits, hulls, labels
+    self.labelBoxes = {};   // id -> [x0,y0,x1,y1], set by the host after it draws labels (InnerElementEvent)
+    self.partAt = function (x, y) {
+      var n = self.hitAt(x, y); if (n) return { node: n, part: 'body' };
+      var ids = Object.keys(self.labelBoxes);
+      for (var i = 0; i < ids.length; i++) { var b = self.labelBoxes[ids[i]]; if (x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]) return { node: G.byId[ids[i]], part: 'label' }; }
+      return null;
+    };
     self.hitAt = function (x, y) {
       var best = null, bd = 1e9;
       G.nodes.forEach(function (n) {
@@ -379,6 +436,7 @@
     function onDbl(ev) {
       var p = local(ev), h = self.hitAt(p[0], p[1]);
       if (O.within && !O.within(p[0], p[1])) return;
+      if (!h) { var pt = self.partAt(p[0], p[1]); if (pt && pt.part === 'label' && on.rename) { on.rename(pt.node.id, ev.clientX, ev.clientY); return; } }
       if (!h) { self.fit(); return; }
       if (h.isGroup) { self.expand(h.group); return; }
       if ((ev.shiftKey) && h.group) { self.collapse(h.group); return; }
@@ -451,7 +509,7 @@
     function kick() { if (onFrame && !G.raf) G.raf = requestAnimationFrame(function (t) { G.raf = 0; if (G.anim) { G.anim(t); if (G.anim) kick(); } onFrame(t); }); }
     self.kick = kick;
     self.setOnFrame = function (fn) { onFrame = fn; };
-    self.step = function (now) { if (G.anim) { G.anim(now); return !!G.anim; } return false; };
+    self.step = function (now) { var a = false; if (G.anim) { G.anim(now); a = !!G.anim; } return a || !!G.morph || G.selected.length > 0; };
     // the overlays the engine owns: a brush rectangle, a lasso, snap guides, a hull round the selection, the grid
     self.drawOverlays = function (ctx, ink) {
       ink = ink || '236,232,228';
@@ -473,8 +531,9 @@
       if (O.edgeLens && G.pointer) { ctx.strokeStyle = 'rgba(' + ink + ',.14)'; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.arc(G.pointer.x, G.pointer.y, O.edgeLensR, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
     };
     self.set = function (k, v) { O[k] = v; kick(); };
+    self.pulse = function (now) { return 0.5 + 0.5 * Math.sin((now || performance.now()) / 420); };   // a slow breath for what is selected
     self.legend = function () { return Object.keys(G.groups).map(function (k) { return { group: k, n: G.groups[k].length, collapsed: !!G.collapsed[k] }; }); };
     return self;
   }
-  return { create: create, version: '0.1.0' };
+  return { create: create, version: '0.2.0' };
 });
