@@ -94,3 +94,93 @@ Preview safety properties, pinned by tests in `CrashReportTest`:
 - **Continue is inert** beyond closing the screen — previewing never relaunches the app.
 - The report is synthesized, never read from disk, so previewing works with no captured crash
   and cannot consume a real pending one.
+
+## `dev.aarso:cell-shell` — nav-bar-aware bottom zone and the optional bottom peek
+
+**Version:** unchanged (`0.1.0`). Source-compatible; nothing to do unless you want the new stage.
+
+### One behaviour change for every consumer: the bottom pull zone
+
+`SpatialShell`'s bottom edge acquisition zone used to be the window's last 56dp. Edge-to-edge
+hosts therefore lost most of it to the navigation bar (a 48dp 3-button bar left 8dp; gesture
+navigation overlapped the home swipe). The zone is now the 56dp band that **ends at the larger of
+the navigation-bar and system-gesture bottom insets**, and the bottom edge hint sits above that
+inset, mirroring how the top zone already sat below the status bar. With no bottom inset (a
+non-edge-to-edge host, or hidden bars) it is identical to before. The shell still consumes no
+insets; it only reads them. Pure helpers `inTopEdgeZone` / `inBottomEdgeZone` carry the
+arithmetic and are tested with non-zero insets.
+
+### New and optional: `bottomPeek`
+
+```kotlin
+SpatialShell(..., bottom = { ActionsRoom() }, bottomPeek = 96.dp, bottomReserve = 56.dp) { Home() }
+```
+
+- `bottomPeek: Dp? = null`. Null keeps the single-stage room. Set, the bottom room has three
+  stops: closed, a strip, and full.
+- **What the number means.** The room arrives top-first and is inset by `SpatialMotion.BAND_DP`
+  (72dp, now public) at its head, for the parked card's edge. `bottomPeek` is the height of the
+  strip **below that band**: the shell adds the band itself, so pass just the height of the strip
+  you want to show. Anchor the strip to the **top** of the room's content (`Modifier.height(bottomPeek)`
+  at the head of the room, under the shell's inset); the navigation bar covers the foot of the
+  revealed area, so that strip is exactly what is on screen, clear of the bar. Hosts that mirrored
+  the band into their own peek (`strip + 72.dp`) must drop that addition.
+- **When it does not fit.** If the strip would need more than half the window (`MAX_PEEK_REVEAL`) -
+  a landscape phone, a large font - there is no peek: the room is single-stage rather than showing
+  a cropped strip. `SpatialController.hasBottomPeek: Boolean` says whether the two-stage room is
+  actually in effect; hide the strip when it is false.
+- **Re-settling.** When the stop moves (rotation in place, insets, density, a new `bottomPeek`) a
+  room parked on the old stop follows it; if the peek goes away (null, or it no longer fits) the
+  room closes. Nothing moves while a finger is on the axis, and a room left at closed or full stays.
+- Release in the lower part of the pull settles on the strip; pulling past it continues to full;
+  a flick up from the strip opens full, a flick down closes; a slow release snaps to the nearest
+  stop (`settleTargetStaged`, pure). `closeAll()` and a tap on the parked card work from any stage.
+- `SpatialController.bottomStage: RoomStage` (`CLOSED` / `PEEK` / `FULL`) is read-only and is the
+  stage a slow release would settle to. `SpatialController.peekBottom()` opens straight to the
+  strip (it is `open(RoomEdge.BOTTOM)` when there is no peek in effect).
+- `openRoom` stays `HOME` at the peek: a peek is not a fully open room. `anyRoomVisible` is true,
+  so a `BackHandler` bound to it closes the peek.
+- While peeked, the home card is parked (lifted a little) and, as at any parked stage, the whole
+  card is the return affordance: tap closes, dragging it up carries on to full.
+
+### New and optional: `bottomReserve`
+
+`bottomReserve: Dp = 0.dp` mirrors `topReserve`: a strip above the navigation bar that the host owns
+(a filmstrip, a video transport). The bottom pull zone becomes
+`[h - inset - reserve - 56dp, h - inset - reserve]` and the edge hint moves up with it, so a
+vertical-first start on the host's own control scrubs instead of opening the room. The default
+keeps today's zone. Pure `inBottomEdgeZone(..., reservePx)` carries the arithmetic.
+
+### Release velocity no longer outlives the finger
+
+A release more than 80ms after the last drag event is now treated as having no velocity (it used to
+reuse the last per-event delta forever, so pulling up, holding on the strip and lifting flung the
+room to full). `dragH` / `dragV` / `settleH` / `settleV` take an optional trailing event uptime
+(`-1L` = unknown, which keeps the old behaviour), so hosts that drive the controller from their own
+gesture code can pass `change.uptimeMillis`. On the parked card, a tap now has to stay inside touch
+slop to count: a jittery tap closes instead of re-settling the room where it stands.
+
+## `dev.aarso:cell-shell` — `EdgeTimelineScrubber(edge = ...)`
+
+**Version:** unchanged (`0.1.0`). Additive; a call that does not pass `edge` is unchanged.
+
+```kotlin
+EdgeTimelineScrubber(..., edge = ScrubberEdge.BOTTOM, modifier = Modifier.align(Alignment.BottomCenter))
+```
+
+- `edge: ScrubberEdge = ScrubberEdge.RIGHT` (new enum `LEFT`, `RIGHT`, `TOP`, `BOTTOM`) is the last
+  parameter. The default is the strip as it was: right-edge, 44dp wide, full height, track and ticks
+  hugging the right, bubble opening to the left. Index mapping, label positions and bubble geometry
+  for `RIGHT` are pinned numerically by `ScrubberEdgeTest`, so Fylz and other existing callers need
+  no change.
+- `LEFT` mirrors it (track on the left, labels left-anchored, bubble opens to the right). `TOP` and
+  `BOTTOM` run horizontally: the strip is the full width of its parent and 44dp tall, scrubbed left
+  to right (start of the list on the left), labels centred on their stop and thinned at a 40dp pitch
+  (a vertical strip keeps 14dp), the bubble opens below a `TOP` strip and above a `BOTTOM` one.
+- Gesture exclusion (`systemGestureExclusion`) is requested for `LEFT` / `RIGHT` only; Android's
+  edge swipes are the side ones. The host places the strip and keeps a `BOTTOM` strip above the
+  navigation / gesture inset itself, as the shell does for its own bottom zone.
+- The strip still does not claim a touch until it travels past slop **along its axis**, and gives
+  the gesture up if the travel is across it, so a vertical strip and the shell's horizontal edge
+  drag (and a horizontal strip and its vertical one) do not fight. Only the strip's own first and
+  last 56dp overlap a room's edge zone.

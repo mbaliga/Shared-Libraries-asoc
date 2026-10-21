@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -44,7 +45,11 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** Width of the touch strip. Wide enough to hit without looking, narrow enough to ignore. */
+/**
+ * Thickness of the touch strip -- its width on [ScrubberEdge.LEFT] / [ScrubberEdge.RIGHT], its
+ * height on [ScrubberEdge.TOP] / [ScrubberEdge.BOTTOM]. Wide enough to hit without looking,
+ * narrow enough to ignore.
+ */
 private const val STRIP_WIDTH_DP = 44f
 
 /**
@@ -66,7 +71,7 @@ private const val TRACK_INSET_DP = 7f
 /** Thickness of the hairline track the ticks live on. */
 private const val TRACK_WIDTH_DP = 1.5f
 
-/** Length of a stop's tick, drawn leftward from the track. */
+/** Length of a stop's tick, drawn from the track toward the inside of the screen. */
 private const val TICK_LENGTH_DP = 5f
 
 /** Length of the marker showing the current position — longer than a tick so it reads as "you". */
@@ -76,14 +81,25 @@ private const val MARKER_LENGTH_DP = 13f
 private const val MARKER_WIDTH_DP = 2.5f
 
 /**
- * Minimum vertical distance between two drawn labels.
+ * Minimum distance between two drawn labels along a vertical strip ([ScrubberEdge.LEFT] /
+ * [ScrubberEdge.RIGHT]).
  *
  * This is the whole anti-overlap mechanism: a label is drawn only if it clears the last one
  * drawn by this much, so it must stay comfortably above [LABEL_SP]'s line height.
  */
 private const val LABEL_PITCH_DP = 14f
 
-/** Where labels end, measured in from the strip's right edge — clear of the track and its ticks. */
+/**
+ * The same minimum for a horizontal strip ([ScrubberEdge.TOP] / [ScrubberEdge.BOTTOM]), where
+ * the thing that must not overlap is label *width*, not line height: `"Mar"` or `"2024"` at
+ * [LABEL_SP] is about 22-26dp wide, so 40dp keeps a visible gap between neighbours.
+ */
+private const val LABEL_PITCH_H_DP = 40f
+
+/**
+ * Where labels sit, measured in from the strip's outer edge -- clear of the track and its ticks.
+ * (On a vertical strip that is the right or left edge; on a horizontal one, the bottom or top.)
+ */
 private const val LABEL_INSET_DP = 15f
 
 /** Label size. Deliberately small: the strip is a map of the list, not a second list. */
@@ -92,7 +108,7 @@ private const val LABEL_SP = 9f
 /** Alpha of a tick belonging to a stop whose label was thinned away. */
 private const val TICK_ALPHA = 0.55f
 
-/** Gap between the strip's left edge and the bubble that floats beside the finger. */
+/** Gap between the strip's inner edge and the bubble that floats beside the finger. */
 private const val BUBBLE_GAP_DP = 12f
 
 private const val BUBBLE_PAD_H_DP = 12f
@@ -110,8 +126,21 @@ private const val BUBBLE_SP = 15f
 data class ScrubberStop(val label: String, val itemIndex: Int)
 
 /**
- * The Niagara-style edge scrubber: a narrow strip down the right edge that sweeps the whole
- * list, with a bubble naming where the finger is.
+ * The edge a [EdgeTimelineScrubber] sits on. [LEFT] and [RIGHT] strips run vertically (the full
+ * height of their parent, [STRIP_WIDTH_DP]dp wide) and are scrubbed up and down; [TOP] and
+ * [BOTTOM] strips run horizontally (the full width of their parent, [STRIP_WIDTH_DP]dp tall) and
+ * are scrubbed left to right. In every case the start of the list is at the top / left end and
+ * the last item at the bottom / right end.
+ *
+ * The enum names the strip's *shape and sides*, not its position: the host still places the
+ * composable (`Modifier.align(...)`, padding for the insets) -- this only says which way it runs,
+ * which side the track hugs, and which side the bubble opens toward.
+ */
+enum class ScrubberEdge { LEFT, RIGHT, TOP, BOTTOM }
+
+/**
+ * The Niagara-style edge scrubber: a narrow strip down an edge (the right one unless [edge] says
+ * otherwise) that sweeps the whole list, with a bubble naming where the finger is.
  *
  * The strip is generic over what the stops mean, because the two hosts key it differently and
  * one of them changes its mind at runtime: Foto Xplorr's grid is keyed by date, while Fylz
@@ -120,9 +149,10 @@ data class ScrubberStop(val label: String, val itemIndex: Int)
  *
  * ### The mapping
  *
- * Position maps to index linearly over the strip's height ([indexForFraction]) — the top of the
- * strip is item 0, the bottom is the last item, regardless of how the stops are distributed.
- * Labels are then placed at the y their own `itemIndex` maps back to, so the two agree: putting
+ * Position maps to index linearly over the strip's length ([indexForFraction]) — the top of a
+ * vertical strip (the left end of a horizontal one) is item 0, the bottom (right end) is the last
+ * item, regardless of how the stops are distributed. Labels are then placed at the position
+ * their own `itemIndex` maps back to, so the two agree: putting
  * the finger on "Mar" lands on March. The alternative — spacing labels evenly — reads more
  * tidily and lies, because a month with 400 photos would occupy the same travel as one with 3.
  *
@@ -130,7 +160,8 @@ data class ScrubberStop(val label: String, val itemIndex: Int)
  *
  * That truthful placement means labels can bunch arbitrarily tightly, so they are thinned by a
  * greedy pass ([thinnedLabels]) that drops any label which would come within [LABEL_PITCH_DP] of
- * the last one drawn. Every stop still gets a tick on the track, so a thinned-away stop is
+ * the last one drawn ([LABEL_PITCH_H_DP] on a horizontal strip, where labels collide by width
+ * rather than by height). Every stop still gets a tick on the track, so a thinned-away stop is
  * visible as structure even when there is no room to name it.
  *
  * ### Gesture ownership
@@ -153,8 +184,13 @@ data class ScrubberStop(val label: String, val itemIndex: Int)
  * deliberate drag reach [pointerInput] at all instead of being read as "go back" before it gets
  * here, the same reachability problem [SpatialShell]'s rooms have on their edges. It is a band,
  * not the strip's full bounds, because the platform caps what any one edge can claim at 200dp
- * regardless of how tall this strip runs — see [EXCLUSION_SPAN_DP].
+ * regardless of how tall this strip runs — see [EXCLUSION_SPAN_DP]. A [ScrubberEdge.TOP] or
+ * [ScrubberEdge.BOTTOM] strip requests no exclusion at all: Android's edge swipes are the side
+ * ones, so there is nothing to claim, and the host keeps a bottom strip clear of the gesture bar
+ * with its own padding.
  *
+ * @param edge which edge the strip sits on; see [ScrubberEdge]. The default [ScrubberEdge.RIGHT]
+ *   is the strip as it was before this parameter existed, and behaves identically.
  * @param stops the labelled stops, **ascending by [ScrubberStop.itemIndex]**.
  * @param itemCount how many items the list holds; the strip's height maps onto `0 until itemCount`.
  * @param currentIndex the list's actual first-visible index — where the marker rests when nobody
@@ -181,6 +217,7 @@ fun EdgeTimelineScrubber(
     bubbleTextColor: Color,
     modifier: Modifier = Modifier,
     restAlpha: Float = EDGE_REST_ALPHA,
+    edge: ScrubberEdge = ScrubberEdge.RIGHT,
 ) {
     // Nothing to scrub: an empty list, or a list nobody has indexed yet. Drawing a live-looking
     // strip over it would be an affordance that does nothing.
@@ -197,13 +234,17 @@ fun EdgeTimelineScrubber(
     val countState = rememberUpdatedState(itemCount)
     val currentIndexState = rememberUpdatedState(currentIndex)
     val onScrubToState = rememberUpdatedState(onScrubTo)
+    // Read per gesture, never captured: the gesture is installed once (see above), and a host
+    // may move the strip to another edge while the composable stays in the tree.
+    val edgeState = rememberUpdatedState(edge)
 
     val pressedState = remember { mutableStateOf(false) }
     var pressed by pressedState
-    // Finger y in px. Held as a state object rather than a `by` delegate because it is read only
-    // from layout and draw lambdas — the marker and the bubble follow the finger every frame
-    // without recomposing anything.
-    val touchY = remember { mutableFloatStateOf(0f) }
+    // Finger position along the strip in px (y on a vertical strip, x on a horizontal one). Held
+    // as a state object rather than a `by` delegate because it is read only from layout and draw
+    // lambdas — the marker and the bubble follow the finger every frame without recomposing
+    // anything.
+    val touchAlong = remember { mutableFloatStateOf(0f) }
     // The index the finger is currently over. Written every time the finger crosses an item
     // boundary, which on a full-library sweep is many times per frame — so it is deliberately
     // NOT read in composition anywhere.
@@ -247,8 +288,13 @@ fun EdgeTimelineScrubber(
         // The caller's modifier goes first so a host can override the width or the alignment;
         // our sizing is a default, not a rule.
         modifier = modifier
-            .fillMaxHeight()
-            .width(STRIP_WIDTH_DP.dp)
+            .then(
+                if (edge.runsVertically) {
+                    Modifier.fillMaxHeight().width(STRIP_WIDTH_DP.dp)
+                } else {
+                    Modifier.fillMaxWidth().height(STRIP_WIDTH_DP.dp)
+                },
+            )
             .pointerInput(Unit) {
                 val slop = viewConfiguration.touchSlop
                 awaitEachGesture {
@@ -257,7 +303,12 @@ fun EdgeTimelineScrubber(
                     // down is in our bounds, and requireUnconsumed yields to the shell's
                     // Initial-pass edge drag.
                     val down = awaitFirstDown(requireUnconsumed = true)
-                    val heightPx = size.height.toFloat()
+                    // `along` is the axis the strip runs on and `across` the one it is thin on:
+                    // y and x on a vertical strip, the other way round on a horizontal one.
+                    val vertical = edgeState.value.runsVertically
+                    val lengthPx = (if (vertical) size.height else size.width).toFloat()
+                    fun along(p: Offset) = if (vertical) p.y else p.x
+                    fun across(p: Offset) = if (vertical) p.x else p.y
 
                     // Nothing is claimed and nothing moves until the finger proves intent by
                     // travelling past slop, vertically. Until then this loop is a bystander.
@@ -268,9 +319,9 @@ fun EdgeTimelineScrubber(
                     var lastStopKey: Int? = null
                     var primed = false
 
-                    fun scrubTo(y: Float) {
-                        touchY.floatValue = y
-                        val index = indexForFraction(y / heightPx, countState.value)
+                    fun scrubTo(pos: Float) {
+                        touchAlong.floatValue = pos
+                        val index = indexForFraction(pos / lengthPx, countState.value)
                         if (index != scrubIndex.intValue || !primed) {
                             scrubIndex.intValue = index
                             onScrubToState.value(index)
@@ -295,50 +346,56 @@ fun EdgeTimelineScrubber(
                         if (!change.pressed) break
 
                         if (!claimed) {
-                            val dy = change.position.y - down.position.y
-                            val dx = change.position.x - down.position.x
+                            val dAlong = along(change.position) - along(down.position)
+                            val dAcross = across(change.position) - across(down.position)
                             // Sideways: not a scrub. Leave without consuming so the gesture is
                             // still available to whatever wanted it.
-                            if (abs(dx) > slop && abs(dx) > abs(dy)) break
-                            if (abs(dy) <= slop) continue
+                            if (abs(dAcross) > slop && abs(dAcross) > abs(dAlong)) break
+                            if (abs(dAlong) <= slop) continue
                             claimed = true
                             pressed = true
                             lastStopKey = stopForIndex(
                                 stopsState.value,
-                                indexForFraction(down.position.y / heightPx, countState.value),
+                                indexForFraction(along(down.position) / lengthPx, countState.value),
                             )?.itemIndex
                         }
 
-                        scrubTo(change.position.y)
+                        scrubTo(along(change.position))
                         change.consume()
                     }
                     if (claimed) pressed = false
                 }
             },
     ) {
-        // Same edge-ownership problem as SpatialShell's rooms, on whichever edge the host places
-        // this strip: without it, Android's own edge-swipe claims the touch before the
+        // Same edge-ownership problem as SpatialShell's rooms, on whichever side edge the host
+        // places this strip: without it, Android's own edge-swipe claims the touch before the
         // pointerInput above ever sees it. Sized and centred rather than applied to the strip's
         // own fillMaxHeight bounds -- see EXCLUSION_SPAN_DP's own KDoc for why the whole strip
-        // would ask for more than the platform's 200dp-per-edge cap grants.
-        Box(
-            Modifier
-                .align(Alignment.Center)
-                .width(STRIP_WIDTH_DP.dp)
-                .height(EXCLUSION_SPAN_DP)
-                .systemGestureExclusion(),
-        )
+        // would ask for more than the platform's 200dp-per-edge cap grants. A top or bottom strip
+        // has no such swipe to beat, so it asks for nothing.
+        if (edge.excludesSystemGestures) {
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .width(STRIP_WIDTH_DP.dp)
+                    .height(EXCLUSION_SPAN_DP)
+                    .systemGestureExclusion(),
+            )
+        }
 
         val density = LocalDensity.current
-        val heightPx = constraints.maxHeight.toFloat()
-        val widthPx = constraints.maxWidth.toFloat()
-        val pitchPx = with(density) { LABEL_PITCH_DP.dp.toPx() }
-        val labelRightPx = widthPx - with(density) { LABEL_INSET_DP.dp.toPx() }
+        val vertical = edge.runsVertically
+        // The strip's long axis and its thin one. For the vertical strips this is the height and
+        // width the code used before [edge] existed.
+        val lengthPx = (if (vertical) constraints.maxHeight else constraints.maxWidth).toFloat()
+        val thicknessPx = (if (vertical) constraints.maxWidth else constraints.maxHeight).toFloat()
+        val pitchPx = with(density) { labelPitchDp(edge).dp.toPx() }
+        val labelInsetPx = with(density) { LABEL_INSET_DP.dp.toPx() }
 
         // Thinning depends only on the geometry, not on the finger, so it survives every frame of
         // a drag untouched.
-        val labels = remember(stops, itemCount, heightPx, pitchPx) {
-            thinnedLabels(stops, itemCount, heightPx, pitchPx)
+        val labels = remember(stops, itemCount, lengthPx, pitchPx) {
+            thinnedLabels(stops, itemCount, lengthPx, pitchPx)
         }
 
         Box(
@@ -349,11 +406,19 @@ fun EdgeTimelineScrubber(
                 .graphicsLayer { alpha = strength },
         ) {
             Canvas(Modifier.fillMaxSize()) {
-                val trackX = size.width - TRACK_INSET_DP.dp.toPx()
+                val length = if (vertical) size.height else size.width
+                val thickness = if (vertical) size.width else size.height
+                // A point given as (position along the strip, position across it).
+                fun at(along: Float, across: Float) =
+                    if (vertical) Offset(across, along) else Offset(along, across)
+                val track = trackAcrossPx(edge, thickness, TRACK_INSET_DP.dp.toPx())
+                // +1 draws toward larger coordinates, -1 toward smaller: always toward the inside
+                // of the screen, away from the edge the track hugs.
+                val inward = edge.inwardSign
                 drawLine(
                     color = inkColor.copy(alpha = TICK_ALPHA),
-                    start = Offset(trackX, 0f),
-                    end = Offset(trackX, size.height),
+                    start = at(0f, track),
+                    end = at(length, track),
                     strokeWidth = TRACK_WIDTH_DP.dp.toPx(),
                 )
                 // Every stop gets a tick, including the ones whose label was thinned away — the
@@ -361,26 +426,27 @@ fun EdgeTimelineScrubber(
                 // rather than as a gap in the timeline.
                 val tickLength = TICK_LENGTH_DP.dp.toPx()
                 for (stop in stops) {
-                    val y = itemCenterY(stop.itemIndex, itemCount, size.height)
+                    val pos = itemCenterY(stop.itemIndex, itemCount, length)
                     drawLine(
                         color = inkColor.copy(alpha = TICK_ALPHA),
-                        start = Offset(trackX - tickLength, y),
-                        end = Offset(trackX, y),
+                        start = at(pos, track + inward * tickLength),
+                        end = at(pos, track),
                         strokeWidth = TRACK_WIDTH_DP.dp.toPx(),
                         cap = StrokeCap.Round,
                     )
                 }
-                // The marker. Reading touchY here — in the draw lambda — is what lets it track the
-                // finger continuously between index changes instead of stepping item by item.
-                val markerY = if (pressed) {
-                    touchY.floatValue.coerceIn(0f, size.height)
+                // The marker. Reading touchAlong here — in the draw lambda — is what lets it
+                // track the finger continuously between index changes instead of stepping item
+                // by item.
+                val markerPos = if (pressed) {
+                    touchAlong.floatValue.coerceIn(0f, length)
                 } else {
-                    itemCenterY(currentIndex, itemCount, size.height)
+                    itemCenterY(currentIndex, itemCount, length)
                 }
                 drawLine(
                     color = accentColor,
-                    start = Offset(trackX - MARKER_LENGTH_DP.dp.toPx(), markerY),
-                    end = Offset(trackX, markerY),
+                    start = at(markerPos, track + inward * MARKER_LENGTH_DP.dp.toPx()),
+                    end = at(markerPos, track),
                     strokeWidth = MARKER_WIDTH_DP.dp.toPx(),
                     cap = StrokeCap.Round,
                 )
@@ -388,7 +454,7 @@ fun EdgeTimelineScrubber(
 
             for (stop in labels) {
                 val active = stop.itemIndex == shownStop?.itemIndex
-                val centerY = itemCenterY(stop.itemIndex, itemCount, heightPx)
+                val centerAlong = itemCenterY(stop.itemIndex, itemCount, lengthPx)
                 BasicText(
                     text = stop.label,
                     style = TextStyle(
@@ -399,25 +465,29 @@ fun EdgeTimelineScrubber(
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
-                    // Placed by hand: the label's own height is not known until it is measured,
-                    // and it has to be centred on the y its index maps to. Reporting a 0×0 size
+                    // Placed by hand: the label's own size is not known until it is measured, and it
+                    // has to be centred on the position its index maps to. Reporting a 0×0 size
                     // keeps the labels out of the parent's sizing entirely — they are an overlay
                     // on the strip, not its contents.
                     modifier = Modifier.layout { measurable, _ ->
                         val placeable = measurable.measure(
-                            Constraints(maxWidth = labelRightPx.roundToInt().coerceAtLeast(0)),
+                            Constraints(
+                                maxWidth = labelMaxWidthPx(edge, thicknessPx, labelInsetPx, pitchPx),
+                            ),
                         )
                         layout(0, 0) {
-                            val top = (centerY - placeable.height / 2f).roundToInt()
-                            placeable.place(
-                                x = labelRightPx.roundToInt() - placeable.width,
-                                // The first and last stops sit half a row past the ends, so clamp
-                                // rather than let them hang off the strip.
-                                y = top.coerceIn(
-                                    0,
-                                    (heightPx.roundToInt() - placeable.height).coerceAtLeast(0),
-                                ),
+                            // The first and last stops sit half a row past the ends, so the
+                            // placement clamps rather than letting them hang off the strip.
+                            val at = labelPlacement(
+                                edge = edge,
+                                labelWidth = placeable.width,
+                                labelHeight = placeable.height,
+                                centerAlong = centerAlong,
+                                lengthPx = lengthPx,
+                                thicknessPx = thicknessPx,
+                                insetPx = labelInsetPx,
                             )
+                            placeable.place(x = at.x, y = at.y)
                         }
                     },
                 )
@@ -426,7 +496,8 @@ fun EdgeTimelineScrubber(
 
         // ── The bubble ────────────────────────────────────────────────────────────────────
         // Only while touched, and only when there is something truthful to name: a scrub above
-        // the first stop has no label, and an empty bubble is worse than none.
+        // the first stop has no label, and an empty bubble is worse than none. It opens toward
+        // the inside of the screen, opposite the side the track hugs.
         val bubbleStop = shownStop
         if (pressed && bubbleStop != null) {
             val gapPx = with(density) { BUBBLE_GAP_DP.dp.toPx() }
@@ -441,14 +512,16 @@ fun EdgeTimelineScrubber(
                             Constraints(maxWidth = constraints.maxWidth * 6),
                         )
                         layout(0, 0) {
-                            val top = (touchY.floatValue - placeable.height / 2f).roundToInt()
-                            placeable.place(
-                                x = -placeable.width - gapPx.roundToInt(),
-                                y = top.coerceIn(
-                                    0,
-                                    (heightPx.roundToInt() - placeable.height).coerceAtLeast(0),
-                                ),
+                            val at = bubblePlacement(
+                                edge = edge,
+                                bubbleWidth = placeable.width,
+                                bubbleHeight = placeable.height,
+                                touchAlong = touchAlong.floatValue,
+                                lengthPx = lengthPx,
+                                thicknessPx = thicknessPx,
+                                gapPx = gapPx,
                             )
+                            placeable.place(x = at.x, y = at.y)
                         }
                     }
                     .background(accentColor, RoundedCornerShape(BUBBLE_CORNER_DP.dp))
@@ -503,7 +576,8 @@ internal fun stopForIndex(stops: List<ScrubberStop>, index: Int): ScrubberStop? 
     stops.lastOrNull { it.itemIndex <= index }
 
 /**
- * The y a given item index sits at on the strip, in px — the inverse of [indexForFraction],
+ * The position (y on a vertical strip, x on a horizontal one) a given item index sits at on the
+ * strip, in px — the inverse of [indexForFraction],
  * taken at the centre of the item's band so the first and last stops are not flush with the ends.
  *
  * Takes an *item* index, not a stop: it places the resting marker at [EdgeTimelineScrubber]'s
@@ -512,12 +586,14 @@ internal fun stopForIndex(stops: List<ScrubberStop>, index: Int): ScrubberStop? 
  * the labels agree with the drag mapping.
  */
 internal fun itemCenterY(itemIndex: Int, itemCount: Int, heightPx: Float): Float {
+    // `heightPx` is the strip's length along its running axis, whichever edge it is on.
     if (itemCount <= 0) return 0f
     return ((itemIndex + 0.5f) / itemCount).coerceIn(0f, 1f) * heightPx
 }
 
 /**
- * The stops whose labels there is room to draw, in order.
+ * The stops whose labels there is room to draw, in order. [heightPx] is the strip's length along
+ * its running axis and [minGapPx] the pitch ([labelPitchDp]) -- the pass itself is axis-blind.
  *
  * A greedy pass down the strip: keep a label, then skip every following one that would land
  * within [minGapPx] of it. This thins by density rather than by a fixed stride, which matters
@@ -545,3 +621,129 @@ internal fun thinnedLabels(
     }
     return kept
 }
+
+// ── Edge geometry ─────────────────────────────────────────────────────────────────────────
+// Everything below is pure, so which side a label, tick or bubble lands on is testable without a
+// device. "Along" is the axis the strip runs on, "across" the one it is thin on. For RIGHT the
+// results are exactly the numbers the strip used before [ScrubberEdge] existed.
+
+/** Whether the strip runs top to bottom ([ScrubberEdge.LEFT], [ScrubberEdge.RIGHT]). */
+internal val ScrubberEdge.runsVertically: Boolean
+    get() = this == ScrubberEdge.LEFT || this == ScrubberEdge.RIGHT
+
+/** Whether the track sits at the larger-coordinate side of the strip (right or bottom). */
+internal val ScrubberEdge.trackOnFarSide: Boolean
+    get() = this == ScrubberEdge.RIGHT || this == ScrubberEdge.BOTTOM
+
+/**
+ * Which way ticks and the marker point from the track, as a multiplier on the across axis:
+ * -1 for [ScrubberEdge.RIGHT] / [ScrubberEdge.BOTTOM] (toward smaller coordinates, i.e. inward),
+ * +1 for [ScrubberEdge.LEFT] / [ScrubberEdge.TOP].
+ */
+internal val ScrubberEdge.inwardSign: Float
+    get() = if (trackOnFarSide) -1f else 1f
+
+/**
+ * Only the side edges have a system swipe to beat. Android's back gesture comes from the left and
+ * right; a top or bottom strip has nothing to exclude itself from.
+ */
+internal val ScrubberEdge.excludesSystemGestures: Boolean
+    get() = runsVertically
+
+/** Minimum gap between drawn labels for this edge, in dp: height-driven or width-driven. */
+internal fun labelPitchDp(edge: ScrubberEdge): Float =
+    if (edge.runsVertically) LABEL_PITCH_DP else LABEL_PITCH_H_DP
+
+/**
+ * Where the track runs across the strip: [insetPx] in from the outer edge it hugs. For
+ * [ScrubberEdge.RIGHT] that is `thickness - inset`, today's `size.width - TRACK_INSET`.
+ */
+internal fun trackAcrossPx(edge: ScrubberEdge, thicknessPx: Float, insetPx: Float): Float =
+    if (edge.trackOnFarSide) thicknessPx - insetPx else insetPx
+
+/** A pixel position in the strip's own (x, y) coordinates. */
+internal data class StripPlacement(val x: Int, val y: Int)
+
+/**
+ * The widest a label may measure. A vertical strip gives a label the room between the strip's
+ * inner edge and its inset (a label is right-anchored there for RIGHT, left-anchored for LEFT);
+ * a horizontal strip gives it one pitch, which is also what guarantees thinned labels never meet.
+ */
+internal fun labelMaxWidthPx(
+    edge: ScrubberEdge,
+    thicknessPx: Float,
+    insetPx: Float,
+    pitchPx: Float,
+): Int =
+    if (edge.runsVertically) (thicknessPx - insetPx).roundToInt().coerceAtLeast(0)
+    else pitchPx.roundToInt().coerceAtLeast(0)
+
+/**
+ * Top-left of a measured label, in the strip's coordinates.
+ *
+ * The label is centred on [centerAlong] along the strip, then clamped inside it. Across the
+ * strip it sits [insetPx] in from the edge the track hugs: right-anchored for RIGHT (the old
+ * placement), left-anchored for LEFT, bottom-anchored for BOTTOM, top-anchored for TOP.
+ */
+internal fun labelPlacement(
+    edge: ScrubberEdge,
+    labelWidth: Int,
+    labelHeight: Int,
+    centerAlong: Float,
+    lengthPx: Float,
+    thicknessPx: Float,
+    insetPx: Float,
+): StripPlacement = when (edge) {
+    ScrubberEdge.RIGHT -> StripPlacement(
+        x = (thicknessPx - insetPx).roundToInt() - labelWidth,
+        y = clampAlong(centerAlong - labelHeight / 2f, labelHeight, lengthPx),
+    )
+    ScrubberEdge.LEFT -> StripPlacement(
+        x = insetPx.roundToInt(),
+        y = clampAlong(centerAlong - labelHeight / 2f, labelHeight, lengthPx),
+    )
+    ScrubberEdge.BOTTOM -> StripPlacement(
+        x = clampAlong(centerAlong - labelWidth / 2f, labelWidth, lengthPx),
+        y = (thicknessPx - insetPx).roundToInt() - labelHeight,
+    )
+    ScrubberEdge.TOP -> StripPlacement(
+        x = clampAlong(centerAlong - labelWidth / 2f, labelWidth, lengthPx),
+        y = insetPx.roundToInt(),
+    )
+}
+
+/**
+ * Top-left of the scrub bubble, in the strip's coordinates (it lies outside them across the
+ * strip): beside the finger, [gapPx] clear of the strip, on the side away from the track --
+ * left of RIGHT, right of LEFT, below TOP, above BOTTOM -- and clamped along the strip's length.
+ */
+internal fun bubblePlacement(
+    edge: ScrubberEdge,
+    bubbleWidth: Int,
+    bubbleHeight: Int,
+    touchAlong: Float,
+    lengthPx: Float,
+    thicknessPx: Float,
+    gapPx: Float,
+): StripPlacement = when (edge) {
+    ScrubberEdge.RIGHT -> StripPlacement(
+        x = -bubbleWidth - gapPx.roundToInt(),
+        y = clampAlong(touchAlong - bubbleHeight / 2f, bubbleHeight, lengthPx),
+    )
+    ScrubberEdge.LEFT -> StripPlacement(
+        x = thicknessPx.roundToInt() + gapPx.roundToInt(),
+        y = clampAlong(touchAlong - bubbleHeight / 2f, bubbleHeight, lengthPx),
+    )
+    ScrubberEdge.BOTTOM -> StripPlacement(
+        x = clampAlong(touchAlong - bubbleWidth / 2f, bubbleWidth, lengthPx),
+        y = -bubbleHeight - gapPx.roundToInt(),
+    )
+    ScrubberEdge.TOP -> StripPlacement(
+        x = clampAlong(touchAlong - bubbleWidth / 2f, bubbleWidth, lengthPx),
+        y = thicknessPx.roundToInt() + gapPx.roundToInt(),
+    )
+}
+
+/** Rounds [start] and keeps a [size]-px item inside `0..length`; pins to 0 if it cannot fit. */
+private fun clampAlong(start: Float, size: Int, lengthPx: Float): Int =
+    start.roundToInt().coerceIn(0, (lengthPx.roundToInt() - size).coerceAtLeast(0))
