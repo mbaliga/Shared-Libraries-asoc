@@ -113,21 +113,49 @@ arithmetic and are tested with non-zero insets.
 ### New and optional: `bottomPeek`
 
 ```kotlin
-SpatialShell(..., bottom = { ActionsRoom() }, bottomPeek = 96.dp) { Home() }
+SpatialShell(..., bottom = { ActionsRoom() }, bottomPeek = 96.dp, bottomReserve = 56.dp) { Home() }
 ```
 
 - `bottomPeek: Dp? = null`. Null keeps the single-stage room. Set, the bottom room has three
-  stops: closed, a strip `bottomPeek` tall **above the navigation bar**, and full.
+  stops: closed, a strip, and full.
+- **What the number means.** The room arrives top-first and is inset by `SpatialMotion.BAND_DP`
+  (72dp, now public) at its head, for the parked card's edge. `bottomPeek` is the height of the
+  strip **below that band**: the shell adds the band itself, so pass just the height of the strip
+  you want to show. Anchor the strip to the **top** of the room's content (`Modifier.height(bottomPeek)`
+  at the head of the room, under the shell's inset); the navigation bar covers the foot of the
+  revealed area, so that strip is exactly what is on screen, clear of the bar. Hosts that mirrored
+  the band into their own peek (`strip + 72.dp`) must drop that addition.
+- **When it does not fit.** If the strip would need more than half the window (`MAX_PEEK_REVEAL`) -
+  a landscape phone, a large font - there is no peek: the room is single-stage rather than showing
+  a cropped strip. `SpatialController.hasBottomPeek: Boolean` says whether the two-stage room is
+  actually in effect; hide the strip when it is false.
+- **Re-settling.** When the stop moves (rotation in place, insets, density, a new `bottomPeek`) a
+  room parked on the old stop follows it; if the peek goes away (null, or it no longer fits) the
+  room closes. Nothing moves while a finger is on the axis, and a room left at closed or full stays.
 - Release in the lower part of the pull settles on the strip; pulling past it continues to full;
   a flick up from the strip opens full, a flick down closes; a slow release snaps to the nearest
   stop (`settleTargetStaged`, pure). `closeAll()` and a tap on the parked card work from any stage.
 - `SpatialController.bottomStage: RoomStage` (`CLOSED` / `PEEK` / `FULL`) is read-only and is the
   stage a slow release would settle to. `SpatialController.peekBottom()` opens straight to the
-  strip (it is `open(RoomEdge.BOTTOM)` when no peek is configured).
+  strip (it is `open(RoomEdge.BOTTOM)` when there is no peek in effect).
 - `openRoom` stays `HOME` at the peek: a peek is not a fully open room. `anyRoomVisible` is true,
   so a `BackHandler` bound to it closes the peek.
-- The room is one composable laid out over the whole screen, so to put something in the strip,
-  anchor it to the **bottom** of the room (above the navigation-bar inset). That part is on screen
-  at the peek and stays put as the rest of the room arrives above it.
 - While peeked, the home card is parked (lifted a little) and, as at any parked stage, the whole
   card is the return affordance: tap closes, dragging it up carries on to full.
+
+### New and optional: `bottomReserve`
+
+`bottomReserve: Dp = 0.dp` mirrors `topReserve`: a strip above the navigation bar that the host owns
+(a filmstrip, a video transport). The bottom pull zone becomes
+`[h - inset - reserve - 56dp, h - inset - reserve]` and the edge hint moves up with it, so a
+vertical-first start on the host's own control scrubs instead of opening the room. The default
+keeps today's zone. Pure `inBottomEdgeZone(..., reservePx)` carries the arithmetic.
+
+### Release velocity no longer outlives the finger
+
+A release more than 80ms after the last drag event is now treated as having no velocity (it used to
+reuse the last per-event delta forever, so pulling up, holding on the strip and lifting flung the
+room to full). `dragH` / `dragV` / `settleH` / `settleV` take an optional trailing event uptime
+(`-1L` = unknown, which keeps the old behaviour), so hosts that drive the controller from their own
+gesture code can pass `change.uptimeMillis`. On the parked card, a tap now has to stay inside touch
+slop to count: a jittery tap closes instead of re-settling the room where it stands.

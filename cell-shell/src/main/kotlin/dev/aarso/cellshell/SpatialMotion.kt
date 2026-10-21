@@ -14,7 +14,6 @@ import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-import kotlin.math.sqrt
 
 /**
  * Which room a settle should land in.
@@ -88,11 +87,43 @@ object SpatialMotion {
      */
     const val PARK_CAMERA_DISTANCE_CARDS = 3f
 
+    /**
+     * How much of the parked card stays on screen, in dp; also the inset each room applies on the
+     * side the card parks to.
+     *
+     * This single number does two jobs and they must agree: it is the band [parkDistance] leaves
+     * visible, and it is the inset each room applies on the side the card parks to. If they drift
+     * apart the card either covers room content or floats off screen with no way back. It is
+     * public so a host never has to mirror it: the shell already insets every room by it, and
+     * `bottomPeek` is counted from below it (see `SpatialShell`), so a host normally needs it only
+     * to reason about the room's geometry, never to size a peek.
+     *
+     * Note what the band actually contains. The card is scaled about its centre and then
+     * translated, so the strip left on screen is the far edge of home's own layout: park the card
+     * right and the band is home's leading 72dp — the first characters of every row — and park it
+     * up and the band is home's *bottom* 72dp, which in a host with bottom chrome is that chrome
+     * and nothing else. Left bare, that band reads as a loose slab of the previous screen floating
+     * over the room. It is the card's exposed edge, and the shell's `parkVeil` is what makes it
+     * look like one.
+     */
+    const val BAND_DP = 72f
+
     /** Past this fraction of travel, release completes the transition rather than retreating. */
     const val SETTLE_THRESHOLD = 0.5f
 
     /** A flick faster than this decides direction by itself, regardless of distance travelled. */
     const val FLICK_VELOCITY_PX = 2f
+
+    /**
+     * How long after the last drag event a release still counts as a flick, in milliseconds.
+     *
+     * [FLICK_VELOCITY_PX] is a per-event delta, and a finger held still produces no events, so the
+     * last delta never decays on its own: pull up, hold on the strip, lift, and the stale delta
+     * from before the pause would fling the room on to full. Past this age a release is treated as
+     * having no velocity ([releaseDelta]). Long enough to survive the gap between the last move
+     * and the lift of a real flick, short enough that a deliberate pause is never one.
+     */
+    internal const val STALE_MOVE_MS = 80L
 
     /** Vertical travel is shorter than horizontal — a top/bottom room opens over 70% of height. */
     const val VERTICAL_TRAVEL_FRACTION = 0.7f
@@ -100,9 +131,11 @@ object SpatialMotion {
     /**
      * The most of the screen a bottom peek may reveal, as a fraction of the reveal axis.
      *
-     * A peek is a strip, not a half-open room: a request for more than this is clamped, and a
-     * peek anywhere near the full stop would leave the two stops indistinguishable under a
-     * thumb. Also the ceiling [settleTargetStaged] trusts — past it the peek is ignored.
+     * A peek is a strip, not a half-open room, and one anywhere near the full stop would leave the
+     * two stops indistinguishable under a thumb. A request that would need more than this does not
+     * fit: [peekReveal] answers 0 (no peek, a single-stage room) rather than quietly showing less
+     * than was asked for. Also the ceiling [settleTargetStaged] trusts — past it the peek is
+     * ignored.
      */
     const val MAX_PEEK_REVEAL = 0.5f
 
@@ -162,13 +195,48 @@ class SpatialController(private val scope: CoroutineScope) {
     private var lastHDelta = 0f
     private var lastVDelta = 0f
 
+    // Event uptimes (ms) of those deltas, or negative when the caller did not say. A delta is a
+    // velocity only while it is fresh; see releaseDelta.
+    private var lastHMoveAt = -1L
+    private var lastVMoveAt = -1L
+
+    // A finger is on the vertical axis. While it is, the peek stop moving must not fight it.
+    private var vDragging = false
+
     /**
      * Where the bottom room's peek stop sits, as a fraction of the reveal axis ([vProgress] = −x),
-     * or 0 when the shell has no bottom peek. Written only by the shell, which is the only thing
-     * that knows the measured height, the band and the navigation-bar inset it is derived from.
-     * Snapshot-backed because [bottomStage] reads it in composition.
+     * or 0 when the shell has no bottom peek. Written only by the shell, through
+     * [updateBottomPeek], which is the only thing that knows the measured height, the band and the
+     * navigation-bar inset it is derived from. Snapshot-backed because [bottomStage] reads it in
+     * composition.
      */
     internal var bottomPeekReveal: Float by mutableStateOf(0f)
+        private set
+
+    /**
+     * Whether the bottom room really is two-stage right now: the shell was given a `bottomPeek`
+     * AND it fits the window. False when there is no peek or when the requested strip would need
+     * more than [SpatialMotion.MAX_PEEK_REVEAL] of a short window — then the room is single-stage
+     * ([peekBottom] opens it fully, [bottomStage] is never PEEK) and a host should hide whatever it
+     * drew for the strip. Snapshot-backed, so it is safe to read in composition.
+     */
+    val hasBottomPeek: Boolean get() = isStagedPeek(bottomPeekReveal)
+
+    /**
+     * The shell's report of where the peek stop is now. If the room is parked at the OLD stop and
+     * nothing is dragging it, it follows the stop (rotation, insets, density or `bottomPeek`
+     * changing in place would otherwise strand it at a height that is no longer the peek); see
+     * [peekResettleTarget] for the rule. Judged against where a running settle is headed, so a
+     * settle that was still on its way to the old stop is redirected too.
+     */
+    internal fun updateBottomPeek(newPeek: Float) {
+        val old = bottomPeekReveal
+        if (old == newPeek) return
+        bottomPeekReveal = newPeek
+        if (vDragging) return
+        val target = peekResettleTarget(vAnim.targetValue, old, newPeek) ?: return
+        scope.launch { vAnim.animateTo(target, SpatialMotion.settleSpec) }
+    }
 
     /**
      * The BOTTOM room's stage: [RoomStage.CLOSED], a [RoomStage.PEEK] strip, or [RoomStage.FULL].
@@ -206,35 +274,50 @@ class SpatialController(private val scope: CoroutineScope) {
      * @param min the most negative the axis may reach — pass 0f when there is no RIGHT room,
      *   which is what stops a drag revealing an edge the host never supplied.
      * @param max likewise the most positive; 0f when there is no LEFT room.
+     * @param uptimeMillis the pointer event's uptime, so a release long after the last move is not
+     *   mistaken for a flick ([releaseDelta]). Negative (the default) means unknown: the last delta
+     *   is then trusted as it always was.
      */
-    fun dragH(deltaPx: Float, min: Float, max: Float) {
+    fun dragH(deltaPx: Float, min: Float, max: Float, uptimeMillis: Long = -1L) {
         lastHDelta = deltaPx
+        lastHMoveAt = uptimeMillis
         // coerceAtLeast(1) so a pre-measure drag divides by a sane extent rather than zero.
         val next = (hProgress + deltaPx / viewport.width.coerceAtLeast(1)).coerceIn(min, max)
         scope.launch { hAnim.snapTo(next) }
     }
 
     /** Vertical counterpart of [dragH]; `min`/`max` gate the BOTTOM and TOP rooms. */
-    fun dragV(deltaPx: Float, min: Float, max: Float) {
+    fun dragV(deltaPx: Float, min: Float, max: Float, uptimeMillis: Long = -1L) {
+        vDragging = true
         lastVDelta = deltaPx
+        lastVMoveAt = uptimeMillis
         val extent = viewport.height.coerceAtLeast(1) * SpatialMotion.VERTICAL_TRAVEL_FRACTION
         val next = (vProgress + deltaPx / extent).coerceIn(min, max)
         scope.launch { vAnim.snapTo(next) }
     }
 
-    /** Release the horizontal axis; it animates to whichever end [settleTarget] chooses. */
-    fun settleH() {
-        scope.launch { hAnim.animateTo(settleTarget(hProgress, lastHDelta), SpatialMotion.settleSpec) }
+    /**
+     * Release the horizontal axis; it animates to whichever end [settleTarget] chooses.
+     *
+     * @param releaseUptimeMillis the lift's uptime, paired with [dragH]'s; negative means unknown.
+     */
+    fun settleH(releaseUptimeMillis: Long = -1L) {
+        val delta = releaseDelta(lastHDelta, lastHMoveAt, releaseUptimeMillis)
+        scope.launch { hAnim.animateTo(settleTarget(hProgress, delta), SpatialMotion.settleSpec) }
     }
 
     /**
      * Release the vertical axis. With a bottom peek configured the BOTTOM room has three stops,
      * so the release lands on the nearest of closed, peek and full ([settleTargetStaged]);
      * otherwise it is the two-stop [settleTarget] every consumer has always had.
+     *
+     * @param releaseUptimeMillis the lift's uptime, paired with [dragV]'s; negative means unknown.
      */
-    fun settleV() {
+    fun settleV(releaseUptimeMillis: Long = -1L) {
+        vDragging = false
+        val delta = releaseDelta(lastVDelta, lastVMoveAt, releaseUptimeMillis)
         scope.launch {
-            vAnim.animateTo(settleTargetStaged(vProgress, lastVDelta, bottomPeekReveal), SpatialMotion.settleSpec)
+            vAnim.animateTo(settleTargetStaged(vProgress, delta, bottomPeekReveal), SpatialMotion.settleSpec)
         }
     }
 
@@ -243,6 +326,7 @@ class SpatialController(private val scope: CoroutineScope) {
      * this is [open] with [RoomEdge.BOTTOM], so a host can call it unconditionally.
      */
     fun peekBottom() {
+        vDragging = false
         val peek = bottomPeekReveal
         val target = if (isStagedPeek(peek)) -peek else -1f
         scope.launch { vAnim.animateTo(target, SpatialMotion.settleSpec) }
@@ -250,6 +334,7 @@ class SpatialController(private val scope: CoroutineScope) {
 
     /** Open a room without a gesture — for a tap on a host's own affordance. */
     fun open(edge: RoomEdge) {
+        vDragging = false
         scope.launch {
             when (edge) {
                 RoomEdge.LEFT -> hAnim.animateTo(1f, SpatialMotion.settleSpec)
@@ -266,6 +351,7 @@ class SpatialController(private val scope: CoroutineScope) {
      * on the parked card does.
      */
     fun closeAll() {
+        vDragging = false
         scope.launch { hAnim.animateTo(0f, SpatialMotion.settleSpec) }
         scope.launch { vAnim.animateTo(0f, SpatialMotion.settleSpec) }
     }
@@ -298,6 +384,55 @@ fun settleTarget(value: Float, lastDelta: Float): Float {
             else -> 0f
         }
     }
+}
+
+/**
+ * The release velocity to settle with: [lastDelta] while it is fresh, 0 once it has gone stale.
+ *
+ * The delta is per pointer event and a still finger produces no events, so without this a pause
+ * between the last move and the lift is invisible and the pre-pause delta flings the room. A
+ * release more than [SpatialMotion.STALE_MOVE_MS] after the last move has no velocity. Either time
+ * negative means the caller did not supply it, and the delta is trusted as before.
+ *
+ * @param lastDelta the last drag event's movement in px.
+ * @param lastMoveUptime that event's uptime in ms, or negative if unknown.
+ * @param releaseUptime the lift's uptime in ms, or negative if unknown.
+ */
+internal fun releaseDelta(lastDelta: Float, lastMoveUptime: Long, releaseUptime: Long): Float =
+    if (lastMoveUptime < 0L || releaseUptime < 0L) {
+        lastDelta
+    } else if (releaseUptime - lastMoveUptime > SpatialMotion.STALE_MOVE_MS) {
+        0f
+    } else {
+        lastDelta
+    }
+
+/**
+ * Whether a touch that has travelled ([totalDx], [totalDy]) from its down has left the tap behind:
+ * strictly further than [slopPx] in a straight line. The parked card uses it so a jittery tap is
+ * still a tap.
+ */
+internal fun beyondTouchSlop(totalDx: Float, totalDy: Float, slopPx: Float): Boolean =
+    totalDx * totalDx + totalDy * totalDy > slopPx * slopPx
+
+/**
+ * Where an idle bottom room should re-settle when the peek stop moves from [oldPeek] to [newPeek],
+ * or null to leave it alone.
+ *
+ * Only a room PARKED AT the old peek ([position], an axis value, within
+ * [SpatialMotion.STOP_EPSILON] of `-oldPeek`) follows: closed and full are stops that do not move
+ * with the window, and a room the user left elsewhere is not ours to nudge. It goes to `-newPeek`
+ * when there still is a peek, and otherwise — the peek was dropped, or no longer fits — to the
+ * nearer of closed and full, by the same [SpatialMotion.SETTLE_THRESHOLD] a slow release uses.
+ */
+internal fun peekResettleTarget(position: Float, oldPeek: Float, newPeek: Float): Float? {
+    if (!isStagedPeek(oldPeek) || position > -0.001f) return null
+    val reveal = -position
+    if (abs(reveal - oldPeek) > SpatialMotion.STOP_EPSILON) return null
+    if (isStagedPeek(newPeek)) {
+        return if (abs(newPeek - oldPeek) < 1e-4f) null else -newPeek
+    }
+    return if (reveal > SpatialMotion.SETTLE_THRESHOLD) -1f else 0f
 }
 
 /**
@@ -372,50 +507,26 @@ fun roomStageFor(reveal: Float, peek: Float): RoomStage {
 }
 
 /**
- * How much of the BOTTOM room shows below the parked card when it is [reveal] out — the height of
- * the strip a peek actually presents, in px.
+ * The reveal at which the BOTTOM room's usable content is [stripPx] tall — where the peek stop
+ * goes so that `bottomPeek` means what it says.
  *
- * This is not `reveal * height`. The card is scaled about its centre and parked by
- * [parkDistance], and the shell reads `scale = 1 - drop * reveal`, so its lower edge sits at
- * `(1 - r) * h * (1 - drop * r / 2) + r * band`. The room's own top is hidden behind the card by
- * the difference, which is small but is a few dp of a strip only a few dozen dp tall.
+ * The room arrives TOP-first: at reveal `r` its box has been lifted to `h * (1 - r)` and is
+ * inset by [bandPx] at its head, so the content area begins at `h * (1 - r) + band` and the
+ * height of it on screen is `r * h - band`. Solving for the strip the host asked for,
+ * `r = (strip + band) / h`: the band is added HERE, so [stripPx] counts from below it and a host
+ * passes just the height of its strip (plus the navigation bar, which sits over the bottom of
+ * what is revealed). This is exact because it is the room's own geometry; it does not depend on
+ * how far the home card has shrunk, which only decides how much of the empty band shows above.
+ *
+ * Returns 0 — no peek, a single-stage room — rather than a clamped value when the strip cannot be
+ * shown honestly: a non-positive strip, an unmeasured height, or a request that would need more
+ * than [SpatialMotion.MAX_PEEK_REVEAL] of the window (a short window, a large font or density).
+ * Showing less than was asked for would crop the host's strip with no way for it to know.
  */
-internal fun parkedStripPx(
-    reveal: Float,
-    heightPx: Float,
-    bandPx: Float,
-    scaleDrop: Float = SpatialMotion.PARK_SCALE_DROP,
-): Float {
-    val r = reveal.coerceIn(0f, 1f)
-    val halfScale = 1f - scaleDrop * r / 2f
-    val cardBottom = (1f - r) * heightPx * halfScale + r * bandPx
-    return heightPx - cardBottom
-}
-
-/**
- * The reveal at which [parkedStripPx] equals [stripPx] — where the peek stop goes so that the
- * strip is the height the host asked for. Inverts [parkedStripPx] in closed form (it is a
- * quadratic in the reveal) and clamps to [SpatialMotion.MAX_PEEK_REVEAL]. Returns 0 — no peek —
- * for a non-positive strip or an unmeasured height.
- */
-internal fun peekReveal(
-    stripPx: Float,
-    heightPx: Float,
-    bandPx: Float,
-    scaleDrop: Float = SpatialMotion.PARK_SCALE_DROP,
-): Float {
+internal fun peekReveal(stripPx: Float, heightPx: Float, bandPx: Float): Float {
     if (stripPx <= 0f || heightPx <= 1f) return 0f
-    // strip(r) = -k*h*r^2 + (h*(1+k) - band)*r, with k = scaleDrop / 2.
-    val k = scaleDrop / 2f
-    val b = heightPx * (1f + k) - bandPx
-    val a = k * heightPx
-    val raw = if (a < 1e-6f) {
-        stripPx / b
-    } else {
-        val disc = b * b - 4f * a * stripPx
-        if (disc < 0f) SpatialMotion.MAX_PEEK_REVEAL else (b - sqrt(disc)) / (2f * a)
-    }
-    return raw.coerceIn(0f, SpatialMotion.MAX_PEEK_REVEAL)
+    val reveal = (stripPx + bandPx.coerceAtLeast(0f)) / heightPx
+    return if (isStagedPeek(reveal)) reveal else 0f
 }
 
 /**
@@ -427,15 +538,22 @@ internal fun inTopEdgeZone(y: Float, topInsetPx: Float, edgePx: Float): Boolean 
 
 /**
  * Whether a touch at [y] may start a BOTTOM-edge pull: the [edgePx] band that ENDS at the
- * navigation bar, `[height - bottomInsetPx - edgePx, height - bottomInsetPx]`.
+ * navigation bar and anything the host reserved above it,
+ * `[height - inset - reserve - edgePx, height - inset - reserve]`.
  *
  * The bar itself is never a legal origin, for the same reason the status bar is not for the top
  * edge: the system owns those pixels (the 3-button bar, or the gesture-navigation home swipe) and
  * an app cannot out-consume it. Without the inset the zone was the window's last [edgePx], of
  * which a 48dp bar left an 8dp strip.
  */
-internal fun inBottomEdgeZone(y: Float, heightPx: Float, bottomInsetPx: Float, edgePx: Float): Boolean {
-    val floor = heightPx - bottomInsetPx.coerceAtLeast(0f)
+internal fun inBottomEdgeZone(
+    y: Float,
+    heightPx: Float,
+    bottomInsetPx: Float,
+    edgePx: Float,
+    reservePx: Float = 0f,
+): Boolean {
+    val floor = heightPx - bottomInsetPx.coerceAtLeast(0f) - reservePx.coerceAtLeast(0f)
     return y <= floor && y >= floor - edgePx
 }
 

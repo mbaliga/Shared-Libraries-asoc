@@ -156,53 +156,45 @@ class StagedPeekTest {
 
     // ── peek geometry ─────────────────────────────────────────────────────────────────────
 
-    @Test
-    fun `the strip is nothing at closed and grows with the reveal`() {
-        assertEquals(0.0, parkedStripPx(0f, 2000f, 180f).toDouble(), 1e-3)
-        var last = 0f
-        for (r in listOf(0.05f, 0.1f, 0.2f, 0.4f)) {
-            val s = parkedStripPx(r, 2000f, 180f)
-            assertTrue("$s should exceed $last", s > last)
-            last = s
-        }
-    }
+    // 420dpi-ish phone: 72dp band = 189px.
+    private val band = 189f
 
     @Test
-    fun `the strip at full is the card clear of the room less its band`() {
-        // At r = 1 the card sits at the top with its band showing: the room is out by everything
-        // the card's own scaled height does not cover.
-        val h = 2000f
-        val band = 180f
-        val s = parkedStripPx(1f, h, band)
-        val expected = h - (band + 0f)
-        assertEquals(expected.toDouble(), s.toDouble(), 1e-3)
-    }
-
-    @Test
-    fun `the peek reveal inverts the strip`() {
+    fun `the peek reveal counts the strip from below the band`() {
+        // The room's content area is r * h - band tall on screen, so a strip s needs (s + band) / h.
         for (h in listOf(1600f, 2400f, 3200f)) for (strip in listOf(150f, 300f, 450f)) {
-            val r = peekReveal(strip, h, bandPx = 189f)
-            assertEquals("h=$h strip=$strip", strip.toDouble(), parkedStripPx(r, h, 189f).toDouble(), 0.05)
+            val r = peekReveal(strip, h, band)
+            assertEquals("h=$h strip=$strip", ((strip + band) / h).toDouble(), r.toDouble(), 1e-6)
+            // The usable height the room really has at that reveal is exactly the strip.
+            assertEquals("h=$h strip=$strip", strip.toDouble(), (r * h - band).toDouble(), 1e-3)
         }
     }
 
     @Test
-    fun `the peek reveal is a little under strip over height`() {
-        // The card lifts as it parks, which covers part of the room, so the reveal needed for a
-        // given visible strip is not simply strip / height.
-        val r = peekReveal(300f, 2400f, 189f)
-        assertTrue("$r", r > 0f)
-        assertTrue("$r", r > 300f / 2400f * 0.9f && r < 300f / 2400f * 1.5f)
+    fun `degenerate input means no peek`() {
+        assertEquals(0.0, peekReveal(0f, 2400f, band).toDouble(), 0.0)
+        assertEquals(0.0, peekReveal(-5f, 2400f, band).toDouble(), 0.0)
+        assertEquals(0.0, peekReveal(300f, 1f, band).toDouble(), 0.0)
+        assertFalse(isStagedPeek(peekReveal(0f, 2400f, band)))
+        assertTrue(isStagedPeek(peekReveal(300f, 2400f, band)))
     }
 
     @Test
-    fun `the peek reveal is clamped and degenerate input means no peek`() {
-        assertEquals(SpatialMotion.MAX_PEEK_REVEAL.toDouble(), peekReveal(5000f, 2400f, 189f).toDouble(), 1e-6)
-        assertEquals(0.0, peekReveal(0f, 2400f, 189f).toDouble(), 0.0)
-        assertEquals(0.0, peekReveal(-5f, 2400f, 189f).toDouble(), 0.0)
-        assertEquals(0.0, peekReveal(300f, 1f, 189f).toDouble(), 0.0)
-        assertFalse(isStagedPeek(peekReveal(0f, 2400f, 189f)))
-        assertTrue(isStagedPeek(peekReveal(300f, 2400f, 189f)))
+    fun `a strip that cannot fit is no peek rather than a clamped one`() {
+        // Exactly half the window fits; one pixel more does not and used to be silently clamped.
+        val h = 2400f
+        val fits = SpatialMotion.MAX_PEEK_REVEAL * h - band
+        assertEquals(SpatialMotion.MAX_PEEK_REVEAL.toDouble(), peekReveal(fits, h, band).toDouble(), 1e-6)
+        assertEquals(0.0, peekReveal(fits + 1f, h, band).toDouble(), 0.0)
+        assertEquals(0.0, peekReveal(5000f, h, band).toDouble(), 0.0)
+        // A short window (landscape phone, 360dp tall = 945px) cannot take a 96dp strip + nav bar.
+        assertEquals(0.0, peekReveal(126f + 252f, 945f, band).toDouble(), 0.0)
+        assertTrue(peekReveal(126f + 252f, 2400f, band) > 0f)
+    }
+
+    @Test
+    fun `the band is part of the public contract`() {
+        assertEquals(72.0, SpatialMotion.BAND_DP.toDouble(), 0.0)
     }
 
     // ── edge zones, with real insets ──────────────────────────────────────────────────────
@@ -257,6 +249,29 @@ class StagedPeekTest {
         assertFalse(inTopEdgeZone(status + edge + 1f, status, edge))
         assertFalse(inTopEdgeZone(status + 50f, status + reserve, edge))
         assertTrue(inTopEdgeZone(status + reserve + 50f, status + reserve, edge))
+    }
+
+    @Test
+    fun `a bottom reserve lifts the whole zone above the host's own surface`() {
+        val bar = 126f
+        val reserve = 147f // a 56dp filmstrip
+        // No reserve is today's zone, unchanged.
+        assertEquals(inBottomEdgeZone(h - bar - 10f, h, bar, edge), inBottomEdgeZone(h - bar - 10f, h, bar, edge, 0f))
+        // The reserve's own pixels are not an origin...
+        assertFalse(inBottomEdgeZone(h - bar - 1f, h, bar, edge, reserve))
+        assertFalse(inBottomEdgeZone(h - bar - reserve + 1f, h, bar, edge, reserve))
+        // ...the zone is a full edge band ending at the reserve...
+        assertTrue(inBottomEdgeZone(h - bar - reserve, h, bar, edge, reserve))
+        assertTrue(inBottomEdgeZone(h - bar - reserve - edge, h, bar, edge, reserve))
+        assertFalse(inBottomEdgeZone(h - bar - reserve - edge - 1f, h, bar, edge, reserve))
+        var reachable = 0
+        for (y in 0..h.toInt()) if (inBottomEdgeZone(y.toFloat(), h, bar, edge, reserve)) reachable++
+        assertEquals(edge.toInt() + 1, reachable)
+    }
+
+    @Test
+    fun `a negative reserve is treated as none`() {
+        assertEquals(inBottomEdgeZone(h - 200f, h, 126f, edge), inBottomEdgeZone(h - 200f, h, 126f, edge, -50f))
     }
 
     @Test

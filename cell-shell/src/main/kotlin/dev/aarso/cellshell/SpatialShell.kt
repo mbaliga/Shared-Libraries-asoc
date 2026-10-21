@@ -36,21 +36,8 @@ import androidx.compose.ui.zIndex
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/**
- * How much of the parked card stays on screen, in dp.
- *
- * This single number does two jobs and they must agree: it is the band [parkDistance] leaves
- * visible, and it is the inset each room applies on the side the card parks to. If they drift
- * apart the card either covers room content or floats off screen with no way back.
- *
- * Note what the band actually contains. The card is scaled about its centre and then translated,
- * so the strip left on screen is the far edge of home's own layout: park the card right and the
- * band is home's leading 72dp — the first characters of every row — and park it up and the band
- * is home's *bottom* 72dp, which in a host with bottom chrome is that chrome and nothing else.
- * Left bare, that band reads as a loose slab of the previous screen floating over the room. It is
- * the card's exposed edge, and [parkVeil] is what makes it look like one.
- */
-private const val BAND_DP = 72f
+/** [SpatialMotion.BAND_DP], which carries the documentation: public so hosts need not mirror it. */
+private const val BAND_DP = SpatialMotion.BAND_DP
 
 /** How close to an edge a touch must start to be read as an edge drag, in dp. */
 private const val EDGE_DP = 56f
@@ -174,15 +161,32 @@ internal fun parkVeil(lift: Float): Float {
  *   otherwise have that surface's own drag swallowed by the shell's top-room gesture, since both
  *   live in the same 56dp of screen and the shell claims pointers on the Initial pass. Reserving
  *   the strip hands those pixels back, and the top room stays reachable directly beneath it.
- * @param bottomPeek turns the BOTTOM room into a two-stage reveal: a strip this many dp tall
- *   above the navigation bar, then the whole room. Null (the default) keeps the single-stage
- *   room every consumer has always had. A release in the lower part of the pull settles on the
- *   strip, a pull past it carries on to full, a flick up from the strip opens the room and a flick
- *   down closes it; [SpatialController.bottomStage] says which stage is showing, and
- *   [SpatialController.peekBottom] opens straight to the strip. The room is not told the stage —
- *   it is one composable laid out in the whole screen — so to have something to show in the strip,
- *   anchor it to the BOTTOM of the room (above the navigation-bar inset), which is the part of the
- *   room that is on screen at the peek and stays put as the rest of the room arrives above it.
+ * @param bottomReserve a strip above the navigation bar that the HOST owns, which the bottom-edge
+ *   gesture must start above — [topReserve]'s mirror. Zero by default, which is today's zone. The
+ *   bottom zone sits on the 56dp ending at the navigation bar, and a host with its own scrubber
+ *   or transport there (a filmstrip, a video seek bar) would otherwise have a vertical-first start
+ *   on it open the bottom room instead of scrubbing. The zone becomes
+ *   `[h - inset - reserve - edge, h - inset - reserve]` and the edge hint moves up with it.
+ * @param bottomPeek turns the BOTTOM room into a two-stage reveal: a strip this many dp tall,
+ *   then the whole room. Null (the default) keeps the single-stage room every consumer has always
+ *   had. A release in the lower part of the pull settles on the strip, a pull past it carries on to
+ *   full, a flick up from the strip opens the room and a flick down closes it;
+ *   [SpatialController.bottomStage] says which stage is showing, and [SpatialController.peekBottom]
+ *   opens straight to the strip.
+ *
+ *   **What the number means.** The room arrives TOP-first and is inset by [SpatialMotion.BAND_DP]
+ *   at its head, so the strip is the first `bottomPeek` of the room's own content, below that
+ *   band. The shell adds the band itself (and the navigation bar's height, which covers the foot of
+ *   the revealed area), so a host passes just the height of the strip it wants to show and
+ *   anchors it to the TOP of the room's content: `Modifier.height(bottomPeek)` at the head of the
+ *   room is exactly what is on screen at the peek, clear of the nav bar. Content lower down
+ *   arrives as the pull continues, and the room is not told which stage it is in.
+ *
+ *   **When it does not fit.** On a window too short for the strip (it would need more than
+ *   [SpatialMotion.MAX_PEEK_REVEAL] of the height) there is no peek: the room is single-stage and
+ *   [SpatialController.hasBottomPeek] is false — hide the strip then. Whenever the stop moves
+ *   (rotation, insets, density, a new `bottomPeek`) a room parked on the old one follows it; if
+ *   the peek goes away the room closes.
  * @param home the surface the app lives on. Always composed, always alive — even while parked.
  */
 @Composable
@@ -199,6 +203,7 @@ fun SpatialShell(
     parkStyle: ParkStyle = ParkStyle.SLIDE,
     topReserve: Dp = 0.dp,
     bottomPeek: Dp? = null,
+    bottomReserve: Dp = 0.dp,
     home: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -231,6 +236,9 @@ fun SpatialShell(
         WindowInsets.systemGestures.getBottom(density),
     ).toFloat()
     val bottomInset = with(density) { bottomInsetPx.toDp() }
+    // Plus whatever the host owns above the bar (see bottomReserve): the zone is the edge band
+    // that ends where the host's own surface begins.
+    val bottomReservePx = with(density) { bottomReserve.toPx() }
 
     // Read the axes in composition: the conditional room subtrees below depend on them, so the
     // shell has to recompose as they move anyway. The card's own translation is still deferred
@@ -240,11 +248,11 @@ fun SpatialShell(
     val lift = controller.lift
     val anyRoom = controller.anyRoomVisible
 
-    // The peek stop, as a reveal fraction. The strip the host asked for sits ABOVE the navigation
-    // bar -- the host lays its quick row out with the bar's inset, so the bar's own height is part
-    // of what has to be on screen -- hence the bar alone, not the (possibly larger) gesture inset.
-    // Pushed to the controller as an effect: the controller owns the settle, the shell owns the
-    // measurements the stop is derived from.
+    // The peek stop, as a reveal fraction. The navigation bar covers the foot of what is revealed,
+    // so the strip the host asked for has to clear it -- hence the bar alone, not the (possibly
+    // larger) gesture inset -- and peekReveal adds the head band, which is the room's own empty
+    // inset. Pushed to the controller as an effect: the controller owns the settle (and re-settles
+    // a room parked on the previous stop), the shell owns the measurements the stop comes from.
     val navBarPx = WindowInsets.navigationBars.getBottom(density).toFloat()
     val peekStripPx = if (bottom != null && bottomPeek != null) {
         navBarPx + with(density) { bottomPeek.toPx() }
@@ -252,7 +260,7 @@ fun SpatialShell(
         0f
     }
     val peekAt = peekReveal(peekStripPx, controller.viewport.height.toFloat(), bandPx)
-    SideEffect { controller.bottomPeekReveal = peekAt }
+    SideEffect { controller.updateBottomPeek(peekAt) }
 
     Box(
         modifier = modifier
@@ -266,6 +274,7 @@ fun SpatialShell(
                 edgePx = edgePx,
                 topInsetPx = topInsetPx,
                 bottomInsetPx = bottomInsetPx,
+                bottomReservePx = bottomReservePx,
                 hasLeft = left != null,
                 hasRight = right != null,
                 hasTop = top != null,
@@ -480,8 +489,12 @@ fun SpatialShell(
             // Below the status bar, same reasoning as topInsetPx above: a hint drawn where the
             // gesture cannot actually be claimed teaches the wrong spot to pull from.
             if (top != null) EdgePeek(Alignment.TopCenter, accentColor, vertical = true, belowStatusBar = true)
-            // Above the navigation bar, same reasoning: the zone starts there, so the hint does.
-            if (bottom != null) EdgePeek(Alignment.BottomCenter, accentColor, vertical = true, bottomInset = bottomInset)
+            // Above the navigation bar and the host's reserve, same reasoning: the zone starts
+            // there, so the hint does.
+            if (bottom != null) EdgePeek(
+                Alignment.BottomCenter, accentColor, vertical = true,
+                bottomInset = bottomInset + bottomReserve,
+            )
         }
     }
 }
@@ -554,18 +567,25 @@ private fun BoxScope.EdgePeek(
  * reach the app. The status bar strip itself is never a legal origin — see the KDoc on the
  * call site in [SpatialShell] for why competing with SystemUI there cannot be won.
  * [bottomInsetPx] does the same for the bottom edge against the navigation bar or gesture bar:
- * the zone is the [EDGE_DP] ending at the inset, not the window's last [EDGE_DP].
+ * the zone is the [EDGE_DP] ending at the inset, not the window's last [EDGE_DP]. [bottomReservePx]
+ * lifts it further, over a surface of the host's own (see `bottomReserve` on [SpatialShell]).
+ *
+ * Releases pass the lift's event time, so a hold between the last move and the lift is not read as
+ * the velocity the finger had before it paused ([releaseDelta]).
  */
 private fun Modifier.spatialEdgeDrag(
     controller: SpatialController,
     edgePx: Float,
     topInsetPx: Float,
     bottomInsetPx: Float,
+    bottomReservePx: Float,
     hasLeft: Boolean,
     hasRight: Boolean,
     hasTop: Boolean,
     hasBottom: Boolean,
-): Modifier = pointerInput(controller, edgePx, topInsetPx, bottomInsetPx, hasLeft, hasRight, hasTop, hasBottom) {
+): Modifier = pointerInput(
+    controller, edgePx, topInsetPx, bottomInsetPx, bottomReservePx, hasLeft, hasRight, hasTop, hasBottom,
+) {
     awaitEachGesture {
         val down = awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
         // Only home opens rooms. Once one is open, the parked card's return-drag owns the shell.
@@ -574,7 +594,7 @@ private fun Modifier.spatialEdgeDrag(
         val fromRight = hasRight && down.position.x >= size.width - edgePx
         val fromTop = hasTop && inTopEdgeZone(down.position.y, topInsetPx, edgePx)
         val fromBottom = hasBottom &&
-            inBottomEdgeZone(down.position.y, size.height.toFloat(), bottomInsetPx, edgePx)
+            inBottomEdgeZone(down.position.y, size.height.toFloat(), bottomInsetPx, edgePx, bottomReservePx)
         if (!fromLeft && !fromRight && !fromTop && !fromBottom) return@awaitEachGesture
 
         var dx = 0f
@@ -598,27 +618,35 @@ private fun Modifier.spatialEdgeDrag(
             // so an overshoot back past 0 cannot flip into the opposite room mid-gesture.
             val min = if (fromRight) -1f else 0f
             val max = if (fromLeft) 1f else 0f
+            var releasedAt = -1L
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                if (!change.pressed) break
-                controller.dragH(change.positionChange().x, min, max)
+                if (!change.pressed) {
+                    releasedAt = change.uptimeMillis
+                    break
+                }
+                controller.dragH(change.positionChange().x, min, max, change.uptimeMillis)
                 // Consume now that the axis is claimed, so anything downstream stays still.
                 change.consume()
             }
-            controller.settleH()
+            controller.settleH(releasedAt)
         } else {
             // Top edge pulls the top room down (v → +1); bottom edge pushes it up (v → −1).
             val min = if (fromBottom) -1f else 0f
             val max = if (fromTop) 1f else 0f
+            var releasedAt = -1L
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                if (!change.pressed) break
-                controller.dragV(change.positionChange().y, min, max)
+                if (!change.pressed) {
+                    releasedAt = change.uptimeMillis
+                    break
+                }
+                controller.dragV(change.positionChange().y, min, max, change.uptimeMillis)
                 change.consume()
             }
-            controller.settleV()
+            controller.settleV(releasedAt)
         }
     }
 }
@@ -641,6 +669,11 @@ private fun Modifier.spatialEdgeDrag(
  * EXISTS, though — without that, closing the left room with momentum drove `h` negative and
  * "opened" a right room the host never supplied, which is precisely the empty void the shell's
  * KDoc promises a missing edge cannot produce.
+ *
+ * A touch only stops being a tap once it has travelled past touch slop in total ([beyondTouchSlop]),
+ * not at the first sub-pixel of jitter: a finger resting on the parked peek card wobbles, and that
+ * is a request to go home, not a drag to settle where it happens to stand. The card still follows
+ * the finger throughout, so the first real drag does not jump.
  */
 private fun Modifier.returnDrag(
     controller: SpatialController,
@@ -659,25 +692,33 @@ private fun Modifier.returnDrag(
             val vMin = if (hasBottom) -1f else 0f
             val vMax = if (hasTop) 1f else 0f
             var moved = false
+            var releasedAt = -1L
+            var totalDx = 0f
+            var totalDy = 0f
             while (true) {
                 val event = awaitPointerEvent()
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                if (!change.pressed) break
+                if (!change.pressed) {
+                    releasedAt = change.uptimeMillis
+                    break
+                }
                 val delta = change.positionChange()
-                if (abs(delta.x) + abs(delta.y) > 0f) moved = true
+                totalDx += delta.x
+                totalDy += delta.y
+                if (!moved && beyondTouchSlop(totalDx, totalDy, viewConfiguration.touchSlop)) moved = true
                 if (horizontal) {
-                    controller.dragH(delta.x, min = hMin, max = hMax)
+                    controller.dragH(delta.x, min = hMin, max = hMax, uptimeMillis = change.uptimeMillis)
                 } else {
-                    controller.dragV(delta.y, min = vMin, max = vMax)
+                    controller.dragV(delta.y, min = vMin, max = vMax, uptimeMillis = change.uptimeMillis)
                 }
                 change.consume()
             }
             when {
-                // A tap that never moved is not a zero-distance drag to settle — it is a
-                // request to go home, and settling would just leave the room open.
+                // A tap that never moved past slop is not a drag to settle — it is a request to
+                // go home, and settling would just leave the room open.
                 !moved -> controller.closeAll()
-                horizontal -> controller.settleH()
-                else -> controller.settleV()
+                horizontal -> controller.settleH(releasedAt)
+                else -> controller.settleV(releasedAt)
             }
         }
     }
