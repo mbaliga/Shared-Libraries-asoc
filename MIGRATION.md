@@ -159,3 +159,28 @@ room to full). `dragH` / `dragV` / `settleH` / `settleV` take an optional traili
 (`-1L` = unknown, which keeps the old behaviour), so hosts that drive the controller from their own
 gesture code can pass `change.uptimeMillis`. On the parked card, a tap now has to stay inside touch
 slop to count: a jittery tap closes instead of re-settling the room where it stands.
+
+## `dev.aarso:cell-shell` — `EdgeTimelineScrubber(edge = ...)`
+
+**Version:** unchanged (`0.1.0`). Additive; a call that does not pass `edge` is unchanged.
+
+```kotlin
+EdgeTimelineScrubber(..., edge = ScrubberEdge.BOTTOM, modifier = Modifier.align(Alignment.BottomCenter))
+```
+
+- `edge: ScrubberEdge = ScrubberEdge.RIGHT` (new enum `LEFT`, `RIGHT`, `TOP`, `BOTTOM`) is the last
+  parameter. The default is the strip as it was: right-edge, 44dp wide, full height, track and ticks
+  hugging the right, bubble opening to the left. Index mapping, label positions and bubble geometry
+  for `RIGHT` are pinned numerically by `ScrubberEdgeTest`, so Fylz and other existing callers need
+  no change.
+- `LEFT` mirrors it (track on the left, labels left-anchored, bubble opens to the right). `TOP` and
+  `BOTTOM` run horizontally: the strip is the full width of its parent and 44dp tall, scrubbed left
+  to right (start of the list on the left), labels centred on their stop and thinned at a 40dp pitch
+  (a vertical strip keeps 14dp), the bubble opens below a `TOP` strip and above a `BOTTOM` one.
+- Gesture exclusion (`systemGestureExclusion`) is requested for `LEFT` / `RIGHT` only; Android's
+  edge swipes are the side ones. The host places the strip and keeps a `BOTTOM` strip above the
+  navigation / gesture inset itself, as the shell does for its own bottom zone.
+- The strip still does not claim a touch until it travels past slop **along its axis**, and gives
+  the gesture up if the travel is across it, so a vertical strip and the shell's horizontal edge
+  drag (and a horizontal strip and its vertical one) do not fight. Only the strip's own first and
+  last 56dp overlap a room's edge zone.
