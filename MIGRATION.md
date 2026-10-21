@@ -94,3 +94,40 @@ Preview safety properties, pinned by tests in `CrashReportTest`:
 - **Continue is inert** beyond closing the screen — previewing never relaunches the app.
 - The report is synthesized, never read from disk, so previewing works with no captured crash
   and cannot consume a real pending one.
+
+## `dev.aarso:cell-shell` — nav-bar-aware bottom zone and the optional bottom peek
+
+**Version:** unchanged (`0.1.0`). Source-compatible; nothing to do unless you want the new stage.
+
+### One behaviour change for every consumer: the bottom pull zone
+
+`SpatialShell`'s bottom edge acquisition zone used to be the window's last 56dp. Edge-to-edge
+hosts therefore lost most of it to the navigation bar (a 48dp 3-button bar left 8dp; gesture
+navigation overlapped the home swipe). The zone is now the 56dp band that **ends at the larger of
+the navigation-bar and system-gesture bottom insets**, and the bottom edge hint sits above that
+inset, mirroring how the top zone already sat below the status bar. With no bottom inset (a
+non-edge-to-edge host, or hidden bars) it is identical to before. The shell still consumes no
+insets; it only reads them. Pure helpers `inTopEdgeZone` / `inBottomEdgeZone` carry the
+arithmetic and are tested with non-zero insets.
+
+### New and optional: `bottomPeek`
+
+```kotlin
+SpatialShell(..., bottom = { ActionsRoom() }, bottomPeek = 96.dp) { Home() }
+```
+
+- `bottomPeek: Dp? = null`. Null keeps the single-stage room. Set, the bottom room has three
+  stops: closed, a strip `bottomPeek` tall **above the navigation bar**, and full.
+- Release in the lower part of the pull settles on the strip; pulling past it continues to full;
+  a flick up from the strip opens full, a flick down closes; a slow release snaps to the nearest
+  stop (`settleTargetStaged`, pure). `closeAll()` and a tap on the parked card work from any stage.
+- `SpatialController.bottomStage: RoomStage` (`CLOSED` / `PEEK` / `FULL`) is read-only and is the
+  stage a slow release would settle to. `SpatialController.peekBottom()` opens straight to the
+  strip (it is `open(RoomEdge.BOTTOM)` when no peek is configured).
+- `openRoom` stays `HOME` at the peek: a peek is not a fully open room. `anyRoomVisible` is true,
+  so a `BackHandler` bound to it closes the peek.
+- The room is one composable laid out over the whole screen, so to put something in the strip,
+  anchor it to the **bottom** of the room (above the navigation-bar inset). That part is on screen
+  at the peek and stays put as the rest of the room arrives above it.
+- While peeked, the home card is parked (lifted a little) and, as at any parked stage, the whole
+  card is the return affordance: tap closes, dragging it up carries on to full.

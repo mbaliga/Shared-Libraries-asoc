@@ -8,14 +8,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -146,9 +149,11 @@ internal fun parkVeil(lift: Float): Float {
  *
  * - **No design system.** Colours arrive as parameters ([accentColor], [scrimColor], [cardColor])
  *   because some hosts are forbidden from depending on one. Nothing here reads a theme.
- * - **No window insets.** The shell fills whatever it is given; the host decides whether room
- *   content sits under the status bar. Consuming insets here would take that choice away and
- *   also lift the drag-sensitive edges off the physical screen edge.
+ * - **No inset consumption.** The shell fills whatever it is given; the host decides whether room
+ *   content sits under the system bars. It READS the status-bar and navigation-bar insets, but
+ *   only to keep the top and bottom acquisition zones out of pixels the system owns (see
+ *   [inTopEdgeZone] and [inBottomEdgeZone]); it never consumes them, so the host's own insets
+ *   handling is untouched.
  * - **No back handling.** That needs `activity-compose`, which this module does not depend on.
  *   Hosts should wire their own: `BackHandler(enabled = controller.anyRoomVisible) {
  *   controller.closeAll() }`.
@@ -169,6 +174,15 @@ internal fun parkVeil(lift: Float): Float {
  *   otherwise have that surface's own drag swallowed by the shell's top-room gesture, since both
  *   live in the same 56dp of screen and the shell claims pointers on the Initial pass. Reserving
  *   the strip hands those pixels back, and the top room stays reachable directly beneath it.
+ * @param bottomPeek turns the BOTTOM room into a two-stage reveal: a strip this many dp tall
+ *   above the navigation bar, then the whole room. Null (the default) keeps the single-stage
+ *   room every consumer has always had. A release in the lower part of the pull settles on the
+ *   strip, a pull past it carries on to full, a flick up from the strip opens the room and a flick
+ *   down closes it; [SpatialController.bottomStage] says which stage is showing, and
+ *   [SpatialController.peekBottom] opens straight to the strip. The room is not told the stage —
+ *   it is one composable laid out in the whole screen — so to have something to show in the strip,
+ *   anchor it to the BOTTOM of the room (above the navigation-bar inset), which is the part of the
+ *   room that is on screen at the peek and stays put as the rest of the room arrives above it.
  * @param home the surface the app lives on. Always composed, always alive — even while parked.
  */
 @Composable
@@ -184,6 +198,7 @@ fun SpatialShell(
     bottom: (@Composable () -> Unit)? = null,
     parkStyle: ParkStyle = ParkStyle.SLIDE,
     topReserve: Dp = 0.dp,
+    bottomPeek: Dp? = null,
     home: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -203,6 +218,19 @@ fun SpatialShell(
     // gesture is a coin flip, and moving ours below it costs the top room nothing.
     val topInsetPx = WindowInsets.statusBars.getTop(density).toFloat() +
         with(density) { topReserve.toPx() }
+    // The bottom zone is the mirror image, and matters more: the bottom room is the primary one in
+    // some hosts. Both activities are edge-to-edge, so the window's last EDGE_DP is partly the
+    // navigation bar -- with a 48dp 3-button bar only an 8dp strip of the zone was reachable, and
+    // under gesture navigation the system home swipe sits over the lowest ~32dp. The zone is
+    // therefore the EDGE_DP that ENDS where the system's pixels begin. systemGestures is read as
+    // well as navigationBars because the gesture inset is what actually reserves the home swipe
+    // (and is the larger of the two on some devices); the bigger one wins so the zone and the
+    // hint, which sits on top of it, stay clear of whichever is taller.
+    val bottomInsetPx = maxOf(
+        WindowInsets.navigationBars.getBottom(density),
+        WindowInsets.systemGestures.getBottom(density),
+    ).toFloat()
+    val bottomInset = with(density) { bottomInsetPx.toDp() }
 
     // Read the axes in composition: the conditional room subtrees below depend on them, so the
     // shell has to recompose as they move anyway. The card's own translation is still deferred
@@ -211,6 +239,20 @@ fun SpatialShell(
     val vProgress = controller.vProgress
     val lift = controller.lift
     val anyRoom = controller.anyRoomVisible
+
+    // The peek stop, as a reveal fraction. The strip the host asked for sits ABOVE the navigation
+    // bar -- the host lays its quick row out with the bar's inset, so the bar's own height is part
+    // of what has to be on screen -- hence the bar alone, not the (possibly larger) gesture inset.
+    // Pushed to the controller as an effect: the controller owns the settle, the shell owns the
+    // measurements the stop is derived from.
+    val navBarPx = WindowInsets.navigationBars.getBottom(density).toFloat()
+    val peekStripPx = if (bottom != null && bottomPeek != null) {
+        navBarPx + with(density) { bottomPeek.toPx() }
+    } else {
+        0f
+    }
+    val peekAt = peekReveal(peekStripPx, controller.viewport.height.toFloat(), bandPx)
+    SideEffect { controller.bottomPeekReveal = peekAt }
 
     Box(
         modifier = modifier
@@ -223,6 +265,7 @@ fun SpatialShell(
                 controller = controller,
                 edgePx = edgePx,
                 topInsetPx = topInsetPx,
+                bottomInsetPx = bottomInsetPx,
                 hasLeft = left != null,
                 hasRight = right != null,
                 hasTop = top != null,
@@ -437,7 +480,8 @@ fun SpatialShell(
             // Below the status bar, same reasoning as topInsetPx above: a hint drawn where the
             // gesture cannot actually be claimed teaches the wrong spot to pull from.
             if (top != null) EdgePeek(Alignment.TopCenter, accentColor, vertical = true, belowStatusBar = true)
-            if (bottom != null) EdgePeek(Alignment.BottomCenter, accentColor, vertical = true)
+            // Above the navigation bar, same reasoning: the zone starts there, so the hint does.
+            if (bottom != null) EdgePeek(Alignment.BottomCenter, accentColor, vertical = true, bottomInset = bottomInset)
         }
     }
 }
@@ -471,11 +515,13 @@ private fun BoxScope.EdgePeek(
     accentColor: Color,
     vertical: Boolean = false,
     belowStatusBar: Boolean = false,
+    bottomInset: Dp = 0.dp,
 ) {
     Box(
         modifier = Modifier
             .align(alignment)
             .then(if (belowStatusBar) Modifier.statusBarsPadding() else Modifier)
+            .padding(bottom = bottomInset)
             .padding(8.dp)
             .then(
                 if (vertical) Modifier.size(width = 56.dp, height = 4.dp)
@@ -507,24 +553,28 @@ private fun BoxScope.EdgePeek(
  * shrinking it: the zone stays [EDGE_DP] tall, it just starts where a touch can actually
  * reach the app. The status bar strip itself is never a legal origin — see the KDoc on the
  * call site in [SpatialShell] for why competing with SystemUI there cannot be won.
+ * [bottomInsetPx] does the same for the bottom edge against the navigation bar or gesture bar:
+ * the zone is the [EDGE_DP] ending at the inset, not the window's last [EDGE_DP].
  */
 private fun Modifier.spatialEdgeDrag(
     controller: SpatialController,
     edgePx: Float,
     topInsetPx: Float,
+    bottomInsetPx: Float,
     hasLeft: Boolean,
     hasRight: Boolean,
     hasTop: Boolean,
     hasBottom: Boolean,
-): Modifier = pointerInput(controller, edgePx, topInsetPx, hasLeft, hasRight, hasTop, hasBottom) {
+): Modifier = pointerInput(controller, edgePx, topInsetPx, bottomInsetPx, hasLeft, hasRight, hasTop, hasBottom) {
     awaitEachGesture {
         val down = awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
         // Only home opens rooms. Once one is open, the parked card's return-drag owns the shell.
         if (!controller.atHome) return@awaitEachGesture
         val fromLeft = hasLeft && down.position.x <= edgePx
         val fromRight = hasRight && down.position.x >= size.width - edgePx
-        val fromTop = hasTop && down.position.y in topInsetPx..(topInsetPx + edgePx)
-        val fromBottom = hasBottom && down.position.y >= size.height - edgePx
+        val fromTop = hasTop && inTopEdgeZone(down.position.y, topInsetPx, edgePx)
+        val fromBottom = hasBottom &&
+            inBottomEdgeZone(down.position.y, size.height.toFloat(), bottomInsetPx, edgePx)
         if (!fromLeft && !fromRight && !fromTop && !fromBottom) return@awaitEachGesture
 
         var dx = 0f
