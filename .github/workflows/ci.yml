@@ -28,8 +28,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Pin the packages: with no list the action asks sdkmanager for the legacy `tools`
+      # package, which the runner's current cmdline-tools no longer offers, so the job died
+      # here before any build step ran.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
 
       - name: Install platform + build-tools
         run: |
