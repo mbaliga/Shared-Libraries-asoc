@@ -12,6 +12,7 @@ code** — it is images and a manifest, consumed as an asset source-set director
 - **Fauna** — ten die-cut insect and animal illustrations (leaf-footed bug, treehoppers,
   lanternfly, shield bug, spiny caterpillar, pink frog, bird-of-paradise, deep-sea drifter,
   …).
+- **Toolz** — 28 die-cut portrait stickers (emotions, work, music, food, a sunset), cut from the owner's master sheet into 512px RGBA PNGs in a flat `toolz/` folder. Supplied by the project owner; the likeness is of a real person, so shipping it publicly is the owner's call.
 - **Flora** — reserved. Empty until plant artwork arrives; see `flora/README.md`.
 
 ## Layout
@@ -29,6 +30,8 @@ stickers/
     preview-*.png                 contact sheets, not part of the sticker set
   fauna/
     NN-name.png                  10 die-cut illustrations (no contact sheet yet)
+  toolz/
+    NN-name.png                  28 die-cut 512px RGBA PNGs, flat
   flora/                          reserved, empty
   android-assets/                GENERATED — see below, never hand-edited
     default_stickers/

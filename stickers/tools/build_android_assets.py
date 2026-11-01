@@ -17,8 +17,9 @@ CATS = {
             ('03-affection-support', 'Love'), ('04-everyday-life', 'Life')],
     'fauna': [('', 'Fauna')],
     'flora': [('', 'Flora')],
+    'toolz': [('', 'Toolz')],
 }
-PACK_LABEL = {'bao': 'Bao', 'fauna': 'Fauna', 'flora': 'Flora'}
+PACK_LABEL = {'bao': 'Bao', 'fauna': 'Fauna', 'flora': 'Flora', 'toolz': 'Toolz'}
 
 # rel path ("<pack>/[<category>/]<file>.png") -> extra search words, layered on top of the
 # words mechanically derived from the file stem. 75 of 115 stems today derive to exactly one
@@ -126,6 +127,34 @@ SYNONYMS = {
     'fauna/08-pink-frog.png': ['frog', 'animal'],
     'fauna/09-bird-of-paradise.png': ['bird', 'animal'],
     'fauna/10-deep-sea-drifter.png': ['jellyfish', 'sea', 'animal'],
+    'toolz/01-smile.png': ['hello', 'hi', 'smile', 'nice'],
+    'toolz/02-white-shirt.png': ['formal', 'work', 'polite', 'professional'],
+    'toolz/03-laughing.png': ['lol', 'haha', 'funny', 'laugh'],
+    'toolz/04-pointing.png': ['you', 'this', 'look', 'there'],
+    'toolz/05-heart-chin.png': ['cute', 'aww', 'love', 'flirty'],
+    'toolz/06-headphones.png': ['music', 'vibe', 'listening', 'chill'],
+    'toolz/07-writing.png': ['notes', 'journal', 'write', 'study'],
+    'toolz/08-pen-thinking.png': ['typing', 'chat', 'hmm', 'thinking', 'dots'],
+    'toolz/09-idea.png': ['lightbulb', 'eureka', 'thought', 'aha'],
+    'toolz/10-question.png': ['confused', 'what', 'why', 'huh'],
+    'toolz/11-smug.png': ['proud', 'confident', 'sassy', 'whatever'],
+    'toolz/12-phone.png': ['text', 'texting', 'scrolling', 'busy', 'ignore'],
+    'toolz/13-piano.png': ['music', 'play', 'song', 'notes'],
+    'toolz/14-reading.png': ['book', 'study', 'read'],
+    'toolz/15-workout.png': ['gym', 'exercise', 'yoga', 'sweat', 'fitness'],
+    'toolz/16-watch.png': ['late', 'time', 'hurry', 'waiting', 'now'],
+    'toolz/17-water-bottle.png': ['drink', 'thirsty', 'hydrate', 'water'],
+    'toolz/18-noodles.png': ['eat', 'food', 'hungry', 'lunch', 'dinner', 'ramen'],
+    'toolz/19-coffee.png': ['brew', 'morning', 'cafe', 'tea', 'pour'],
+    'toolz/20-laptop-code.png': ['code', 'dev', 'developer', 'programming', 'work'],
+    'toolz/21-puzzle.png': ['solve', 'piece', 'problem', 'fit'],
+    'toolz/22-fountain-pen.png': ['write', 'signature', 'letter', 'ink', 'calligraphy'],
+    'toolz/23-tablet.png': ['draw', 'design', 'work', 'ipad'],
+    'toolz/24-hoodie.png': ['cozy', 'sleepy', 'tired', 'spooky', 'halloween'],
+    'toolz/25-sunglasses.png': ['cool', 'kiss', 'summer', 'mwah', 'hat'],
+    'toolz/26-rearview-mirror.png': ['driving', 'drive', 'eyes', 'watching', 'car'],
+    'toolz/27-sunbathing.png': ['laugh', 'beach', 'summer', 'happy', 'joy'],
+    'toolz/28-sunset.png': ['beach', 'sea', 'evening', 'goodbye', 'bye', 'view'],
 }
 
 def quant(src, dst):

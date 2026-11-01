@@ -1155,6 +1155,343 @@
    "id": "flora",
    "label": "Flora",
    "categories": []
+  },
+  {
+   "id": "toolz",
+   "label": "Toolz",
+   "categories": [
+    {
+     "id": "toolz",
+     "label": "Toolz",
+     "stickers": [
+      {
+       "file": "toolz/01-smile.png",
+       "name": "Smile",
+       "keywords": [
+        "smile",
+        "hello",
+        "hi",
+        "nice"
+       ]
+      },
+      {
+       "file": "toolz/02-white-shirt.png",
+       "name": "White shirt",
+       "keywords": [
+        "white",
+        "shirt",
+        "formal",
+        "work",
+        "polite",
+        "professional"
+       ]
+      },
+      {
+       "file": "toolz/03-laughing.png",
+       "name": "Laughing",
+       "keywords": [
+        "laughing",
+        "lol",
+        "haha",
+        "funny",
+        "laugh"
+       ]
+      },
+      {
+       "file": "toolz/04-pointing.png",
+       "name": "Pointing",
+       "keywords": [
+        "pointing",
+        "you",
+        "this",
+        "look",
+        "there"
+       ]
+      },
+      {
+       "file": "toolz/05-heart-chin.png",
+       "name": "Heart chin",
+       "keywords": [
+        "heart",
+        "chin",
+        "cute",
+        "aww",
+        "love",
+        "flirty"
+       ]
+      },
+      {
+       "file": "toolz/06-headphones.png",
+       "name": "Headphones",
+       "keywords": [
+        "headphones",
+        "music",
+        "vibe",
+        "listening",
+        "chill"
+       ]
+      },
+      {
+       "file": "toolz/07-writing.png",
+       "name": "Writing",
+       "keywords": [
+        "writing",
+        "notes",
+        "journal",
+        "write",
+        "study"
+       ]
+      },
+      {
+       "file": "toolz/08-pen-thinking.png",
+       "name": "Pen thinking",
+       "keywords": [
+        "pen",
+        "thinking",
+        "typing",
+        "chat",
+        "hmm",
+        "dots"
+       ]
+      },
+      {
+       "file": "toolz/09-idea.png",
+       "name": "Idea",
+       "keywords": [
+        "idea",
+        "lightbulb",
+        "eureka",
+        "thought",
+        "aha"
+       ]
+      },
+      {
+       "file": "toolz/10-question.png",
+       "name": "Question",
+       "keywords": [
+        "question",
+        "confused",
+        "what",
+        "why",
+        "huh"
+       ]
+      },
+      {
+       "file": "toolz/11-smug.png",
+       "name": "Smug",
+       "keywords": [
+        "smug",
+        "proud",
+        "confident",
+        "sassy",
+        "whatever"
+       ]
+      },
+      {
+       "file": "toolz/12-phone.png",
+       "name": "Phone",
+       "keywords": [
+        "phone",
+        "text",
+        "texting",
+        "scrolling",
+        "busy",
+        "ignore"
+       ]
+      },
+      {
+       "file": "toolz/13-piano.png",
+       "name": "Piano",
+       "keywords": [
+        "piano",
+        "music",
+        "play",
+        "song",
+        "notes"
+       ]
+      },
+      {
+       "file": "toolz/14-reading.png",
+       "name": "Reading",
+       "keywords": [
+        "reading",
+        "book",
+        "study",
+        "read"
+       ]
+      },
+      {
+       "file": "toolz/15-workout.png",
+       "name": "Workout",
+       "keywords": [
+        "workout",
+        "gym",
+        "exercise",
+        "yoga",
+        "sweat",
+        "fitness"
+       ]
+      },
+      {
+       "file": "toolz/16-watch.png",
+       "name": "Watch",
+       "keywords": [
+        "watch",
+        "late",
+        "time",
+        "hurry",
+        "waiting",
+        "now"
+       ]
+      },
+      {
+       "file": "toolz/17-water-bottle.png",
+       "name": "Water bottle",
+       "keywords": [
+        "water",
+        "bottle",
+        "drink",
+        "thirsty",
+        "hydrate"
+       ]
+      },
+      {
+       "file": "toolz/18-noodles.png",
+       "name": "Noodles",
+       "keywords": [
+        "noodles",
+        "eat",
+        "food",
+        "hungry",
+        "lunch",
+        "dinner",
+        "ramen"
+       ]
+      },
+      {
+       "file": "toolz/19-coffee.png",
+       "name": "Coffee",
+       "keywords": [
+        "coffee",
+        "brew",
+        "morning",
+        "cafe",
+        "tea",
+        "pour"
+       ]
+      },
+      {
+       "file": "toolz/20-laptop-code.png",
+       "name": "Laptop code",
+       "keywords": [
+        "laptop",
+        "code",
+        "dev",
+        "developer",
+        "programming",
+        "work"
+       ]
+      },
+      {
+       "file": "toolz/21-puzzle.png",
+       "name": "Puzzle",
+       "keywords": [
+        "puzzle",
+        "solve",
+        "piece",
+        "problem",
+        "fit"
+       ]
+      },
+      {
+       "file": "toolz/22-fountain-pen.png",
+       "name": "Fountain pen",
+       "keywords": [
+        "fountain",
+        "pen",
+        "write",
+        "signature",
+        "letter",
+        "ink",
+        "calligraphy"
+       ]
+      },
+      {
+       "file": "toolz/23-tablet.png",
+       "name": "Tablet",
+       "keywords": [
+        "tablet",
+        "draw",
+        "design",
+        "work",
+        "ipad"
+       ]
+      },
+      {
+       "file": "toolz/24-hoodie.png",
+       "name": "Hoodie",
+       "keywords": [
+        "hoodie",
+        "cozy",
+        "sleepy",
+        "tired",
+        "spooky",
+        "halloween"
+       ]
+      },
+      {
+       "file": "toolz/25-sunglasses.png",
+       "name": "Sunglasses",
+       "keywords": [
+        "sunglasses",
+        "cool",
+        "kiss",
+        "summer",
+        "mwah",
+        "hat"
+       ]
+      },
+      {
+       "file": "toolz/26-rearview-mirror.png",
+       "name": "Rearview mirror",
+       "keywords": [
+        "rearview",
+        "mirror",
+        "driving",
+        "drive",
+        "eyes",
+        "watching",
+        "car"
+       ]
+      },
+      {
+       "file": "toolz/27-sunbathing.png",
+       "name": "Sunbathing",
+       "keywords": [
+        "sunbathing",
+        "laugh",
+        "beach",
+        "summer",
+        "happy",
+        "joy"
+       ]
+      },
+      {
+       "file": "toolz/28-sunset.png",
+       "name": "Sunset",
+       "keywords": [
+        "sunset",
+        "beach",
+        "sea",
+        "evening",
+        "goodbye",
+        "bye",
+        "view"
+       ]
+      }
+     ]
+    }
+   ]
   }
  ]
 }
