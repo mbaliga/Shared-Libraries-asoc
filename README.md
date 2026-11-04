@@ -13,6 +13,10 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:feedback` | `dev.aarso:feedback` | Android library | Opt-in feedback for experimental features: a fully user-readable draft, delivered only by a share/mail chooser the user launches. No telemetry, no network, ever. |
 | `:evidence-schema` | `dev.aarso:evidence-schema` | pure JVM/resources | Versioned portable JSON schemas for evidence/event exchange across Baseline, Crocodyl, and Ebbflow. |
 
+**Web modules** live under [`web/orrery-kit/`](web/orrery-kit/README.md): dependency-free browser files
+(`cells`, `sfx`, `rose`, `brands`, `Graph`, `gantt`) carved out of Orrery so that no app draws the same thing twice.
+They are consumed by copying or submodule, with no bundler assumed.
+
 Multi-platform porting plan (Ubuntu Touch, Linux, iOS/iPadOS, macOS, Windows — a plan only, nothing built): [PORTING_PLAN.md](PORTING_PLAN.md).
 
 `local-session-core` is the reserved home for Bocal's local multiplayer/session transport. It is
