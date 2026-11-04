@@ -98,6 +98,27 @@ data class CrashReport(
         const val STREAK_WINDOW_MS = 60_000L
 
         /**
+         * Upper bound on the stack trace kept in a report (characters). A StackOverflowError
+         * trace is ~1024 frames and a deeply wrapped one can be larger still; unbounded, that
+         * text is written on the crash path, re-read on every launch, put in a TextView and
+         * handed to a mail Intent. Past the cap the MIDDLE is dropped (see [capTrace]): the top
+         * frames say where it died and the tail carries the `Caused by:` chain.
+         */
+        const val MAX_TRACE_CHARS = 64_000
+
+        /** Upper bound on the exception message kept in a report (characters). */
+        const val MAX_MESSAGE_CHARS = 2_000
+
+        /** [trace] bounded to [max] characters, keeping the head and the tail and saying what was dropped. */
+        fun capTrace(trace: String, max: Int = MAX_TRACE_CHARS): String {
+            if (trace.length <= max) return trace
+            val head = max * 3 / 4
+            val tail = max - head
+            val dropped = trace.length - head - tail
+            return trace.substring(0, head) + "\n… [$dropped characters omitted] …\n" + trace.substring(trace.length - tail)
+        }
+
+        /**
          * The consecutive-crash count after a new crash at [nowMillis], given the previous
          * [prevCount] captured at [prevMillis]. Increments only when the new crash lands inside
          * [windowMs] of the last one; otherwise it's a fresh incident (count 1). A backwards
@@ -246,16 +267,24 @@ data class CrashReport(
             threadName: String,
             throwable: Throwable,
             device: DeviceInfo,
-        ): CrashReport = CrashReport(
-            appLabel = appLabel,
-            whenMillis = whenMillis,
-            threadName = threadName,
-            excType = typeOf(throwable),
-            excMessage = throwable.message?.takeIf { it.isNotBlank() },
-            plainLanguage = plainLanguageFor(throwable),
-            device = device,
-            trace = stackTraceOf(throwable),
-        )
+            sanitizer: ((String) -> String)? = null,
+        ): CrashReport {
+            val clean: (String) -> String = { text ->
+                // A sanitizer that throws must not lose the report, nor leak the raw text:
+                // fall back to dropping the text it could not clean.
+                if (sanitizer == null) text else runCatching { sanitizer(text) }.getOrDefault("[redaction failed]")
+            }
+            return CrashReport(
+                appLabel = appLabel,
+                whenMillis = whenMillis,
+                threadName = threadName,
+                excType = typeOf(throwable),
+                excMessage = throwable.message?.takeIf { it.isNotBlank() }?.let(clean)?.take(MAX_MESSAGE_CHARS),
+                plainLanguage = plainLanguageFor(throwable),
+                device = device,
+                trace = capTrace(clean(stackTraceOf(throwable))),
+            )
+        }
 
         /**
          * A report for a process death the JVM handler never saw — a native crash or an ANR
@@ -271,12 +300,17 @@ data class CrashReport(
             description: String?,
             whenMillis: Long,
             device: DeviceInfo,
-        ): CrashReport = CrashReport(
+            sanitizer: ((String) -> String)? = null,
+        ): CrashReport {
+            val detail = description?.takeIf { it.isNotBlank() }
+                ?.let { d -> if (sanitizer == null) d else runCatching { sanitizer(d) }.getOrDefault("[redaction failed]") }
+                ?.take(MAX_MESSAGE_CHARS)
+            return CrashReport(
             appLabel = appLabel,
             whenMillis = whenMillis,
             threadName = "?",
             excType = reasonLabel,
-            excMessage = description?.takeIf { it.isNotBlank() },
+            excMessage = detail,
             plainLanguage = when {
                 reasonLabel.startsWith("Native") ->
                     "$appLabel was stopped by a crash inside one of its native components — " +
@@ -290,9 +324,10 @@ data class CrashReport(
                 append("No Java stack trace exists for this kind of death.\n")
                 append("Recorded by Android (ApplicationExitInfo):\n")
                 append("  reason: ").append(reasonLabel).append('\n')
-                append("  detail: ").append(description?.takeIf { it.isNotBlank() } ?: "(none recorded)")
+                append("  detail: ").append(detail ?: "(none recorded)")
             },
-        )
+            )
+        }
 
         /**
          * Decode [encode]'s v2 format into a display-ready [Decoded] with every structured

@@ -18,6 +18,17 @@ plugins {
 val crashRecoveryGroup = "dev.aarso"
 val crashRecoveryArtifact = "crash-recovery"
 
+// 1.7.0 — hardening. Every file this module writes (pending report, streak, attempt count, exit
+// watermark, each history entry) is now written atomically (temp file, fsync, rename) and read
+// bounded, so a death mid-write can no longer leave a blank "crash" behind. Reports are capped
+// (CrashReport.MAX_TRACE_CHARS, MAX_MESSAGE_CHARS). install() takes a sanitizer so a host can redact
+// free text (exception messages quote app data) BEFORE it reaches disk, and a contextWrapper so the
+// recovery screen follows the host's in-app language; install() is idempotent. A JVM crash's own
+// ApplicationExitInfo record no longer resurfaces as a second, stack-less report after Continue.
+// Discard also removes the history copy. A recovery screen that cannot be built falls back to a
+// minimal plain one before it gives up on recovery. Every user-visible string is a resource, with
+// es, de and hi translations (the SHARED report text stays English on purpose).
+//
 // 1.6.0 — adds a bounded crash HISTORY, distinct from the single "pending" slot the rest
 // of this module manages: every capture (JVM crash or captureExitDeath) now also lands in
 // a crash_recovery_history/ subdirectory of filesDir, one file per crash, so a consuming
@@ -56,7 +67,7 @@ val crashRecoveryArtifact = "crash-recovery"
 // crash loop where the OS showed "keeps stopping" and our recovery screen never could.
 // (1.2.0 was the first release from this home: hyle-design-system@c586f8f + previewIntent
 // merged forward from the never-merged 33b0faa. See MIGRATION.md.)
-val crashRecoveryVersion = "1.6.0"
+val crashRecoveryVersion = "1.7.0"
 
 // Project coordinate — required for Gradle composite-build (`includeBuild`) dependency
 // substitution, which is how every consumer resolves this module.
