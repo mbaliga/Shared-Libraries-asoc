@@ -6,6 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantLock
 
 /**
  * The shared crash-recovery utility: **install** an uncaught-exception handler that
@@ -40,15 +44,83 @@ object CrashRecovery {
     private const val EXIT_SEEN_FILE_NAME = "crash_recovery_exit_seen.txt"
     // A historical exit older than this is stale context, not news — don't resurface it.
     private const val EXIT_MAX_AGE_MILLIS = 7L * 24 * 60 * 60 * 1000
+    // Bookkeeping for the hard N-attempt ceiling on a single pending report (see
+    // bumpAttemptAndCheckCeiling) — separate from the streak file, which counts something
+    // different (consecutive crashes close together in time, not repeated recovery launches
+    // for the same unresolved report).
+    private const val ATTEMPT_FILE_NAME = "crash_recovery_attempts.txt"
+    // Bounded per-crash history (see history/clearHistory/removeHistoryEntry): one file per
+    // capture in this subdirectory of filesDir, named by CrashReport.historyFileName so the
+    // newest-first listing is a plain numeric sort and decode() needs no changes.
+    private const val HISTORY_DIR_NAME = "crash_recovery_history"
+    // The durable "recovery screen started building its own UI and hasn't finished" marker
+    // (see markRecoveryEntryStarted). SharedPreferences + commit() rather than a plain file:
+    // this has to survive a death that happens WHILE it's being written far more reliably than
+    // this module's other files need to, since it exists specifically to detect that kind of
+    // death on the next launch.
+    private const val ENTRY_PREFS_NAME = "dev.aarso.crashrecovery.entry"
+    private const val ENTRY_KEY = "recovery_entry_in_progress"
 
-    /** Installs the handler. Chains to any previously-installed handler so this composes. */
-    fun install(app: Application, appLabel: String) {
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            runCatching { capture(app, appLabel, throwable, thread.name) }
-            previous?.uncaughtException(thread, throwable)
+    // What the installed handler captures for. Held in one place so installing twice (a second
+    // Application, a test) re-points the SAME handler instead of stacking a second one: two
+    // stacked handlers would capture one crash twice and count a single crash as a streak of 2.
+    private class Installed(
+        @Volatile var app: Application,
+        @Volatile var label: String,
+        val previous: Thread.UncaughtExceptionHandler?,
+    ) : Thread.UncaughtExceptionHandler {
+        override fun uncaughtException(t: Thread, e: Throwable) {
+            // The same throwable reaching us twice (a chained handler re-delivering it) is one crash.
+            if (lastThrowable.getAndSet(e) !== e) runCatching { capture(app, label, e, t.name) }
+            previous?.uncaughtException(t, e)
         }
     }
+    private val lastThrowable = AtomicReference<Throwable?>(null)
+    @Volatile private var installed: Installed? = null
+
+    // Serialises captures: a main-thread and a background crash can land together, and the streak
+    // is a read-modify-write. A bounded tryLock, never a plain lock: a capture stuck on slow disk
+    // must not stop the OTHER crashing thread from reaching the previous handler and dying.
+    private val captureLock = ReentrantLock()
+
+    /** Redacts report text on the way to disk; see [install]. */
+    @Volatile private var sanitizer: ((String) -> String)? = null
+    @Volatile private var contextWrapper: ((Context) -> Context)? = null
+
+    /**
+     * Installs the handler. Chains to any previously-installed handler so this composes, and is
+     * idempotent: a second call re-points the existing handler rather than adding another.
+     *
+     * [sanitizer] is applied to every piece of free text that goes into a report (the exception
+     * message, each `Caused by:` line, an ANR subject) BEFORE it reaches disk, so what is stored,
+     * shown, copied and shared is already clean and there is no un-redacted copy to leak. Exception
+     * messages routinely quote app data (an input string, a JSON body, a file name), which this
+     * module cannot know is private; the host can. [contextWrapper] lets the host apply its own
+     * locale to [CrashRecoveryActivity] (an in-app language picker below Android 13).
+     */
+    fun install(
+        app: Application,
+        appLabel: String,
+        sanitizer: ((String) -> String)? = null,
+        contextWrapper: ((Context) -> Context)? = null,
+    ) {
+        this.sanitizer = sanitizer
+        this.contextWrapper = contextWrapper
+        val current = Thread.getDefaultUncaughtExceptionHandler()
+        val mine = installed
+        if (mine != null && current === mine) {
+            mine.app = app
+            mine.label = appLabel
+            return
+        }
+        val h = Installed(app, appLabel, current)
+        installed = h
+        Thread.setDefaultUncaughtExceptionHandler(h)
+    }
+
+    /** Applies the host's locale wrapper (if any) to [base]; never throws. */
+    internal fun wrapContext(base: Context): Context =
+        runCatching { contextWrapper?.invoke(base) }.getOrNull() ?: base
 
     /**
      * For a failure that happens synchronously during your own init (e.g. a DI container
@@ -61,17 +133,72 @@ object CrashRecovery {
     }
 
     private fun capture(context: Context, appLabel: String, throwable: Throwable, threadName: String) {
-        val now = System.currentTimeMillis()
-        val report = CrashReport.of(
-            appLabel = appLabel,
-            whenMillis = now,
-            threadName = threadName,
-            throwable = throwable,
-            device = deviceInfo(context),
-        )
-        file(context).writeText(report.encode())
-        bumpStreak(context, now)
-        android.util.Log.e("CrashRecovery", "captured crash for $appLabel", throwable)
+        if (!captureLock.tryLock(CAPTURE_LOCK_WAIT_MS, TimeUnit.MILLISECONDS)) return
+        try {
+            val now = System.currentTimeMillis()
+            val report = CrashReport.of(
+                appLabel = appLabel,
+                whenMillis = now,
+                threadName = threadName,
+                throwable = throwable,
+                device = deviceInfo(context),
+                sanitizer = sanitizer,
+            )
+            writeAtomic(file(context), report.encode())
+            bumpStreak(context, now)
+            appendHistory(context, report, now)
+            android.util.Log.e("CrashRecovery", "captured crash for $appLabel", throwable)
+        } finally {
+            captureLock.unlock()
+        }
+    }
+
+    private const val CAPTURE_LOCK_WAIT_MS = 2_000L
+
+    /**
+     * Write [text] to [target] so a reader sees the old file or the new one, never half of one: a
+     * temp file in the same directory, fsync, rename over the target. A process killed mid-write
+     * (the whole situation this module exists for) used to leave a truncated report that decoded as
+     * a blank crash; now it leaves a stray `.tmp` that nothing reads. The temp name carries the
+     * thread id so two threads writing the same target cannot interleave into one temp file.
+     */
+    private fun writeAtomic(target: File, text: String) {
+        val dir = target.absoluteFile.parentFile
+        dir?.mkdirs()
+        val tmp = File(dir, "${target.name}.${Thread.currentThread().id}.tmp")
+        try {
+            FileOutputStream(tmp).use { out ->
+                out.write(text.toByteArray(Charsets.UTF_8))
+                out.flush()
+                runCatching { out.fd.sync() }
+            }
+            if (!tmp.renameTo(target)) {
+                target.delete()
+                if (!tmp.renameTo(target)) throw java.io.IOException("could not replace ${target.name}")
+            }
+        } finally {
+            if (tmp.exists()) tmp.delete()
+        }
+    }
+
+    /** Text of [f], or null if unreadable or blank. Bounded: a corrupt or hostile file cannot OOM a launch. */
+    private fun readBounded(f: File): String? = runCatching {
+        if (!f.isFile) return null
+        val bytes = f.inputStream().use { it.readUpTo(MAX_FILE_BYTES) }
+        String(bytes, Charsets.UTF_8).takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    private const val MAX_FILE_BYTES = 512 * 1024
+
+    private fun java.io.InputStream.readUpTo(max: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(8192)
+        while (out.size() < max) {
+            val n = read(buf, 0, minOf(buf.size, max - out.size()))
+            if (n < 0) break
+            out.write(buf, 0, n)
+        }
+        return out.toByteArray()
     }
 
     // --- consecutive-crash streak (for loop-gated recovery affordances) ---
@@ -80,12 +207,12 @@ object CrashRecovery {
         runCatching {
             val (prevCount, prevMillis) = readStreak(context)
             val next = CrashReport.nextStreakCount(prevCount, prevMillis, nowMillis)
-            streakFile(context).writeText("$next\t$nowMillis")
+            writeAtomic(streakFile(context), "$next\t$nowMillis")
         }
     }
 
     private fun readStreak(context: Context): Pair<Int, Long> = runCatching {
-        val parts = streakFile(context).takeIf { it.exists() }?.readText()?.split('\t') ?: return 0 to 0L
+        val parts = readBounded(streakFile(context))?.trim()?.split('\t') ?: return 0 to 0L
         (parts.getOrNull(0)?.toIntOrNull() ?: 0) to (parts.getOrNull(1)?.toLongOrNull() ?: 0L)
     }.getOrDefault(0 to 0L)
 
@@ -155,7 +282,8 @@ object CrashRecovery {
 
     /** Non-null if a crash was captured and not yet cleared. */
     fun pending(context: Context): CrashReport.Decoded? = runCatching {
-        file(context).takeIf { it.exists() }?.readText()?.let(CrashReport::decode)
+        // A blank or unreadable file (a legacy torn write) is "nothing pending", not a blank crash.
+        readBounded(file(context))?.let(CrashReport::decode)
     }.getOrNull()
 
     /**
@@ -183,7 +311,7 @@ object CrashRecovery {
         if (pending(context) != null) return false
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
         val history = am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
-        val seenUpTo = runCatching { exitSeenFile(context).readText().trim().toLong() }.getOrDefault(0L)
+        val seenUpTo = readExitSeen(context)
         val now = System.currentTimeMillis()
         val death = history.firstOrNull { info ->
             info.timestamp > seenUpTo &&
@@ -200,7 +328,7 @@ object CrashRecovery {
         } ?: return false
         // Advance the watermark BEFORE writing the report: even if the write fails, this death
         // must never become its own recurring report on every subsequent launch.
-        runCatching { exitSeenFile(context).writeText(death.timestamp.toString()) }
+        runCatching { writeAtomic(exitSeenFile(context), death.timestamp.toString()) }
         val reasonLabel = when (death.reason) {
             android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "Native crash"
             android.app.ApplicationExitInfo.REASON_ANR -> "App not responding (ANR)"
@@ -212,20 +340,225 @@ object CrashRecovery {
             description = death.description,
             whenMillis = death.timestamp,
             device = deviceInfo(context),
+            sanitizer = sanitizer,
         )
         // Persist through the SAME file as a JVM crash: CrashRecoveryActivity re-reads
         // pending() itself, so routing through the one store means the whole recovery flow
         // (show, share, copy, clear, streak-gated reset) works for these deaths unchanged.
-        file(context).writeText(report.encode())
+        writeAtomic(file(context), report.encode())
         bumpStreak(context, death.timestamp)
+        appendHistory(context, report, death.timestamp)
         true
     }.getOrDefault(false)
+
+    private fun readExitSeen(context: Context): Long =
+        runCatching { readBounded(exitSeenFile(context))?.trim()?.toLong() }.getOrNull() ?: 0L
+
+    /**
+     * A JVM crash is ALSO an [android.app.ApplicationExitInfo] record (`REASON_CRASH`): the same
+     * death, seen twice. Left alone, tapping Continue on the real report cleared it, and the very
+     * next launch synthesised a second, stack-less "Crash" report from that exit record: the
+     * recovery screen came back once more, and the streak counted one crash as two (which is what
+     * unlocks the data-wiping Reset). So while a real report is pending, mark the exit records that
+     * belong to it as already surfaced. Only runs when a report is pending (a recovery launch).
+     */
+    private fun markJvmExitSeen(context: Context, reportWhenMillis: Long?) {
+        if (Build.VERSION.SDK_INT < 30 || reportWhenMillis == null) return
+        runCatching {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val seen = readExitSeen(context)
+            val newest = am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
+                .filter {
+                    it.reason == android.app.ApplicationExitInfo.REASON_CRASH &&
+                        it.timestamp >= reportWhenMillis - EXIT_MATCH_SLACK_MS &&
+                        it.timestamp <= reportWhenMillis + EXIT_MATCH_WINDOW_MS
+                }
+                .maxOfOrNull { it.timestamp } ?: return
+            if (newest > seen) writeAtomic(exitSeenFile(context), newest.toString())
+        }
+    }
+
+    // The handler stamps the report just BEFORE the process dies; the OS stamps the exit just after.
+    private const val EXIT_MATCH_SLACK_MS = 5_000L
+    private const val EXIT_MATCH_WINDOW_MS = 60_000L
 
     private fun exitSeenFile(context: Context): File =
         File(context.applicationContext.filesDir, EXIT_SEEN_FILE_NAME)
 
     fun clear(context: Context) {
         runCatching { file(context).delete() }
+        // A cleared report has nothing left to count attempts against — forget it too, so a
+        // genuinely new crash later starts its own ceiling at 1 rather than inheriting this
+        // one's count (identityOf would already prevent that, but there's no reason to keep
+        // the file around either).
+        clearAttemptCeiling(context)
+    }
+
+    // --- durable "recovery screen started its own onCreate" marker ---
+
+    private fun entryPrefs(context: Context) =
+        context.applicationContext.getSharedPreferences(ENTRY_PREFS_NAME, Context.MODE_PRIVATE)
+
+    /**
+     * Call at the very top of [CrashRecoveryActivity.onCreate], before anything that could
+     * throw. `commit()`, not `apply()`, on purpose: this marker only earns its keep if it is
+     * actually on disk before the risky UI-building work below it runs, even if the process
+     * dies immediately after — an `apply()` write can still be queued, not yet persisted, when
+     * that happens.
+     */
+    fun markRecoveryEntryStarted(context: Context) {
+        runCatching { entryPrefs(context).edit().putBoolean(ENTRY_KEY, true).commit() }
+    }
+
+    /**
+     * Call once [CrashRecoveryActivity]'s own UI has actually finished — `setContentView`
+     * succeeded, or the user resolved the report via Continue/Discard/Reset.
+     */
+    fun clearRecoveryEntryMarker(context: Context) {
+        runCatching { entryPrefs(context).edit().putBoolean(ENTRY_KEY, false).commit() }
+    }
+
+    /**
+     * True when a PRIOR launch set [markRecoveryEntryStarted] and never reached
+     * [clearRecoveryEntryMarker] — proof the recovery screen itself didn't even finish starting
+     * up last time (e.g. a native crash during view inflation that no `runCatching` inside it
+     * could catch). Showing it again would just repeat the same failure.
+     */
+    fun recoveryEntryMarkerIsStale(context: Context): Boolean =
+        runCatching { entryPrefs(context).getBoolean(ENTRY_KEY, false) }.getOrDefault(false)
+
+    // --- hard N-attempt ceiling for a single pending report ---
+
+    private fun attemptFile(context: Context): File = File(context.applicationContext.filesDir, ATTEMPT_FILE_NAME)
+
+    private fun readAttempt(context: Context): Pair<String?, Int> = runCatching {
+        val parts = readBounded(attemptFile(context))?.trim()?.split('\t') ?: return null to 0
+        (parts.getOrNull(0)?.takeIf { it.isNotEmpty() }) to (parts.getOrNull(1)?.toIntOrNull() ?: 0)
+    }.getOrDefault(null to 0)
+
+    /**
+     * Bumps the attempt count for [identity] (the currently pending report — see
+     * [CrashReport.identityOf]) and returns whether the ceiling is now exceeded. See
+     * [CrashReport.nextAttemptCount] / [CrashReport.attemptCeilingExceeded] for the pure rule.
+     */
+    private fun bumpAttemptAndCheckCeiling(context: Context, identity: String): Boolean = runCatching {
+        val (prevIdentity, prevCount) = readAttempt(context)
+        val next = CrashReport.nextAttemptCount(prevIdentity, prevCount, identity)
+        writeAtomic(attemptFile(context), "$identity\t$next")
+        CrashReport.attemptCeilingExceeded(next)
+    }.getOrDefault(false)
+
+    /** Forget the attempt ceiling bookkeeping — folded into [clear] since it tracks attempts
+     * against a specific pending report, and a cleared report has none left to track. */
+    fun clearAttemptCeiling(context: Context) {
+        runCatching { attemptFile(context).delete() }
+    }
+
+    /** A stable identity for whatever report is currently pending on disk, or null if none. */
+    private fun pendingIdentity(context: Context): String? = runCatching {
+        val text = readBounded(file(context)) ?: return null
+        CrashReport.identityOf(CrashReport.decode(text).whenMillis, text)
+    }.getOrNull()
+
+    // --- bounded per-crash history (a crash-history screen, distinct from the single
+    // --- "pending" slot above: every capture lands here too, and stays until pruned or
+    // --- explicitly cleared, regardless of whether the pending report was resolved) ---
+
+    private fun historyDir(context: Context): File =
+        File(context.applicationContext.filesDir, HISTORY_DIR_NAME)
+
+    /**
+     * Append [report] (captured at [whenMillis]) to the bounded crash history. Called from
+     * inside [capture]/[captureExitDeath] — i.e. from the uncaught-exception handler path
+     * itself — so this stays `runCatching`-guarded end to end and cheap: one directory
+     * listing, one write, and a prune of whatever [CrashReport.historyEntriesToPrune] says is
+     * past the cap.
+     */
+    private fun appendHistory(context: Context, report: CrashReport, whenMillis: Long) {
+        runCatching {
+            val dir = historyDir(context)
+            dir.mkdirs()
+            writeAtomic(File(dir, CrashReport.historyFileName(whenMillis)), report.encode())
+            val all = dir.listFiles() ?: return
+            // Temp files orphaned by a death mid-write: nothing reads them, and nothing else would prune them.
+            all.filter { it.name.endsWith(".tmp") && System.currentTimeMillis() - it.lastModified() > 60_000 }
+                .forEach { it.delete() }
+            val byWhen = all
+                .mapNotNull { f -> CrashReport.historyWhenMillisOf(f.name)?.let { it to f } }
+            val prune = CrashReport.historyEntriesToPrune(byWhen.map { it.first }).toSet()
+            if (prune.isEmpty()) return
+            byWhen.filter { it.first in prune }.forEach { it.second.delete() }
+        }
+    }
+
+    /**
+     * Every crash captured on this device, newest first, up to [CrashReport.HISTORY_CAP]
+     * entries — a superset of [pending] (the one still-unresolved report) meant for a
+     * user-facing crash-history screen. Each file decodes independently (`runCatching` per
+     * entry) so one unreadable/corrupt file can never hide the rest of the list.
+     */
+    fun history(context: Context): List<CrashReport.Decoded> = runCatching {
+        val files = historyDir(context).listFiles()?.toList() ?: return emptyList()
+        files
+            .mapNotNull { f -> CrashReport.historyWhenMillisOf(f.name)?.let { it to f } }
+            .sortedByDescending { it.first }
+            .take(CrashReport.HISTORY_CAP)
+            .mapNotNull { (at, f) ->
+                // A blank/unreadable entry is skipped; one with no timestamp of its own takes its file's,
+                // so the screen can still remove it.
+                readBounded(f)?.let { text -> runCatching { CrashReport.decode(text) }.getOrNull() }
+                    ?.let { d -> if (d.whenMillis == null) d.copy(whenMillis = at) else d }
+            }
+    }.getOrDefault(emptyList())
+
+    /**
+     * Capture times of every history entry, newest first, from FILE NAMES ALONE: no file is opened
+     * or decoded. For a host that wants to ask "has this app been crashing in a loop?" on every
+     * process start: one directory listing, and nothing at all when there is no history.
+     */
+    fun recentCaptureTimes(context: Context): List<Long> = runCatching {
+        historyDir(context).list()?.mapNotNull(CrashReport::historyWhenMillisOf)?.sortedDescending()
+    }.getOrNull() ?: emptyList()
+
+    /** Forget every entry in the crash history — the "Clear all" action on a crash-history
+     *  screen. Does not touch [pending]/the streak/the attempt ceiling; those are a separate,
+     *  single-slot concern (see [clear]). */
+    fun clearHistory(context: Context) {
+        runCatching { historyDir(context).listFiles()?.forEach { it.delete() } }
+    }
+
+    /**
+     * Forget one crash history entry by its capture time (see [CrashReport.Decoded.whenMillis])
+     * — the per-row "remove" action on a crash-history screen. A no-op, not an error, when no
+     * entry has that timestamp.
+     */
+    fun removeHistoryEntry(context: Context, whenMillis: Long) {
+        runCatching { File(historyDir(context), CrashReport.historyFileName(whenMillis)).delete() }
+    }
+
+    // --- shared "give up on recovery" remediation ---
+
+    /**
+     * The one remediation shared by every loop-breaker below: clear the pending report, clear
+     * the streak, clear the entry marker, optionally relaunch the real app, and always run
+     * [then] last. Plain function references rather than Android types on purpose, so the
+     * sequencing — and its failure tolerance — is unit-testable without a device: a crash
+     * INSIDE the remediation itself (any one of these throwing) must never be able to stop the
+     * rest of it, matching this module's own "every operation is runCatching-guarded" rule. If
+     * this fix's own cleanup became a new crash-loop surface, it would defeat the entire point.
+     */
+    internal fun giveUpOnRecovery(
+        clearReport: () -> Unit,
+        clearStreak: () -> Unit,
+        clearEntryMarker: () -> Unit,
+        relaunch: (() -> Unit)? = null,
+        then: () -> Unit = {},
+    ) {
+        runCatching { clearReport() }
+        runCatching { clearStreak() }
+        runCatching { clearEntryMarker() }
+        if (relaunch != null) runCatching { relaunch() }
+        then()
     }
 
     /**
@@ -236,6 +569,15 @@ object CrashRecovery {
      * recovery screen relaunches a clean instance instead of returning to a blank one.
      * Returns `true` when recovery was shown (the caller should `return` immediately without
      * building its real UI), `false` when there's nothing to recover from.
+     *
+     * Two independent loop-breakers can also make this return `false` even though a report
+     * *is* pending, each giving up on recovery and clearing the report so the real app loads
+     * instead:
+     *  - [recoveryEntryMarkerIsStale] — the recovery screen's own `onCreate` didn't even finish
+     *    on the prior launch, so showing it again would repeat that same failure.
+     *  - the N-attempt ceiling — the SAME report is still pending after
+     *    [CrashReport.MAX_RECOVERY_ATTEMPTS] calls to this function, so the real app itself is
+     *    assumed to be what's persistently broken, not this screen.
      */
     fun maybeShowRecovery(
         activity: Activity,
@@ -243,13 +585,44 @@ object CrashRecovery {
         style: CrashRecoveryStyle = CrashRecoveryStyle.Default,
         contactEmail: String? = null,
     ): Boolean {
-        if (pending(activity) == null) {
+        val already = pending(activity)
+        if (already != null) {
+            markJvmExitSeen(activity, already.whenMillis)
+        } else {
             // No JVM report — check whether the OS recorded a death the handler couldn't see
             // (native crash, ANR). If it did, this synthesizes and persists a report through
             // the same store, and recovery proceeds identically.
             if (!captureExitDeath(activity, appLabel)) return false
             if (pending(activity) == null) return false
         }
+
+        // The recovery screen itself didn't even finish starting up last time (see
+        // markRecoveryEntryStarted) — showing it again would just repeat the SAME failure on a
+        // loop with no in-app escape, since its own Reset button is built by the very onCreate
+        // call that's failing. Fall through to the real app instead.
+        if (recoveryEntryMarkerIsStale(activity)) {
+            giveUpOnRecovery(
+                clearReport = { clear(activity) },
+                clearStreak = { clearStreak(activity) },
+                clearEntryMarker = { clearRecoveryEntryMarker(activity) },
+            )
+            return false
+        }
+
+        // Hard ceiling, independent of CrashReport.STREAK_WINDOW_MS: the SAME report still
+        // unresolved after repeated launches means the real app itself keeps crashing, not just
+        // this screen — the streak window alone can't catch that (a user reopening minutes
+        // apart never re-enters a 60s window at all).
+        val identity = pendingIdentity(activity)
+        if (identity != null && bumpAttemptAndCheckCeiling(activity, identity)) {
+            giveUpOnRecovery(
+                clearReport = { clear(activity) },
+                clearStreak = { clearStreak(activity) },
+                clearEntryMarker = { clearRecoveryEntryMarker(activity) },
+            )
+            return false
+        }
+
         activity.startActivity(CrashRecoveryActivity.intent(activity, appLabel, style, contactEmail))
         activity.finish()
         return true
