@@ -13,6 +13,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.graphics.drawable.StateListDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -21,6 +22,7 @@ import android.text.Spanned
 import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.animation.PathInterpolator
 import android.view.ViewGroup
@@ -188,6 +190,7 @@ class CrashRecoveryActivity : Activity() {
                 gravity = Gravity.CENTER_HORIZONTAL
             }
             isClickable = true
+            focusRing(pal.ink)
             contentDescription = "Replay the crash animation"
             setOnClickListener { glitch(this) }
         }
@@ -234,6 +237,7 @@ class CrashRecoveryActivity : Activity() {
                 // action and a mis-tap on it is not recoverable.
                 setPadding(0, Look.Space.L.dp, 0, Look.Space.S.dp)
                 background = pressable(null, pal.ink)
+                focusRing(pal.ink)
                 setOnClickListener { discard() }
             }.withTopMargin(Look.Space.XS),
         )
@@ -344,6 +348,7 @@ class CrashRecoveryActivity : Activity() {
                     isClickable = true
                     setPadding(Look.Space.M.dp, Look.Space.S.dp, Look.Space.M.dp, Look.Space.S.dp)
                     background = pressable(null, pal.ink)
+                    focusRing(pal.ink)
                     setOnClickListener { showMain() }
                 })
             },
@@ -388,6 +393,10 @@ class CrashRecoveryActivity : Activity() {
             ScrollView(this).apply {
                 background = filled(pal.monoBg, Look.Radius.FIELD)
                 layoutParams = LinearLayout.LayoutParams(MATCH, 220.dp)
+                // A right-click (or stylus button) on the trace copies the report, the same
+                // text the Copy button copies. Context clicks are never sent by a touchscreen,
+                // so this does not change what a long-press does on a phone.
+                setOnContextClickListener { copyReport(); true }
                 addView(HorizontalScrollView(this@CrashRecoveryActivity).apply {
                     addView(text(report.trace, Look.Type.MONO, pal.monoInk, monospace = true).apply {
                         setPadding(Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp)
@@ -569,6 +578,7 @@ class CrashRecoveryActivity : Activity() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, Look.Type.CAPTION)
             typeface = Typeface.create(typeface, Typeface.BOLD)
             background = pressable(filled(pal.card, Look.Radius.FIELD), pal.ink, Look.Radius.FIELD)
+            focusRing(pal.ink, Look.Radius.FIELD)
             setPadding(Look.Space.XS.dp, Look.Space.M.dp, Look.Space.XS.dp, Look.Space.M.dp)
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
             setOnClickListener { onClick() }
@@ -721,6 +731,16 @@ class CrashRecoveryActivity : Activity() {
             .setDuration(Look.Motion.SETTLE_MS).setInterpolator(settle).start()
     }
 
+    /**
+     * Escape does what Back does on a phone: close the report if it is open, otherwise
+     * Continue. Only a hardware keyboard sends it, so touch behaviour is untouched.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode != KeyEvent.KEYCODE_ESCAPE) return super.onKeyDown(keyCode, event)
+        if (paneDetails.translationX < root.width * 0.5f) showMain() else continueToApp()
+        return true
+    }
+
     override fun onBackPressed() {
         // If the report is open, Back returns to the main pane rather than leaving the screen.
         if (paneDetails.translationX < root.width * 0.5f) showMain() else super.onBackPressed()
@@ -840,6 +860,7 @@ class CrashRecoveryActivity : Activity() {
                 cornerRadius = Look.Radius.PILL.dp.toFloat()
             }
             background = pressable(shape, labelColor, Look.Radius.PILL)
+            focusRing(labelColor, Look.Radius.PILL)
             setPadding(Look.Space.L.dp, Look.Space.L.dp, Look.Space.L.dp, Look.Space.L.dp)
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
             setOnClickListener { onClick() }
@@ -893,6 +914,28 @@ class CrashRecoveryActivity : Activity() {
         )
         val mask = radiusDp?.let { filled(Color.WHITE, it) }
         return RippleDrawable(highlight, content, mask)
+    }
+
+    /**
+     * Draw a visible outline while the view has keyboard focus, and make it focusable.
+     *
+     * Touch never focuses these views (they are not focusable in touch mode), so a phone
+     * never shows the ring; it appears only when a hardware keyboard moves focus. The ripple
+     * from [pressable] already covers pointer hover.
+     *
+     * @param radiusDp the ring's corner radius, matching the control's own; null for a
+     *   borderless target.
+     */
+    private fun View.focusRing(color: Int, radiusDp: Int? = null) {
+        isFocusable = true
+        val ring = GradientDrawable().apply {
+            setColor(Color.TRANSPARENT)
+            setStroke(Look.Space.HAIR.dp, color)
+            cornerRadius = (radiusDp ?: 0).dp.toFloat()
+        }
+        foreground = StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_focused), ring)
+        }
     }
 
     private fun View.withTopMargin(dp: Int): View = apply {
