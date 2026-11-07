@@ -155,6 +155,10 @@ internal fun parkVeil(lift: Float): Float {
  * @param parkStyle whether the parked card merely slides away or also turns about its hinge
  *   edge. Both shrink it; see [ParkStyle]. Defaults to [ParkStyle.SLIDE], which is the motion
  *   this shell has always had, so an app that says nothing sees no change.
+ * @param leftPark parks the card for the LEFT room the [OpenPark] way: large, flat and fully lit,
+ *   with [OpenPark.keepFraction] of the window still showing it, no scrim, no veil, no ring and no
+ *   grip, and the room narrowed to the part of the window the card leaves. Null (the default) keeps
+ *   the contract park for the left room too. The other three rooms are never affected.
  * @param topReserve a strip below the status bar that the HOST owns, which the top-edge gesture
  *   must start beneath. Zero by default. The case it exists for: a host that reveals its own
  *   pull-down surface at the top of the pane — a status band, a notification layer — would
@@ -201,6 +205,7 @@ fun SpatialShell(
     top: (@Composable () -> Unit)? = null,
     bottom: (@Composable () -> Unit)? = null,
     parkStyle: ParkStyle = ParkStyle.SLIDE,
+    leftPark: OpenPark? = null,
     topReserve: Dp = 0.dp,
     bottomPeek: Dp? = null,
     bottomReserve: Dp = 0.dp,
@@ -290,7 +295,14 @@ fun SpatialShell(
 
         val w = controller.viewport.width.toFloat()
         val hgt = controller.viewport.height.toFloat()
-        val scale = 1f - SpatialMotion.PARK_SCALE_DROP * lift
+        // The left room, when the host asked for an open park, moves the card a shorter way and
+        // keeps it lit; everything below reads `openLeft` instead of re-deriving it.
+        val openLeft = leftPark != null && hProgress > 0f
+        val scale = if (openLeft) 1f - (1f - leftPark!!.scale) * lift else 1f - SpatialMotion.PARK_SCALE_DROP * lift
+        val leftTravel = if (leftPark != null && w > 0f) openParkDistance(w, leftPark) else 0f
+        SideEffect { controller.leftTravelPx = leftTravel }
+        // The open-parked card's own coats: nothing quiets it, nothing closes over it.
+        val parkCoats = if (openLeft) 0f else 1f
 
         // ── Rooms, beneath the home card ──────────────────────────────────────────────
         // Each room is composed only while it is at least slightly revealed, so a closed room
@@ -302,7 +314,9 @@ fun SpatialShell(
                 Modifier
                     .fillMaxSize()
                     .offset { IntOffset((-w * (1f - hProgress)).roundToInt(), 0) }
-                    .padding(end = BAND_DP.dp),
+                    // The room ends where the parked card begins: the band, or for an open park
+                    // the share of the window the card keeps.
+                    .padding(end = if (leftPark != null) with(density) { (w * leftPark.keepFraction).toDp() } else BAND_DP.dp),
             ) { left() }
         }
         if (right != null && hProgress < -0.001f) {
@@ -338,11 +352,11 @@ fun SpatialShell(
         // used to each work it out for themselves and the swivel got it backwards.
         val hBand = bandEdge(hProgress)
         val vBand = bandEdge(vProgress)
-        val swivelDeg = if (parkStyle == ParkStyle.SWIVEL) SpatialMotion.PARK_SWIVEL_DEG * lift else 0f
+        val swivelDeg = if (parkStyle == ParkStyle.SWIVEL && !openLeft) SpatialMotion.PARK_SWIVEL_DEG * lift else 0f
         // No foreshortening compensation: the card hinges on the band edge, so that edge sits at
         // z = 0 throughout the rotation and the projection leaves it exactly where it was. The
         // band stays BAND_DP wide at any angle, and SLIDE and SWIVEL park to the same depth.
-        val tx = (hProgress * parkDistance(w, scale, bandPx)).roundToInt()
+        val tx = (hProgress * if (openLeft) leftTravel else parkDistance(w, scale, bandPx)).roundToInt()
         val ty = (vProgress * parkDistance(hgt, scale, bandPx)).roundToInt()
         val cardShape = RoundedCornerShape((SpatialMotion.PARK_CORNER_DP * lift).dp)
         Box(
@@ -416,7 +430,7 @@ fun SpatialShell(
                 }
                 // The ring appears as the card lifts: on a dark room floor a shadow alone gives
                 // no contrast, and without a visible boundary the card reads as part of the room.
-                .border(1.dp, accentColor.copy(alpha = lift * SpatialMotion.PARK_RING_ALPHA), cardShape)
+                .border(1.dp, accentColor.copy(alpha = lift * SpatialMotion.PARK_RING_ALPHA * parkCoats), cardShape)
                 // A raised surface so the card is plainly above the room, not a hole in it.
                 .background(cardColor, cardShape),
         ) {
@@ -443,14 +457,14 @@ fun SpatialShell(
                             hasTop = top != null,
                             hasBottom = bottom != null,
                         )
-                        .background(scrimColor.copy(alpha = SpatialMotion.PARK_SCRIM_ALPHA * lift))
+                        .background(scrimColor.copy(alpha = SpatialMotion.PARK_SCRIM_ALPHA * lift * parkCoats))
                         // Over the scrim, not under it: at full park the band is the card's own
                         // surface colour, so it stays plainly distinct from the room floor the
                         // scrim is tinted with instead of dissolving into it.
-                        .background(cardColor.copy(alpha = parkVeil(lift))),
+                        .background(cardColor.copy(alpha = parkVeil(lift) * parkCoats)),
                 ) {
                     val grip = Modifier.background(
-                        accentColor.copy(alpha = GRIP_ALPHA * lift),
+                        accentColor.copy(alpha = GRIP_ALPHA * lift * parkCoats),
                         RoundedCornerShape(2.dp),
                     )
                     // Same [bandEdge] answer the hinge above uses, so the pill can never again

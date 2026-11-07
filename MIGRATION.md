@@ -110,6 +110,22 @@ non-edge-to-edge host, or hidden bars) it is identical to before. The shell stil
 insets; it only reads them. Pure helpers `inTopEdgeZone` / `inBottomEdgeZone` carry the
 arithmetic and are tested with non-zero insets.
 
+### New and optional: `leftPark` (an open park for the left room)
+
+```kotlin
+SpatialShell(..., left = { Destinations() }, leftPark = OpenPark()) { Home() }
+```
+
+- `leftPark: OpenPark? = null`. Null keeps the contract park for the left room. Set, the left room
+  parks the card the open way: large (`scale`, default 0.80), flat (no swivel, whatever `parkStyle`
+  says), fully lit (no scrim, no veil, no ring, no grip), with `keepFraction` of the window's width
+  (default 0.47) still showing it. The room is narrowed to the part of the window the card leaves,
+  so lay it out for about half a phone's width.
+- The drag tracks the finger over the card's shorter travel (`openParkDistance`). Release, flicks,
+  a tap on the card and `closeAll()` behave as before. Top, right and bottom rooms are unchanged.
+- From the owner's Fotoz reference (2026-11-07): the destinations as a short list on the left, the
+  content still in view on the right.
+
 ### New and optional: `bottomPeek`
 
 ```kotlin

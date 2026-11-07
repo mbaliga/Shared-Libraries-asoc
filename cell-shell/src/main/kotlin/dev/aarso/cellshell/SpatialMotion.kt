@@ -214,6 +214,15 @@ class SpatialController(private val scope: CoroutineScope) {
         private set
 
     /**
+     * How far, in px, the card travels from home to a fully open LEFT room when the shell parks
+     * that room with an [OpenPark], or 0 when it does not (the travel is then the width, as it has
+     * always been). Written only by the shell, which owns the measurement. An open park moves the
+     * card a shorter way than the default park, so [dragH] divides by this to keep the card under
+     * the finger.
+     */
+    internal var leftTravelPx: Float = 0f
+
+    /**
      * Whether the bottom room really is two-stage right now: the shell was given a `bottomPeek`
      * AND it fits the window. False when there is no peek or when the requested strip would need
      * more than [SpatialMotion.MAX_PEEK_REVEAL] of a short window — then the room is single-stage
@@ -282,7 +291,7 @@ class SpatialController(private val scope: CoroutineScope) {
         lastHDelta = deltaPx
         lastHMoveAt = uptimeMillis
         // coerceAtLeast(1) so a pre-measure drag divides by a sane extent rather than zero.
-        val next = (hProgress + deltaPx / viewport.width.coerceAtLeast(1)).coerceIn(min, max)
+        val next = (hProgress + deltaPx / horizontalTravelPx(hProgress, deltaPx, viewport.width, leftTravelPx)).coerceIn(min, max)
         scope.launch { hAnim.snapTo(next) }
     }
 
@@ -556,6 +565,47 @@ internal fun inBottomEdgeZone(
     val floor = heightPx - bottomInsetPx.coerceAtLeast(0f) - reservePx.coerceAtLeast(0f)
     return y <= floor && y >= floor - edgePx
 }
+
+/**
+ * The px of drag that move the horizontal axis by one whole unit of progress. The width, as it has
+ * always been, except on the LEFT side of home when the shell parks that room with an [OpenPark]
+ * ([leftTravelPx] > 0): the card then travels only that far, and dividing by it keeps the card
+ * under the finger. A drag that starts at home towards the left room counts as that side.
+ */
+internal fun horizontalTravelPx(hProgress: Float, deltaPx: Float, widthPx: Int, leftTravelPx: Float): Float {
+    val onLeftSide = hProgress > 0f || (hProgress == 0f && deltaPx > 0f)
+    return if (onLeftSide && leftTravelPx > 1f) leftTravelPx else widthPx.coerceAtLeast(1).toFloat()
+}
+
+/**
+ * An "open" park for a side room: the card stays large, flat and fully lit, slid aside so that a
+ * wide share of it ([keepFraction] of the window) stays on screen beside the room, instead of
+ * shrinking away to a band behind a scrim. The room is the part of the window the card leaves.
+ *
+ * The owner's reference (2026-11-07, Fotoz's navigation room): the destinations as a short list on
+ * the left half, the content still in view as a rounded card on the right half, "cleaner and more
+ * immersive". Opt-in per edge ([SpatialShell]'s `leftPark`); every other room, and every app that
+ * says nothing, keeps the contract park.
+ *
+ * @param keepFraction the share of the window's width the parked card keeps on screen.
+ * @param scale the card's scale at full open, about its centre.
+ */
+data class OpenPark(
+    val keepFraction: Float = 0.47f,
+    val scale: Float = 0.80f,
+) {
+    init {
+        require(keepFraction in 0.1f..0.9f) { "keepFraction must be in 0.1..0.9, was $keepFraction" }
+        require(scale in 0.5f..1f) { "scale must be in 0.5..1, was $scale" }
+    }
+}
+
+/**
+ * How far an [OpenPark]ed card travels so that its near edge, after scaling about its centre to
+ * [OpenPark.scale], lands at `extent * (1 - keepFraction)`: the room is everything before that.
+ */
+fun openParkDistance(extent: Float, park: OpenPark): Float =
+    extent * (1f - park.keepFraction) - extent * (1f - park.scale) / 2f
 
 /**
  * How far the parked card travels so its trailing edge stays on screen as a grab band.
