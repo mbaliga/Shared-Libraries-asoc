@@ -23,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -272,7 +274,15 @@ fun SpatialShell(
             .fillMaxSize()
             // The room floor. Rooms draw on top of it, and it is what shows through in the
             // sliver beside a partly-open room.
-            .background(scrimColor)
+            .background(
+                // An open park may bring its own floor in as the room opens (the owner's light
+                // room); everything else keeps the shell's floor.
+                if (leftPark != null && leftPark.floor.isSpecified && hProgress > 0f) {
+                    lerp(scrimColor, leftPark.floor, hProgress.coerceIn(0f, 1f))
+                } else {
+                    scrimColor
+                },
+            )
             .onSizeChanged { controller.onMeasured(it) }
             .spatialEdgeDrag(
                 controller = controller,
@@ -358,7 +368,7 @@ fun SpatialShell(
         // band stays BAND_DP wide at any angle, and SLIDE and SWIVEL park to the same depth.
         val tx = (hProgress * if (openLeft) leftTravel else parkDistance(w, scale, bandPx)).roundToInt()
         val ty = (vProgress * parkDistance(hgt, scale, bandPx)).roundToInt()
-        val cardShape = RoundedCornerShape((SpatialMotion.PARK_CORNER_DP * lift).dp)
+        val cardShape = RoundedCornerShape(((if (openLeft) leftPark!!.cornerDp else SpatialMotion.PARK_CORNER_DP) * lift).dp)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -423,7 +433,8 @@ fun SpatialShell(
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
-                    shadowElevation = SpatialMotion.PARK_ELEVATION * lift
+                    // The open park is flat: the reference's card casts no shadow.
+                    shadowElevation = SpatialMotion.PARK_ELEVATION * lift * parkCoats
                     shape = cardShape
                     // Clipping costs a layer, so only pay for it once the corners exist.
                     clip = lift > 0.001f

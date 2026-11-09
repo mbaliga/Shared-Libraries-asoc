@@ -1,5 +1,7 @@
 package dev.aarso.cellshell
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.isSpecified
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -33,11 +35,21 @@ class OpenParkTest {
     }
 
     @Test
+    fun `the open park is rounder than the contract park and keeps the shell floor unless told`() {
+        val park = OpenPark()
+        assertEquals(true, park.cornerDp > SpatialMotion.PARK_CORNER_DP)
+        assertEquals(false, park.floor.isSpecified)
+        assertEquals(true, OpenPark(floor = Color(0xFFD9DBDE)).floor.isSpecified)
+    }
+
+    @Test
     fun `out of range parks are refused`() {
         assertThrows(IllegalArgumentException::class.java) { OpenPark(keepFraction = 0f) }
         assertThrows(IllegalArgumentException::class.java) { OpenPark(keepFraction = 0.95f) }
         assertThrows(IllegalArgumentException::class.java) { OpenPark(scale = 0.3f) }
         assertThrows(IllegalArgumentException::class.java) { OpenPark(scale = 1.2f) }
+        assertThrows(IllegalArgumentException::class.java) { OpenPark(cornerDp = -1f) }
+        assertThrows(IllegalArgumentException::class.java) { OpenPark(cornerDp = 80f) }
     }
 
     @Test

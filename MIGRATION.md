@@ -123,6 +123,8 @@ SpatialShell(..., left = { Destinations() }, leftPark = OpenPark()) { Home() }
   so lay it out for about half a phone's width.
 - The drag tracks the finger over the card's shorter travel (`openParkDistance`). Release, flicks,
   a tap on the card and `closeAll()` behave as before. Top, right and bottom rooms are unchanged.
+- `OpenPark(cornerDp = 28f, floor = Color.Unspecified)`: the card's corner radius at full open, and an optional colour for
+  the floor around the card, blended in as the room opens (Unspecified keeps `scrimColor`). The open park casts no shadow.
 - From the owner's Fotoz reference (2026-11-07): the destinations as a short list on the left, the
   content still in view on the right.
 

@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -589,14 +590,22 @@ internal fun horizontalTravelPx(hProgress: Float, deltaPx: Float, widthPx: Int, 
  *
  * @param keepFraction the share of the window's width the parked card keeps on screen.
  * @param scale the card's scale at full open, about its centre.
+ * @param cornerDp the card's corner radius at full open, in dp (the contract park rounds to
+ *   [SpatialMotion.PARK_CORNER_DP]; the reference's card is rounder).
+ * @param floor the colour of the floor around the card (the room's own ground, above and below the
+ *   card and behind it) at full open, blended in as the room opens. [Color.Unspecified] keeps the
+ *   shell's `scrimColor`, as every park has always had.
  */
 data class OpenPark(
     val keepFraction: Float = 0.47f,
     val scale: Float = 0.80f,
+    val cornerDp: Float = 28f,
+    val floor: Color = Color.Unspecified,
 ) {
     init {
         require(keepFraction in 0.1f..0.9f) { "keepFraction must be in 0.1..0.9, was $keepFraction" }
         require(scale in 0.5f..1f) { "scale must be in 0.5..1, was $scale" }
+        require(cornerDp in 0f..64f) { "cornerDp must be in 0..64, was $cornerDp" }
     }
 }
 
