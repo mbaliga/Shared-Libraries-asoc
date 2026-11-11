@@ -13,6 +13,9 @@ plugins {
     // No version here: resolved from the Kotlin Gradle plugin the root build already has on its
     // classpath (the kotlin.jvm / kotlin.android aliases, all at libs.versions.kotlin).
     id("org.jetbrains.kotlin.multiplatform")
+    // On the classpath always, applied only when an Android SDK is present (android-target.gradle.kts),
+    // so that script's Android DSL compiles on a runner that has an SDK. AGP 8.9.1 is the lockstep version.
+    id("com.android.library") version "8.9.1" apply false
     `maven-publish`
 }
 
@@ -39,6 +42,27 @@ kotlin {
     }
 }
 
+// Android target: only when an Android SDK is present, so a bare-JDK build never touches AGP's
+// SDK checks. Not exercised in the authoring container (no SDK); CI on a runner with an SDK is
+// the first thing that compiles it.
 if (androidSdkPresent()) {
-    apply(from = "android-target.gradle.kts")
+    pluginManager.apply("com.android.library")
+
+    extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension> {
+        androidTarget {
+            publishLibraryVariants("release")
+        }
+    }
+
+    extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+        namespace = "dev.aarso.platformports"
+        compileSdk = 36
+        defaultConfig {
+            minSdk = 24
+        }
+        compileOptions {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
+        }
+    }
 }

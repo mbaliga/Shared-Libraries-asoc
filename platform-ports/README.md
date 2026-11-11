@@ -35,7 +35,7 @@ shows the level should say so.
 - `CI (hosted VM)`-class only; this was written in a container with JDK 17, no display, no Android
   SDK, no Mac, no Windows. Label: `CONTAINER-BUILD-ONLY`.
 - Verified: common + JVM tests (`./gradlew :platform-ports:jvmTest`), 57 tests.
-- **Not verified:** the `androidMain` source and `android-target.gradle.kts` (never compiled);
+- **Not verified:** the `androidMain` source and the guarded Android block in `build.gradle.kts` (never compiled);
   `iosMain` and the iOS targets (Kotlin/Native iOS is disabled on Linux); the Swing dialog path
   (needs a display); Windows/macOS behaviour of file permissions and sysfs probes (Linux only).
   Anything on a device is `NEEDS-DEVICE-VALIDATION`.
