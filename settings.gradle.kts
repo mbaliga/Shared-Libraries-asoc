@@ -59,3 +59,8 @@ include(":feedback")
 // Portable JSON schemas shared by Baseline, Crocodyl and Ebbflow. Pure JVM/resources;
 // implementations remain in their owning products.
 include(":evidence-schema")
+
+// The shared dashboard's chart layer: a native Kotlin/Canvas port of web/viz-kit (one ink, identity
+// by texture). Plain Views, no Compose/WebView/network. Same data contract as viz.js so one JSON
+// feed drives both. Graph/rose/gantt stay web-only (they sit on the Orrery engines).
+include(":viz-kit-android")
