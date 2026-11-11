@@ -21,6 +21,8 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 (`cells`, `sfx`, `rose`, `brands`, `Graph`, `gantt`) carved out of Orrery so that no app draws the same thing twice.
 They are consumed by copying or submodule, with no bundler assumed.
 
+CI lanes `desktop-linux.yml`, `desktop-macos.yml` and `desktop-windows.yml` run the pure-JVM tests on hosted VMs. That is CI (hosted VM) evidence, not device evidence.
+
 Multi-platform porting plan (Ubuntu Touch, Linux, iOS/iPadOS, macOS, Windows — a plan only, nothing built): [PORTING_PLAN.md](PORTING_PLAN.md).
 
 `local-session-core` is the reserved home for Bocal's local multiplayer/session transport. It is
