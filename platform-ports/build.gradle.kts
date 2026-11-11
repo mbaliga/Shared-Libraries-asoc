@@ -4,7 +4,7 @@
 // Every part that is not real on a host is a stub that carries the sentence a UI must show.
 //
 // Targets: jvm (real, tested here), android (only if an Android SDK is present; see
-// android-target.gradle.kts), iosArm64/iosSimulatorArm64/iosX64 (stubs; Kotlin/Native skips
+// the guarded block at the bottom of this file), iosArm64/iosSimulatorArm64/iosX64 (stubs; Kotlin/Native skips
 // them on Linux, so they are never compiled in the authoring container).
 //
 // Dependencies: none beyond the Kotlin stdlib and kotlin-test. No coroutines, no Compose, no
@@ -13,8 +13,8 @@ plugins {
     // No version here: resolved from the Kotlin Gradle plugin the root build already has on its
     // classpath (the kotlin.jvm / kotlin.android aliases, all at libs.versions.kotlin).
     id("org.jetbrains.kotlin.multiplatform")
-    // On the classpath always, applied only when an Android SDK is present (android-target.gradle.kts),
-    // so that script's Android DSL compiles on a runner that has an SDK. AGP 8.9.1 is the lockstep version.
+    // On the classpath always, applied only when an Android SDK is present (guarded block at the bottom),
+    // so that block's Android DSL compiles on a runner that has an SDK. AGP 8.9.1 is the lockstep version.
     id("com.android.library") version "8.9.1" apply false
     `maven-publish`
 }
