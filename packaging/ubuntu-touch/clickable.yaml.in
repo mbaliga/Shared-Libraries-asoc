@@ -1,0 +1,5 @@
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+# Clickable config. Keys follow Clickable 8 as recalled, NOT checked against a running Clickable.
+clickable_minimum_required: 8.0.0
+builder: pure-qml-cmake
+kill: @@APP_NAME@@

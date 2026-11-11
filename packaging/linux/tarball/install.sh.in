@@ -1,0 +1,24 @@
+#!/bin/sh
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+# User-level install of the extracted app-image tarball. No root, no network, no services.
+# Usage: ./install.sh [--uninstall]      PREFIX defaults to $HOME/.local
+set -eu
+APP="@@APP_NAME@@"
+PREFIX="${PREFIX:-$HOME/.local}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+DEST="$PREFIX/opt/$APP"
+
+if [ "${1:-}" = "--uninstall" ]; then
+  rm -f "$PREFIX/bin/$APP" "$PREFIX/share/applications/@@FLATPAK_ID@@.desktop"
+  rm -rf "$DEST"
+  echo "Removed $APP from $PREFIX"
+  exit 0
+fi
+
+[ -d "$HERE/@@APP_NAME@@" ] || { echo "app-image directory not found next to install.sh" >&2; exit 1; }
+mkdir -p "$PREFIX/opt" "$PREFIX/bin" "$PREFIX/share/applications"
+rm -rf "$DEST"
+cp -R "$HERE/@@APP_NAME@@" "$DEST"
+ln -sf "$DEST/bin/$APP" "$PREFIX/bin/$APP"
+sed "s|^Exec=.*|Exec=$DEST/bin/$APP|" "$HERE/app.desktop" > "$PREFIX/share/applications/@@FLATPAK_ID@@.desktop"
+echo "Installed $APP to $DEST"

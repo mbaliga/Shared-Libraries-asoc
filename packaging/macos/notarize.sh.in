@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+# Sign, notarize and staple a .app. Needs macOS + Xcode CLT + paid Apple Developer membership;
+# none of that exists in this repository's environment, so this has never run.
+# DISABLED by default (rule R6): refuses to run unless ASOC_NOTARIZE_ENABLE=1.
+# Credentials come ONLY from the CI environment, never from the repo:
+#   ASOC_CODESIGN_IDENTITY, ASOC_NOTARY_KEY_PATH, ASOC_NOTARY_KEY_ID, ASOC_NOTARY_ISSUER
+set -euo pipefail
+[ "${ASOC_NOTARIZE_ENABLE:-0}" = "1" ] || { echo "notarize.sh is a disabled template; set ASOC_NOTARIZE_ENABLE=1 in CI to enable" >&2; exit 2; }
+: "${ASOC_CODESIGN_IDENTITY:?not set}" "${ASOC_NOTARY_KEY_PATH:?not set}" "${ASOC_NOTARY_KEY_ID:?not set}" "${ASOC_NOTARY_ISSUER:?not set}"
+APP="@@APP_PATH@@"
+ZIP="$(mktemp -d)/@@APP_NAME@@.zip"
+codesign --force --options runtime --timestamp \
+  --entitlements "@@ENTITLEMENTS_PATH@@" --sign "$ASOC_CODESIGN_IDENTITY" "$APP"
+ditto -c -k --keepParent "$APP" "$ZIP"
+xcrun notarytool submit "$ZIP" --wait \
+  --key "$ASOC_NOTARY_KEY_PATH" --key-id "$ASOC_NOTARY_KEY_ID" --issuer "$ASOC_NOTARY_ISSUER"
+xcrun stapler staple "$APP"

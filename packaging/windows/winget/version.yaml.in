@@ -1,0 +1,6 @@
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+PackageIdentifier: @@WINGET_ID@@
+PackageVersion: "@@VERSION@@"
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.9.0

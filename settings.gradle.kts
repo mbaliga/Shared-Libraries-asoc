@@ -59,3 +59,7 @@ include(":feedback")
 // Portable JSON schemas shared by Baseline, Crocodyl and Ebbflow. Pure JVM/resources;
 // implementations remain in their owning products.
 include(":evidence-schema")
+
+// Platform-neutral cell-shell maths, extracted so non-Android hosts can reuse it. Pure JVM, no
+// android.* imports; :cell-shell does not depend on it yet (see cell-shell-core/MIGRATION.md).
+include(":cell-shell-core")

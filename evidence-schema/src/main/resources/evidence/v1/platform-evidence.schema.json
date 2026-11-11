@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aarso.dev/evidence/v1/platform-evidence.schema.json",
+  "title": "Platform evidence record (platform-evidence/1)",
+  "description": "One row of a per-platform device checklist, or one piece of build/test evidence about a platform claim. The label field is the evidence label from PORTING_PROGRAM.md section 2, verbatim. A record is evidence of what was run and where; it never says an app 'works' beyond that. outcome pass/fail is reserved for an owner run on a real device (label NEEDS-DEVICE-VALIDATION or NEEDS-OWNER-VALIDATION); every other label can only be 'open' or 'recorded', and 'recorded' never closes a checklist row. This schema is a data contract only: it does not run, and nothing in it is a claim about any device.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "repo", "platform", "item", "label", "outcome", "recordedAt"],
+  "properties": {
+    "schema": { "const": "platform-evidence/1" },
+    "id": { "type": "string", "minLength": 1 },
+    "repo": { "type": "string", "minLength": 1 },
+    "platform": { "$ref": "#/$defs/platform" },
+    "item": {
+      "type": "string",
+      "pattern": "^DV-(UT|LX|IOS|IPAD|MAC|WIN|AD)-[0-9]{2,3}$",
+      "description": "Checklist row id, as in docs/device-checklists/DEVICE_CHECKLIST_<PLATFORM>.md."
+    },
+    "label": { "$ref": "#/$defs/label" },
+    "outcome": {
+      "enum": ["open", "recorded", "pass", "fail"],
+      "description": "open: nothing run. recorded: something ran, it does not close the row. pass/fail: the owner ran the row's command on a real device."
+    },
+    "recordedAt": { "type": "string", "format": "date-time" },
+    "recordedBy": { "enum": ["owner", "ci", "agent", "builder"] },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "command": { "type": "string" },
+    "output": { "type": "string", "description": "Pasted output, as run. Leave a failing or surprising result in place." },
+    "note": { "type": "string" },
+    "device": { "$ref": "#/$defs/device" },
+    "runner": { "$ref": "#/$defs/runner" },
+    "artefacts": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Names or release-draft references. No telemetry endpoints; artefacts stay with the owner (program rule R6)."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "outcome": { "enum": ["pass", "fail"] } }, "required": ["outcome"] },
+      "then": {
+        "required": ["device", "command", "output", "recordedBy"],
+        "properties": {
+          "label": { "enum": ["NEEDS-DEVICE-VALIDATION", "NEEDS-OWNER-VALIDATION"] },
+          "recordedBy": { "const": "owner" },
+          "output": { "minLength": 1 },
+          "command": { "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "outcome": { "const": "recorded" } }, "required": ["outcome"] },
+      "then": { "required": ["output"] }
+    },
+    {
+      "if": {
+        "properties": { "label": { "enum": ["CI (hosted VM) evidence", "CI-APPROX — NOT DEVICE EVIDENCE", "CI-ONLY / NOT RUN", "CONTAINER-BUILD-ONLY"] } },
+        "required": ["label"]
+      },
+      "then": { "properties": { "outcome": { "enum": ["open", "recorded"] } } }
+    },
+    {
+      "if": { "properties": { "label": { "enum": ["SIMULATOR", "EMULATOR EVIDENCE", "SIMULATED — NOT DEVICE EVIDENCE", "VIRTUALIZED — NOT DEVICE EVIDENCE", "SYNTHETIC", "BROWSER-HEADLESS", "LAB", "PLAN"] } }, "required": ["label"] },
+      "then": { "properties": { "outcome": { "enum": ["open", "recorded"] } } }
+    },
+    {
+      "if": { "properties": { "label": { "pattern": "^NOT-APPLICABLE \\(.+\\)$" } }, "required": ["label"] },
+      "then": { "properties": { "outcome": { "const": "recorded" } }, "required": ["note"] }
+    },
+    {
+      "if": { "properties": { "outcome": { "const": "open" } }, "required": ["outcome"] },
+      "then": { "properties": { "label": { "enum": ["NEEDS-DEVICE-VALIDATION", "NEEDS-OWNER-VALIDATION", "PLAN", "CI-ONLY / NOT RUN"] } } }
+    }
+  ],
+  "$defs": {
+    "platform": {
+      "enum": ["android", "android-desktop", "ubuntu-touch", "linux", "steam-deck", "ios", "ipados", "macos", "windows", "web"]
+    },
+    "label": {
+      "description": "PORTING_PROGRAM.md section 2, verbatim. NEEDS-DEVICE-VALIDATION (NDV) and NEEDS-OWNER-VALIDATION (NOV) are written in full, never as the abbreviation.",
+      "anyOf": [
+        {
+          "enum": [
+            "LAB",
+            "CI (hosted VM) evidence",
+            "EMULATOR EVIDENCE",
+            "SIMULATOR",
+            "CI-APPROX — NOT DEVICE EVIDENCE",
+            "SIMULATED — NOT DEVICE EVIDENCE",
+            "VIRTUALIZED — NOT DEVICE EVIDENCE",
+            "SYNTHETIC",
+            "CI-ONLY / NOT RUN",
+            "NEEDS-DEVICE-VALIDATION",
+            "NEEDS-OWNER-VALIDATION",
+            "PLAN",
+            "CONTAINER-BUILD-ONLY",
+            "BROWSER-HEADLESS"
+          ]
+        },
+        { "type": "string", "pattern": "^NOT-APPLICABLE \\(.+\\)$" }
+      ]
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "os"],
+      "properties": {
+        "model": { "type": "string", "minLength": 1 },
+        "os": { "type": "string", "minLength": 1 },
+        "osBuild": { "type": "string" },
+        "arch": { "enum": ["arm64", "x86_64", "other"] },
+        "gpu": { "type": "string" },
+        "display": { "type": "string" },
+        "input": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["hosted-ci", "container", "emulator", "simulator", "vm", "headless-browser"] },
+        "image": { "type": "string" },
+        "workflow": { "type": "string" }
+      }
+    }
+  }
+}

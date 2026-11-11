@@ -1,0 +1,11 @@
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+PackageIdentifier: @@WINGET_ID@@
+PackageVersion: "@@VERSION@@"
+PackageLocale: en-US
+Publisher: "@@VENDOR@@"
+PackageName: "@@APP_TITLE@@"
+License: "@@LICENSE_SPDX@@"
+ShortDescription: "@@DESCRIPTION@@"
+PackageUrl: "@@HOMEPAGE@@"
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

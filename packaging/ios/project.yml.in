@@ -1,0 +1,30 @@
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+# XcodeGen spec (needs a Mac to generate and build; never run here). Signing material is never in
+# the repo: the team id is read from the CI environment and code signing is OFF unless CI turns it on.
+name: @@APP_TITLE@@
+options:
+  bundleIdPrefix: com.asoc
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    CODE_SIGNING_ALLOWED: "NO"
+    DEVELOPMENT_TEAM: "${ASOC_APPLE_TEAM_ID}"
+targets:
+  @@APP_TITLE@@:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: PrivacyInfo.xcprivacy
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.asoc.@@APP_NAME@@
+        MARKETING_VERSION: "@@VERSION@@"
+        CURRENT_PROJECT_VERSION: "@@BUILD_NUMBER@@"
+        TARGETED_DEVICE_FAMILY: "1,2"
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: @@APP_TITLE@@
+        UILaunchScreen: {}

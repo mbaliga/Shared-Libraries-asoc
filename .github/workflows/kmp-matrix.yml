@@ -1,0 +1,417 @@
+name: KMP matrix (reusable)
+
+# Reusable CI matrix for the constellation's Kotlin Multiplatform repos. A caller adds a
+# new workflow file that does `uses: <owner>/Shared-Libraries-asoc/.github/workflows/kmp-matrix.yml@<sha>`
+# and passes only the lanes its target list needs. Inputs are documented in docs/kmp-matrix.md.
+#
+# What this is, and is not: a TEMPLATE. Nothing here has been run. This container has no
+# Mac, no Windows host, no Android SDK, no iOS toolchain, no Docker daemon and no UT device,
+# so every lane below is unverified until a hosted runner executes it, and even then it
+# yields `CI (hosted VM) evidence` only, never device evidence.
+#
+# Rules honoured (PORTING_PROGRAM R3, R5, R6, OQ-20):
+#   - No Actions artifact uploads anywhere (artifact storage is exhausted). Release binaries
+#     belong in draft GitHub Releases, which this template does not create.
+#   - Nothing is served, bound, downloaded as a model, or signed. The `sign` job is a
+#     disabled template (an `if:` that is never true) and references no secret.
+#   - Package lanes run only on main or tags; pull requests build and test (compile) only.
+#   - macOS and Windows lanes run only when the caller says the repo is public. Private
+#     repos get Linux lanes only.
+#   - The Windows path lint runs before any Windows lane.
+#   - No telemetry, no network call beyond fetching toolchains and dependencies.
+#
+# TODO: pin every `uses:` to a full commit SHA. Tags are used because the SHAs could not be
+# resolved when this file was written (no network API here); do not invent them. Also pin the
+# Clickable image by digest via the `clickable-image` input once the digest is known.
+on:
+  workflow_call:
+    inputs:
+      lanes:
+        description: >-
+          Comma-separated lanes to run, no spaces. Any of: jvm-linux, jvm-linux-arm,
+          jvm-windows, jvm-macos, ios-sim, ios-device-build, wasm-browser, ut-click,
+          ut-arm64-smoke, package. Unlisted lanes are skipped.
+        type: string
+        default: jvm-linux
+      repo-public:
+        description: >-
+          True only when the calling repo is public. macOS and Windows lanes (jvm-windows,
+          jvm-macos, ios-sim, ios-device-build) are skipped unless this is true (OQ-20).
+        type: boolean
+        default: false
+      allow-arm-on-private:
+        description: >-
+          Standard arm64 Linux runners are free only on public repos. Set true to run
+          jvm-linux-arm and ut-arm64-smoke on a private repo anyway (you accept the cost).
+        type: boolean
+        default: false
+      java-version:
+        description: JDK major version for Gradle lanes.
+        type: string
+        default: "17"
+      gradle-args:
+        description: Extra Gradle arguments for every lane, for example "-Pfoo=bar".
+        type: string
+        default: ""
+      jvm-task:
+        description: Gradle task(s) for the jvm-* lanes.
+        type: string
+        default: jvmTest
+      wasm-task:
+        description: Gradle task(s) for wasm-browser (headless browser tests).
+        type: string
+        default: wasmJsBrowserTest
+      ios-sim-task:
+        description: Gradle task(s) for ios-sim (Kotlin/Native simulator tests).
+        type: string
+        default: iosSimulatorArm64Test
+      ios-project:
+        description: >-
+          Path to an existing .xcodeproj for ios-device-build. Empty skips the lane. This
+          template does not run XcodeGen; the project must already be in the checkout.
+        type: string
+        default: ""
+      ios-scheme:
+        description: Xcode scheme for ios-device-build.
+        type: string
+        default: ""
+      package-task:
+        description: >-
+          Gradle task(s) for the package lane (for example jpackage). Runs on main and tags
+          only. Empty skips the lane. Output is UNSIGNED and is not uploaded.
+        type: string
+        default: ""
+      clickable-image:
+        description: >-
+          Clickable CI image for ut-click, which must be digest-pinned
+          (name@sha256:...). Empty skips the lane; a tag-only reference fails the lane.
+        type: string
+        default: ""
+      clickable-args:
+        description: Arguments passed to `clickable` inside the image.
+        type: string
+        default: "build --arch arm64"
+      ut-smoke-task:
+        description: >-
+          Gradle task(s) for ut-arm64-smoke, run on a native arm64 Linux userland. Empty
+          skips the lane. This is not a Ubuntu Touch device and proves nothing about one.
+        type: string
+        default: ""
+      lint-windows-paths:
+        description: Run the Windows path lint (job windows-path-lint). Leave true.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  # R3: runs before any windows lane. Checks tracked paths only; byte-exact fixtures still
+  # need `-text` in .gitattributes, which a path check cannot see.
+  windows-path-lint:
+    if: >-
+      inputs.lint-windows-paths && inputs.repo-public &&
+      contains(format(',{0},', inputs.lanes), ',jvm-windows,')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Windows path lint
+        run: |
+          git ls-files -z | python3 -I -c '
+          import re, sys
+          bad = 0
+          reserved = {"CON", "PRN", "AUX", "NUL"} | {"COM%d" % i for i in range(10)} | {"LPT%d" % i for i in range(10)}
+          for path in sys.stdin.buffer.read().decode("utf-8", "surrogateescape").split("\0"):
+              if not path:
+                  continue
+              reason = None
+              if re.search(r"[:<>|?*\"\\\\]", path):
+                  reason = "forbidden character"
+              else:
+                  for part in path.split("/"):
+                      if part.split(".")[0].upper() in reserved:
+                          reason = "reserved device name " + part
+                          break
+                      if part.endswith(".") or part.endswith(" "):
+                          reason = "component ends in a dot or space " + part
+                          break
+              if reason:
+                  sys.stderr.write("windows-path-lint: %s: %s\n" % (reason, path))
+                  bad = 1
+          if bad:
+              sys.exit(1)
+          print("windows-path-lint: ok")
+          '
+
+  jvm-linux:
+    if: contains(format(',{0},', inputs.lanes), ',jvm-linux,')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: JVM tests
+        env:
+          TASKS: ${{ inputs.jvm-task }}
+          EXTRA: ${{ inputs.gradle-args }}
+        run: ./gradlew --no-daemon $EXTRA $TASKS
+      - name: Evidence label
+        run: |
+          echo "jvm-linux (x86_64): CI (hosted VM) evidence only" >> "$GITHUB_STEP_SUMMARY"
+
+  jvm-linux-arm:
+    if: >-
+      contains(format(',{0},', inputs.lanes), ',jvm-linux-arm,') &&
+      (inputs.repo-public || inputs.allow-arm-on-private)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: JVM tests (arm64)
+        env:
+          TASKS: ${{ inputs.jvm-task }}
+          EXTRA: ${{ inputs.gradle-args }}
+        run: ./gradlew --no-daemon $EXTRA $TASKS
+      - name: Evidence label
+        run: |
+          echo "jvm-linux-arm (aarch64 hosted VM): CI (hosted VM) evidence only, not a device" >> "$GITHUB_STEP_SUMMARY"
+
+  jvm-windows:
+    needs: windows-path-lint
+    if: >-
+      always() && !cancelled() && inputs.repo-public &&
+      contains(format(',{0},', inputs.lanes), ',jvm-windows,') &&
+      (needs.windows-path-lint.result == 'success' ||
+       (needs.windows-path-lint.result == 'skipped' && !inputs.lint-windows-paths))
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: JVM tests (Windows)
+        shell: bash
+        env:
+          TASKS: ${{ inputs.jvm-task }}
+          EXTRA: ${{ inputs.gradle-args }}
+        run: ./gradlew --no-daemon $EXTRA $TASKS
+      - name: Evidence label
+        shell: bash
+        run: |
+          echo "jvm-windows: CI (hosted VM) evidence only; says nothing about Windows UI or devices" >> "$GITHUB_STEP_SUMMARY"
+
+  jvm-macos:
+    if: >-
+      inputs.repo-public &&
+      contains(format(',{0},', inputs.lanes), ',jvm-macos,')
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: JVM tests (macOS)
+        env:
+          TASKS: ${{ inputs.jvm-task }}
+          EXTRA: ${{ inputs.gradle-args }}
+        run: ./gradlew --no-daemon $EXTRA $TASKS
+      - name: Evidence label
+        run: |
+          echo "jvm-macos: CI (hosted VM) evidence only" >> "$GITHUB_STEP_SUMMARY"
+
+  ios-sim:
+    if: >-
+      inputs.repo-public &&
+      contains(format(',{0},', inputs.lanes), ',ios-sim,')
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Kotlin/Native simulator tests
+        env:
+          TASKS: ${{ inputs.ios-sim-task }}
+          EXTRA: ${{ inputs.gradle-args }}
+        run: ./gradlew --no-daemon $EXTRA $TASKS
+      - name: Evidence label
+        run: |
+          echo "ios-sim: SIMULATOR evidence on a hosted VM; not a device" >> "$GITHUB_STEP_SUMMARY"
+
+  # Compile only, unsigned. CODE_SIGNING_ALLOWED=NO means no certificate, profile or secret
+  # is involved. The output is not archived, uploaded or distributed.
+  ios-device-build:
+    if: >-
+      inputs.repo-public && inputs.ios-project != '' && inputs.ios-scheme != '' &&
+      contains(format(',{0},', inputs.lanes), ',ios-device-build,')
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unsigned iOS device build
+        env:
+          IOS_PROJECT: ${{ inputs.ios-project }}
+          IOS_SCHEME: ${{ inputs.ios-scheme }}
+        run: |
+          xcodebuild build \
+            -project "$IOS_PROJECT" \
+            -scheme "$IOS_SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+      - name: Evidence label
+        run: |
+          echo "ios-device-build: UNSIGNED compile on a hosted VM; not for release, not device evidence" >> "$GITHUB_STEP_SUMMARY"
+
+  wasm-browser:
+    if: contains(format(',{0},', inputs.lanes), ',wasm-browser,')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Kotlin/Wasm headless browser tests
+        env:
+          TASKS: ${{ inputs.wasm-task }}
+          EXTRA: ${{ inputs.gradle-args }}
+        run: ./gradlew --no-daemon $EXTRA $TASKS
+      - name: Evidence label
+        run: |
+          echo "wasm-browser: BROWSER-HEADLESS on a hosted VM" >> "$GITHUB_STEP_SUMMARY"
+
+  # Builds a click inside a digest-pinned Clickable image. Needs a Docker daemon on the
+  # runner; whether this works unmodified is unverified. Builds only; nothing is installed
+  # on or tested against an Ubuntu Touch device (all NDV).
+  ut-click:
+    if: >-
+      inputs.clickable-image != '' &&
+      contains(format(',{0},', inputs.lanes), ',ut-click,')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require a digest-pinned image
+        env:
+          IMAGE: ${{ inputs.clickable-image }}
+        run: |
+          case "$IMAGE" in
+            *@sha256:*) ;;
+            *) echo "clickable-image must be pinned by digest (name@sha256:...)" >&2; exit 1 ;;
+          esac
+      - name: Clickable build
+        env:
+          IMAGE: ${{ inputs.clickable-image }}
+          CLICKABLE_ARGS: ${{ inputs.clickable-args }}
+        run: |
+          # shellcheck disable=SC2086
+          docker run --rm -v "$PWD:/work" -w /work "$IMAGE" clickable $CLICKABLE_ARGS
+      - name: Evidence label
+        run: |
+          echo "ut-click: CONTAINER build on a hosted VM; NEEDS-DEVICE-VALIDATION for everything else" >> "$GITHUB_STEP_SUMMARY"
+
+  ut-arm64-smoke:
+    if: >-
+      inputs.ut-smoke-task != '' &&
+      contains(format(',{0},', inputs.lanes), ',ut-arm64-smoke,') &&
+      (inputs.repo-public || inputs.allow-arm-on-private)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: arm64 smoke
+        env:
+          TASKS: ${{ inputs.ut-smoke-task }}
+          EXTRA: ${{ inputs.gradle-args }}
+        run: ./gradlew --no-daemon $EXTRA $TASKS
+      - name: Evidence label
+        run: |
+          echo "ut-arm64-smoke: aarch64 userland on a hosted VM; CI-APPROX, NOT DEVICE EVIDENCE" >> "$GITHUB_STEP_SUMMARY"
+
+  # Main and tags only. Builds unsigned packages in the runner and discards them: no upload
+  # (R6). Where the binaries go is the caller's draft-release job, not this template.
+  package:
+    if: >-
+      inputs.package-task != '' &&
+      contains(format(',{0},', inputs.lanes), ',package,') &&
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Package (UNSIGNED, not for release)
+        env:
+          TASKS: ${{ inputs.package-task }}
+          EXTRA: ${{ inputs.gradle-args }}
+        run: ./gradlew --no-daemon $EXTRA $TASKS
+      - name: Evidence label
+        run: |
+          echo "package: UNSIGNED - not for release; not uploaded" >> "$GITHUB_STEP_SUMMARY"
+
+  # Disabled template. Signing and notarisation stay off until OQ-3 and OQ-4 are ruled; when
+  # enabled it must be main/tags only and use environment-scoped secrets, never a PR event.
+  sign:
+    if: github.event_name == 'disabled-template-never-true'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "sign lane is a disabled template (OQ-3, OQ-4)"

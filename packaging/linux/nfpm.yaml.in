@@ -1,0 +1,26 @@
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+# nFPM config for deb and rpm. Packages the jpackage app-image; builds nothing itself.
+# Run: nfpm package -p deb -f nfpm.yaml   (and -p rpm)
+name: "@@APP_NAME@@"
+arch: "@@NFPM_ARCH@@"
+platform: linux
+version: "@@VERSION@@"
+section: misc
+priority: optional
+maintainer: "@@MAINTAINER@@"
+description: "@@DESCRIPTION@@"
+vendor: "@@VENDOR@@"
+homepage: "@@HOMEPAGE@@"
+license: "@@LICENSE_SPDX@@"
+contents:
+  - src: "@@APPIMAGE_DIR@@"
+    dst: /opt/@@APP_NAME@@
+    type: tree
+  - src: /opt/@@APP_NAME@@/bin/@@APP_NAME@@
+    dst: /usr/bin/@@APP_NAME@@
+    type: symlink
+  - src: "@@DESKTOP_FILE@@"
+    dst: /usr/share/applications/@@FLATPAK_ID@@.desktop
+  - src: "@@METAINFO_FILE@@"
+    dst: /usr/share/metainfo/@@FLATPAK_ID@@.metainfo.xml
+# Deliberately none: no scripts that start services, no network calls at install time.

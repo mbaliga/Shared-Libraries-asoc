@@ -1,0 +1,45 @@
+name: Desktop (Windows)
+
+# The pure-JVM modules on a windows-2025 runner, after a lint that every tracked path is a
+# legal Windows filename. No artifacts are uploaded. This does not build or test the Android
+# modules, and says nothing about Windows UI or device behaviour.
+#
+# TODO: pin each `uses:` to a full commit SHA. Tags are used for now because the SHAs could not
+# be resolved when this file was written; do not invent them.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  jvm-windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Windows path lint
+        shell: bash
+        run: bash scripts/windows-path-lint.sh
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Unverified: whether the root build configures here without an Android SDK. If it does
+      # not, this step is the evidence, and the fix is in the build, not in this lane.
+      - name: JVM module tests
+        shell: bash
+        run: ./gradlew --no-daemon :search-core:test :evidence-schema:test

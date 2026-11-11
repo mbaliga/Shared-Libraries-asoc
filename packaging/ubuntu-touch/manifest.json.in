@@ -1,0 +1,15 @@
+{
+  "name": "@@CLICK_NAME@@",
+  "title": "@@APP_TITLE@@",
+  "description": "@@DESCRIPTION@@",
+  "version": "@@VERSION@@",
+  "maintainer": "@@MAINTAINER@@",
+  "framework": "@@UT_FRAMEWORK@@",
+  "architecture": "@@CLICK_ARCH@@",
+  "hooks": {
+    "@@APP_NAME@@": {
+      "apparmor": "apparmor.json",
+      "desktop": "@@APP_NAME@@.desktop"
+    }
+  }
+}

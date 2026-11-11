@@ -1,0 +1,11 @@
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+PackageIdentifier: @@WINGET_ID@@
+PackageVersion: "@@VERSION@@"
+InstallerType: wix
+Scope: user
+Installers:
+  - Architecture: x64
+    InstallerUrl: "@@MSI_URL@@"
+    InstallerSha256: "@@MSI_SHA256@@"
+ManifestType: installer
+ManifestVersion: 1.9.0

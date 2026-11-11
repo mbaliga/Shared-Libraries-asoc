@@ -1,0 +1,13 @@
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+# jpackage @argfile: run as  jpackage @jpackage.args  (JDK 17+). Linux: produces an app-image;
+# the deb/rpm and Flatpak templates consume that app-image rather than letting jpackage build them.
+--type app-image
+--name "@@APP_NAME@@"
+--app-version @@VERSION@@
+--vendor "@@VENDOR@@"
+--description "@@DESCRIPTION@@"
+--input "@@INPUT_DIR@@"
+--main-jar "@@MAIN_JAR@@"
+--main-class "@@MAIN_CLASS@@"
+--dest "@@OUT_DIR@@"
+--java-options -Dfile.encoding=UTF-8

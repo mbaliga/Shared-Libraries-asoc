@@ -1,0 +1,35 @@
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+# Flatpak manifest consuming a PREBUILT app-image (Flathub builds offline: every source must be a
+# URL plus sha256, nothing fetched during build). Runtime version must be checked for currency
+# against Flathub before use; the value below is a placeholder, not a recommendation.
+app-id: @@FLATPAK_ID@@
+runtime: org.freedesktop.Platform
+runtime-version: "@@FLATPAK_RUNTIME_VERSION@@"
+sdk: org.freedesktop.Sdk
+command: @@APP_NAME@@
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # No --share=network by default. Add it per app only if the app's own README names why.
+modules:
+  - name: @@APP_NAME@@
+    buildsystem: simple
+    build-commands:
+      - cp -r app-image /app/@@APP_NAME@@
+      - install -d /app/bin
+      - ln -s /app/@@APP_NAME@@/bin/@@APP_NAME@@ /app/bin/@@APP_NAME@@
+      - install -Dm644 @@FLATPAK_ID@@.desktop /app/share/applications/@@FLATPAK_ID@@.desktop
+      - install -Dm644 @@FLATPAK_ID@@.metainfo.xml /app/share/metainfo/@@FLATPAK_ID@@.metainfo.xml
+    sources:
+      - type: archive
+        url: "@@APPIMAGE_URL@@"
+        sha256: "@@APPIMAGE_SHA256@@"
+        dest: app-image
+      - type: file
+        path: app.desktop
+        dest-filename: @@FLATPAK_ID@@.desktop
+      - type: file
+        path: app.metainfo.xml
+        dest-filename: @@FLATPAK_ID@@.metainfo.xml

@@ -1,0 +1,35 @@
+# One catalog, TWO pin sets (OQ-17 Option B + OQ-38, ruled 2026-10-06 / 2026-10-07).
+#
+#   *-classic : repos with NO iOS target. Kotlin 2.1.20 + Compose Multiplatform 1.8.2
+#               (Clavis's working set). Android, desktop (JVM), Linux, Web.
+#   *-ios     : repos that SHIP an iOS target. Kotlin 2.2.21 + Compose Multiplatform 1.9.3.
+#               A Gradle build has exactly one Kotlin version, so such a repo moves as a whole
+#               (the plan's reading, not researched; PORTING_PROGRAM 5A.11).
+#
+# A repo uses ONE set and never mixes them. AGP is shared and is held in lockstep with
+# Hyle-Design-System (PT:D-Q): do not bump it here alone.
+#
+# Status: the pins are the owner's rulings; neither pair has been run in a consumer yet, and
+# 2.1.20 versus Xcode 26 is untested (OQ-38). 1.9.3 is Clavis's recipe, not a JetBrains-tested pair.
+#
+# Consume (settings.gradle.kts of a repo):
+#   dependencyResolutionManagement { versionCatalogs { create("asoc") {
+#       from(files("<path>/kmp-conventions/catalog/asoc.versions.toml")) } } }
+# then e.g. alias(asoc.plugins.kotlin.multiplatform.classic).
+# (Plugin aliases in a plugins block need the catalog loaded from settings, as above.)
+
+[versions]
+kotlin-classic = "2.1.20"
+compose-classic = "1.8.2"
+kotlin-ios = "2.2.21"
+compose-ios = "1.9.3"
+agp = "8.9.1"
+
+[plugins]
+kotlin-multiplatform-classic = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin-classic" }
+kotlin-compose-classic = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin-classic" }
+compose-multiplatform-classic = { id = "org.jetbrains.compose", version.ref = "compose-classic" }
+kotlin-multiplatform-ios = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin-ios" }
+kotlin-compose-ios = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin-ios" }
+compose-multiplatform-ios = { id = "org.jetbrains.compose", version.ref = "compose-ios" }
+android-library = { id = "com.android.library", version.ref = "agp" }

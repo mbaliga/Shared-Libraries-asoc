@@ -1,0 +1,40 @@
+name: Desktop (macOS)
+
+# The pure-JVM modules on a hosted macOS runner. No artifacts are uploaded, nothing is signed,
+# notarised or packaged. This is CI (hosted VM) evidence only: no Mac device gate is claimed
+# (OQ-5, OQ-31). It runs only when the repository is public (OQ-20), because hosted macOS
+# minutes are not free on a private repo.
+#
+# TODO: pin each `uses:` to a full commit SHA. Tags are used for now because the SHAs could not
+# be resolved when this file was written; do not invent them.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  jvm-macos:
+    if: github.event.repository.private == false
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: JVM module tests
+        run: ./gradlew --no-daemon :search-core:test :evidence-schema:test
