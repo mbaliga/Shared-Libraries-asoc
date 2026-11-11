@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--page-->
+<title>ASOC Viz Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500&display=swap">
+<style>
+/* Layout: a bento of loud grounds above quiet ones — colour sits in the top row, every mark below is one ink. */
+:root {
+  --page: #e3e1db; --wash-a: rgba(246, 238, 45, .34); --wash-b: rgba(255, 143, 76, .2);
+  --fg: #111110; --muted: #5d5b55; --card: #efede8; --line: rgba(17, 17, 16, .13);
+  --code-bg: #111110; --code-fg: #ecebe6;
+  --display: "Outfit", "Avenir Next", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
+  --r: 28px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #07070a; --wash-a: rgba(204, 236, 117, .07); --wash-b: rgba(142, 123, 255, .09);
+  --fg: #ecebe6; --muted: #9a988f; --card: #131316; --line: rgba(236, 235, 230, .15);
+  --code-bg: #131316; --code-fg: #ecebe6; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --page: #07070a; --wash-a: rgba(204, 236, 117, .07); --wash-b: rgba(142, 123, 255, .09);
+  --fg: #ecebe6; --muted: #9a988f; --card: #131316; --line: rgba(236, 235, 230, .15);
+  --code-bg: #131316; --code-fg: #ecebe6; color-scheme: dark }
+
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body {
+  margin: 0; background: var(--page); color: var(--fg); font: 300 16px/1.45 var(--display);
+  background-image: radial-gradient(60rem 34rem at 0% 0%, var(--wash-a), transparent 70%), radial-gradient(50rem 30rem at 70% 0%, var(--wash-b), transparent 70%);
+  background-repeat: no-repeat;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 36px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; margin-bottom: 28px }
+h1 { margin: 0; font-weight: 300; font-size: clamp(2.4rem, 6vw, 3.6rem); line-height: 1; letter-spacing: -.02em }
+.sub { margin: 10px 0 0; color: var(--muted); font-size: .8rem }
+.seg { display: inline-flex; padding: 4px; border-radius: 999px; border: 1px solid var(--line); gap: 2px }
+.seg button { font: inherit; font-size: .8rem; font-weight: 400; color: var(--fg); background: none; border: 0; padding: 7px 16px; border-radius: 999px; cursor: pointer }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--page) }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px }
+
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px }
+.card { --g: var(--card); --i: var(--fg); grid-column: span var(--span, 12); min-width: 0; background: var(--g); color: var(--i); border-radius: var(--r); padding: 18px 22px 22px; display: flex; flex-direction: column; gap: 16px; overflow: hidden }
+.card > .head { display: flex; align-items: center; justify-content: space-between; gap: 12px }
+.card h2 { margin: 0; font-size: 1.05rem; font-weight: 400 }
+.card h2 small { font-size: .72rem; font-weight: 300; opacity: .7; margin-left: .5em }
+.tbl-btn { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; cursor: pointer; color: var(--i); background: color-mix(in srgb, var(--i) 9%, transparent); display: grid; place-items: center }
+.tbl-btn[aria-pressed="true"] { background: var(--i); color: var(--g) }
+.body { min-width: 0; display: flex; flex-direction: column; gap: 16px; flex: 1 }
+.plot { min-width: 0 }
+.flush { padding-bottom: 0 }
+.flush .body { justify-content: flex-end }
+.h200 { height: 200px }
+.fanwrap { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: end }
+.fanwrap .legend { padding-bottom: 22px }
+.fanwrap .plot { height: 190px; margin-right: -22px }
+.pulse { gap: 18px }
+.card table { border-collapse: collapse; width: 100%; font-size: .78rem; font-variant-numeric: tabular-nums }
+.card th, .card td { text-align: left; font-weight: 300; padding: 5px 12px 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--i) 14%, transparent) }
+.card thead th { font-weight: 400; opacity: .7 }
+.card td { text-align: right; padding-right: 0 }
+.tbl { overflow-x: auto }
+.fills { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 14px }
+.fills figure { margin: 0; min-width: 0 }
+.fills svg { display: block; width: 100%; height: 76px; border-radius: 16px }
+.fills figcaption { font-size: .72rem; margin-top: 8px; display: flex; gap: .5em }
+.fills figcaption span { opacity: .55; font-variant-numeric: tabular-nums }
+pre { margin: 0; background: var(--code-bg); color: var(--code-fg); border-radius: 18px; padding: 18px 20px; overflow-x: auto; font: 400 .78rem/1.6 var(--mono) }
+.card.code { background: none; padding: 0 }
+
+@media (max-width: 960px) { .card { --span: 6 !important } .card.wide { --span: 12 !important } .fills { grid-template-columns: repeat(4, minmax(0, 1fr)) } }
+@media (max-width: 620px) { .card { --span: 12 !important } :root { --r: 24px } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+<!--/page-->
+</head>
+<body>
+<!--page-->
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Viz kit</h1>
+      <p class="sub">ASOC.viz <span id="ver"></span> · example data</p>
+    </div>
+    <div class="seg" role="group" aria-label="Grounds">
+      <button type="button" id="set-reference" data-set="reference" aria-pressed="true">Reference</button>
+      <button type="button" id="set-hyle" data-set="hyle" aria-pressed="false">Hyle</button>
+      <button type="button" id="set-mono" data-set="mono" aria-pressed="false">Mono</button>
+    </div>
+  </header>
+
+  <main class="grid" id="grid">
+    <section class="card flush" style="--span:5" data-slot="A" data-chart="builds">
+      <div class="head"><h2>Builds <small>this week</small></h2></div>
+      <div class="body"><div class="plot h200"></div></div>
+    </section>
+
+    <section class="card flush" style="--span:4" data-slot="B" data-chart="storage">
+      <div class="head"><h2>Storage <small>GB</small></h2></div>
+      <div class="body"><div class="fanwrap"><div class="legend"></div><div class="plot"></div></div></div>
+    </section>
+
+    <section class="card" style="--span:3" data-slot="C" data-chart="pulse">
+      <div class="head"><h2>Stability</h2></div>
+      <div class="body pulse"><div class="stat"></div><div class="plot spark"></div><div class="plot meter"></div></div>
+    </section>
+
+    <section class="card wide" style="--span:7" data-slot="N" data-chart="commits">
+      <div class="head"><h2>Commits <small>per day, 30 days</small></h2></div>
+      <div class="body"><div class="legend"></div><div class="plot h200"></div></div>
+    </section>
+
+    <section class="card wide" style="--span:5" data-slot="N" data-chart="repos">
+      <div class="head"><h2>Repository size <small>MB</small></h2></div>
+      <div class="body"><div class="plot"></div></div>
+    </section>
+
+    <section class="card wide" style="--span:7" data-slot="N" data-chart="time">
+      <div class="head"><h2>Hours <small>by project, this week</small></h2></div>
+      <div class="body"><div class="plot"></div><div class="legend"></div></div>
+    </section>
+
+    <section class="card wide" style="--span:5" data-slot="C" data-chart="hours">
+      <div class="head"><h2>Sessions <small>by hour</small></h2></div>
+      <div class="body"><div class="plot"></div></div>
+    </section>
+
+    <section class="card wide" style="--span:12" data-slot="N" data-chart="fills">
+      <div class="head"><h2>Textures <small>in their fixed order</small></h2></div>
+      <div class="body"><div class="fills" id="fills"></div></div>
+    </section>
+
+    <section class="card code wide" style="--span:12">
+<pre><code>&lt;script src="viz.js"&gt;&lt;/script&gt;
+
+ASOC.viz.steps(el, [
+  { label: 'Failed', value: 1 }, { label: 'Flaky', value: 3 },
+  { label: 'Running', value: 14 }, { label: 'Passed', value: 94 }
+], { tone: 'sun' });
+
+ASOC.viz.fan(el, parts, { tone: 'ember', sweep: 90 });   // or { ink, ground, accent }</code></pre>
+    </section>
+  </main>
+</div>
+
+<script src="viz.js"></script>
+<script>
+(function () {
+  var V = ASOC.viz, live = [], current = { hyle: 1, mono: 1 }[location.hash.slice(1)] ? location.hash.slice(1) : 'reference';
+  document.getElementById('ver').textContent = V.version;
+
+  var SETS = {
+    reference: { A: V.tones.sun, B: V.tones.ember, C: V.tones.night },
+    hyle: { A: V.tones.radium, B: V.tones.violet, C: { ground: '#000000', ink: '#ecebe6', accent: '#ccec75' } },
+    mono: { A: null, B: null, C: { ground: '#0c0c0d', ink: '#f2efe9' } }
+  };
+
+  /* example data */
+  var builds = [{ label: 'Failed', value: 1 }, { label: 'Flaky', value: 3 }, { label: 'Running', value: 14 }, { label: 'Passed', value: 94 }];
+  var storage = [{ label: 'Photos', value: 61, fill: 'fade' }, { label: 'Video', value: 38, fill: 'dots' }, { label: 'Apps', value: 23, fill: 'hatch' }, { label: 'Cache', value: 12, fill: 'solid' }];
+  var crashFree = [98.1, 98.4, 98.2, 98.6, 98.5, 98.9, 98.7, 98.8, 99.0, 98.8, 99.1, 99.0, 99.3, 99.2];
+  var main = [4, 6, 5, 9, 7, 2, 1, 6, 8, 11, 9, 12, 3, 2, 8, 10, 13, 11, 14, 4, 3, 12, 15, 13, 17, 16, 5, 4, 18, 21];
+  var side = [9, 8, 10, 7, 9, 3, 2, 8, 7, 9, 6, 8, 2, 1, 7, 6, 8, 5, 6, 2, 1, 5, 6, 4, 5, 4, 1, 1, 4, 3];
+  var days = main.map(function (_, i) { var d = new Date(2026, 9, 12 + i); return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); });
+  var hourly = (function () {
+    var rows = [], seed = 7;
+    function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    for (var d = 0; d < 7; d++) { var r = []; for (var h = 0; h < 24; h++) { var day = Math.exp(-Math.pow(h - 11, 2) / 18) + 0.8 * Math.exp(-Math.pow(h - 21, 2) / 6); r.push(h < 6 ? (rnd() < 0.15 ? 1 : 0) : Math.round(day * (d > 4 ? 14 : 26) * (0.6 + rnd() * 0.6))); } rows.push(r); }
+    return rows;
+  })();
+  var time = [{ label: 'Atlas', value: 18.5 }, { label: 'Birch', value: 11 }, { label: 'Cinder', value: 7.5 }, { label: 'Dune', value: 5 }, { label: 'Ember', value: 3.5 }, { label: 'Fjord', value: 2.5 }, { label: 'Grove', value: 1.5 }, { label: 'Heron', value: 1 }, { label: 'Islet', value: 0.5 }];
+  var repos = [{ label: 'atlas-android', value: 412 }, { label: 'shared-libraries', value: 131 }, { label: 'birch-web', value: 88 }, { label: 'cinder-engine', value: 54 }, { label: 'dune-watch', value: 19 }];
+
+  var draw = {
+    builds: function (card, t) { return [V.steps(card.querySelector('.plot'), builds, t)]; },
+    storage: function (card, t) {
+      V.legend(card.querySelector('.legend'), storage, t);
+      return [V.fan(card.querySelector('.plot'), storage, Object.assign({ sweep: 90, callout: '134 GB' }, t))];
+    },
+    pulse: function (card, t) {
+      V.stat(card.querySelector('.stat'), { label: 'Crash-free sessions', value: '99.2%', delta: 0.4, deltaUnit: ' pts', vs: 'vs last week' }, t);
+      V.spark(card.querySelector('.spark'), crashFree, Object.assign({ height: 44, label: 'Crash-free sessions, last 14 days' }, t));
+      return [V.meter(card.querySelector('.meter'), { value: 412, max: 500, label: 'beta seats' }, t)];
+    },
+    commits: function (card, t) {
+      var s = [{ label: 'main', values: main }, { label: 'branches', values: side }];
+      V.legend(card.querySelector('.legend'), s, Object.assign({ lines: true, row: true }, t));
+      return [V.line(card.querySelector('.plot'), s, Object.assign({ x: days, xTitle: 'Day' }, t))];
+    },
+    hours: function (card, t) {
+      var cols = []; for (var h = 0; h < 24; h++) cols.push((h < 10 ? '0' : '') + h);
+      return [V.halftone(card.querySelector('.plot'), { rows: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], cols: cols, values: hourly }, t)];
+    },
+    time: function (card, t) {
+      V.legend(card.querySelector('.legend'), time, Object.assign({ row: true }, t));
+      return [V.stack(card.querySelector('.plot'), time, Object.assign({ unit: 'Hours' }, t))];
+    },
+    repos: function (card, t) { return [V.bars(card.querySelector('.plot'), repos, Object.assign({ unit: 'MB' }, t))]; },
+    fills: function (card, t) {
+      var host = card.querySelector('.fills'); host.textContent = '';
+      V.order.forEach(function (kind, i) {
+        var fig = document.createElement('figure'), svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        r.setAttribute('width', '100%'); r.setAttribute('height', '100%'); r.setAttribute('fill', V.fills(svg, { ink: t.ink, scale: 1.25 })(kind, 'up'));
+        svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', kind); svg.appendChild(r); fig.appendChild(svg);
+        var cap = document.createElement('figcaption'), n = document.createElement('span'); n.textContent = String(i + 1);
+        cap.appendChild(n); cap.appendChild(document.createTextNode(kind)); fig.appendChild(cap); host.appendChild(fig);
+      });
+      return [];
+    }
+  };
+
+  var ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12M6 4v8"/></svg>';
+
+  function toneFor(card) {
+    var t = SETS[current][card.dataset.slot], root = getComputedStyle(document.documentElement);
+    if (!t) t = { ground: root.getPropertyValue('--card').trim(), ink: root.getPropertyValue('--fg').trim() };
+    card.style.setProperty('--g', t.ground); card.style.setProperty('--i', t.ink);
+    return { ink: t.ink, ground: t.ground, accent: t.accent || (card.dataset.slot === 'B' && SETS[current].A ? SETS[current].A.ground : null) };
+  }
+
+  function build() {
+    live.forEach(function (a) { a.destroy(); }); live = [];
+    Array.prototype.forEach.call(document.querySelectorAll('.card[data-chart]'), function (card) {
+      var apis = draw[card.dataset.chart](card, toneFor(card)), head = card.querySelector('.head'), btn = head.querySelector('.tbl-btn'), body = card.querySelector('.body'), tbl = card.querySelector('.tbl');
+      live = live.concat(apis);
+      if (!apis.length) return;
+      if (!btn) {
+        btn = document.createElement('button'); btn.type = 'button'; btn.className = 'tbl-btn'; btn.id = 'tbl-' + card.dataset.chart; btn.innerHTML = ICON;
+        btn.setAttribute('aria-label', 'Show as table'); btn.setAttribute('aria-pressed', 'false'); head.appendChild(btn);
+        tbl = document.createElement('div'); tbl.className = 'tbl'; tbl.hidden = true; card.appendChild(tbl);
+        btn.addEventListener('click', function () {
+          var on = btn.getAttribute('aria-pressed') !== 'true';
+          btn.setAttribute('aria-pressed', String(on)); body.hidden = on; tbl.hidden = !on;
+          if (on) { tbl.textContent = ''; tbl.appendChild(card._api.table()); }
+        });
+      }
+      card._api = apis[0];
+      if (!tbl.hidden) { tbl.textContent = ''; tbl.appendChild(card._api.table()); }
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function (b) {
+    b.addEventListener('click', function () {
+      current = b.dataset.set;
+      try { history.replaceState(null, '', '#' + current); } catch (e) {}
+      press(); build();
+    });
+  });
+  function press() { Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function (x) { x.setAttribute('aria-pressed', String(x.dataset.set === current)); }); }
+  press();
+  if (window.matchMedia) { var mq = matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', build); }
+  new MutationObserver(build).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  build();
+})();
+</script>
+<!--/page-->
+</body>
+</html>

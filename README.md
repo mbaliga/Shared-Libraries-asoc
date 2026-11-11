@@ -17,6 +17,9 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 (`cells`, `sfx`, `rose`, `brands`, `Graph`, `gantt`) carved out of Orrery so that no app draws the same thing twice.
 They are consumed by copying or submodule, with no bundler assumed.
 
+[`web/viz-kit/`](web/viz-kit/README.md) holds `viz.js` (`ASOC.viz`): charts whose categories are textures rather than
+hues — steps, bars, fan, stack, line, halftone, meter — in one ink on any ground, with the same consumption rules.
+
 `local-session-core` is the reserved home for Bocal's local multiplayer/session transport. It is
 not scaffolded here: the concurrent Bocal session remains authoritative, and its implementation
 should land once rather than be duplicated by a placeholder.
