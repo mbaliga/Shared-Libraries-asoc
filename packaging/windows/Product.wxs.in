@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+     WiX v4 source (untested here: no Windows or WiX toolchain in this repository's environment).
+     UpgradeCode is allocated per app via NAMES.md; the sample value in lint is not real. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="@@APP_TITLE@@" Manufacturer="@@VENDOR@@" Version="@@VERSION@@"
+           UpgradeCode="@@WIX_UPGRADE_GUID@@" Scope="perUser" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of @@APP_TITLE@@ is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="@@APP_NAME@@">
+        <Files Include="@@APPIMAGE_DIR@@\**" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="*">
+        <Shortcut Id="AppShortcut" Name="@@APP_TITLE@@" Target="[INSTALLFOLDER]@@APP_TITLE@@.exe" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKCU" Key="Software\@@VENDOR@@\@@APP_NAME@@" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+    <Feature Id="Main" Title="@@APP_TITLE@@" Level="1">
+      <ComponentGroupRef Id="INSTALLFOLDER" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+</Wix>

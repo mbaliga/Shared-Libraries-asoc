@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+     Entitlements are a PLACEHOLDER set. Which ones the app really needs (App Sandbox or not, JIT
+     for a JVM app-image) is the verdict of spike S-M3, which has not been run. Do not widen
+     without that verdict. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+  <!-- Add com.apple.security.network.client only for apps whose README names the outbound call. -->
+</dict>
+</plist>

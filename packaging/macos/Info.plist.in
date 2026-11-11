@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+     jpackage can take this via its resource-dir option; otherwise it generates its own. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.asoc.@@APP_NAME@@</string>
+  <key>CFBundleName</key><string>@@APP_TITLE@@</string>
+  <key>CFBundleDisplayName</key><string>@@APP_TITLE@@</string>
+  <key>CFBundleExecutable</key><string>@@APP_TITLE@@</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>@@VERSION@@</string>
+  <key>CFBundleVersion</key><string>@@BUILD_NUMBER@@</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>

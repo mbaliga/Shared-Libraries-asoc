@@ -1,0 +1,14 @@
+# TEMPLATE - UNSIGNED - NOT FOR RELEASE. Never built or run in this repository; see packaging/README.md.
+cask "@@APP_NAME@@" do
+  version "@@VERSION@@"
+  sha256 "@@DMG_SHA256@@"
+
+  url "@@DMG_URL@@"
+  name "@@APP_TITLE@@"
+  desc "@@DESCRIPTION@@"
+  homepage "@@HOMEPAGE@@"
+
+  depends_on macos: ">= :sequoia"
+
+  app "@@APP_TITLE@@.app"
+end

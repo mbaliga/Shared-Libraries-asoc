@@ -12,6 +12,10 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:cell-shell` | `dev.aarso:cell-shell` | Android library (Compose) | The constellation's shared navigation and motion shell — spatial layout, edge timeline scrubber, shake-to-refresh. |
 | `:feedback` | `dev.aarso:feedback` | Android library | Opt-in feedback for experimental features: a fully user-readable draft, delivered only by a share/mail chooser the user launches. No telemetry, no network, ever. |
 | `:evidence-schema` | `dev.aarso:evidence-schema` | pure JVM/resources | Versioned portable JSON schemas for evidence/event exchange across Baseline, Crocodyl, and Ebbflow. |
+| `:cell-shell-core` | `dev.aarso:cell-shell-core` | pure JVM | The platform-neutral maths and state behind `:cell-shell`, for hosts that are not Android. `:cell-shell` does not use it yet. |
+| `platform-ports/` | `dev.aarso:platform-ports` | Kotlin Multiplatform (own included build) | Key storage that reports its tier, app directories, file picker and share sheet, power/thermal/metered probes, Bluetooth RFCOMM. Every stub says so. Not part of the root build on purpose. |
+| `kmp-conventions/` | `dev.aarso.kmp-conventions` | Gradle plugin (own included build) | `asocTargets { android(); jvm(); ios(); wasm() }`, the `android.*` import ban, a permissive-licence check, and the two Kotlin/Compose pin sets. |
+| `packaging/` | n/a | templates | Per-OS packaging templates (Linux, Windows, macOS, iOS/iPadOS, Ubuntu Touch) with a lint script. Templates only: none is known to build an installer. |
 
 **Web modules** live under [`web/orrery-kit/`](web/orrery-kit/README.md): dependency-free browser files
 (`cells`, `sfx`, `rose`, `brands`, `Graph`, `gantt`) carved out of Orrery so that no app draws the same thing twice.
