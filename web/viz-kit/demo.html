@@ -8,80 +8,94 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500&display=swap">
 <style>
-/* Layout: a bento of loud grounds above quiet ones — colour sits in the top row, every mark below is one ink. */
+/* Layout: loud grounds in a bento at the top, then the whole vocabulary as a masonry of quiet cards sized to their charts. */
 :root {
   --page: #e3e1db; --wash-a: rgba(246, 238, 45, .34); --wash-b: rgba(255, 143, 76, .2);
   --fg: #111110; --muted: #5d5b55; --card: #efede8; --line: rgba(17, 17, 16, .13);
   --code-bg: #111110; --code-fg: #ecebe6;
   --display: "Outfit", "Avenir Next", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
-  --r: 28px;
+  --r: 26px;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --page: #07070a; --wash-a: rgba(204, 236, 117, .07); --wash-b: rgba(142, 123, 255, .09);
   --fg: #ecebe6; --muted: #9a988f; --card: #131316; --line: rgba(236, 235, 230, .15);
-  --code-bg: #131316; --code-fg: #ecebe6; color-scheme: dark } }
+  --code-bg: #1b1b1f; --code-fg: #ecebe6; color-scheme: dark } }
 :root[data-theme="dark"] {
   --page: #07070a; --wash-a: rgba(204, 236, 117, .07); --wash-b: rgba(142, 123, 255, .09);
   --fg: #ecebe6; --muted: #9a988f; --card: #131316; --line: rgba(236, 235, 230, .15);
-  --code-bg: #131316; --code-fg: #ecebe6; color-scheme: dark }
+  --code-bg: #1b1b1f; --code-fg: #ecebe6; color-scheme: dark }
 
 * { box-sizing: border-box }
 [hidden] { display: none !important }
+html { scroll-behavior: smooth }
 body {
   margin: 0; background: var(--page); color: var(--fg); font: 300 16px/1.45 var(--display);
   background-image: radial-gradient(60rem 34rem at 0% 0%, var(--wash-a), transparent 70%), radial-gradient(50rem 30rem at 70% 0%, var(--wash-b), transparent 70%);
   background-repeat: no-repeat;
 }
-.wrap { max-width: 1180px; margin: 0 auto; padding-block: 36px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; margin-bottom: 28px }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 36px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; margin-bottom: 18px }
 h1 { margin: 0; font-weight: 300; font-size: clamp(2.4rem, 6vw, 3.6rem); line-height: 1; letter-spacing: -.02em }
 .sub { margin: 10px 0 0; color: var(--muted); font-size: .8rem }
+.ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 .seg { display: inline-flex; padding: 4px; border-radius: 999px; border: 1px solid var(--line); gap: 2px }
-.seg button { font: inherit; font-size: .8rem; font-weight: 400; color: var(--fg); background: none; border: 0; padding: 7px 16px; border-radius: 999px; cursor: pointer }
-.seg button[aria-pressed="true"] { background: var(--fg); color: var(--page) }
-button:focus-visible, [tabindex]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px }
+.seg button, .chip { font: inherit; font-size: .78rem; font-weight: 400; color: var(--fg); background: none; border: 0; padding: 7px 15px; border-radius: 999px; cursor: pointer; white-space: nowrap }
+.chip { border: 1px solid var(--line) }
+.seg button[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--fg); color: var(--page); border-color: var(--fg) }
+button:focus-visible, select:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px }
+nav { display: flex; flex-wrap: wrap; gap: 4px 2px; margin: 0 0 22px -10px }
+nav a { color: var(--muted); text-decoration: none; font-size: .82rem; padding: 4px 10px; border-radius: 999px }
+nav a:hover { color: var(--fg) }
+nav a span { opacity: .6; font-variant-numeric: tabular-nums; margin-left: .35em }
 
-.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px }
-.card { --g: var(--card); --i: var(--fg); grid-column: span var(--span, 12); min-width: 0; background: var(--g); color: var(--i); border-radius: var(--r); padding: 18px 22px 22px; display: flex; flex-direction: column; gap: 16px; overflow: hidden }
-.card > .head { display: flex; align-items: center; justify-content: space-between; gap: 12px }
-.card h2 { margin: 0; font-size: 1.05rem; font-weight: 400 }
-.card h2 small { font-size: .72rem; font-weight: 300; opacity: .7; margin-left: .5em }
-.tbl-btn { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; cursor: pointer; color: var(--i); background: color-mix(in srgb, var(--i) 9%, transparent); display: grid; place-items: center }
-.tbl-btn[aria-pressed="true"] { background: var(--i); color: var(--g) }
-.body { min-width: 0; display: flex; flex-direction: column; gap: 16px; flex: 1 }
+section.sec { margin-top: 34px; scroll-margin-top: 16px }
+section.sec > h2 { margin: 0 0 12px; font-size: 1.5rem; font-weight: 300; letter-spacing: -.01em }
+section.sec > h2 small { font-size: .78rem; color: var(--muted); margin-left: .6em; font-weight: 300 }
+.bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px }
+.bento .card { grid-column: span var(--span, 12) }
+.gal { columns: 3 330px; column-gap: 10px }
+.gal .card { break-inside: avoid; margin: 0 0 10px; display: flex }
+.gal .card.wide { column-span: all }
+
+.card { --g: var(--card); --i: var(--fg); min-width: 0; background: var(--g); color: var(--i); border-radius: var(--r); padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 14px; overflow: hidden }
+.card > .head { display: flex; align-items: center; gap: 6px }
+.card h3 { margin: 0 auto 0 0; font-size: 1.02rem; font-weight: 400; min-width: 0 }
+.card h3 small { font-size: .72rem; font-weight: 300; opacity: .7; margin-left: .5em }
+.ib { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 0; cursor: pointer; color: var(--i); background: color-mix(in srgb, var(--i) 9%, transparent); display: grid; place-items: center; font: 400 .8rem var(--display) }
+.ib[aria-pressed="true"] { background: var(--i); color: var(--g) }
+.vars { display: flex; flex-wrap: wrap; gap: 5px }
+.vars button { font: inherit; font-size: .72rem; font-weight: 400; color: var(--i); background: color-mix(in srgb, var(--i) 9%, transparent); border: 0; border-radius: 999px; padding: 5px 12px; cursor: pointer }
+.vars button[aria-pressed="true"] { background: var(--i); color: var(--g) }
+.body { min-width: 0; display: flex; flex-direction: column; gap: 14px; flex: 1 }
 .plot { min-width: 0 }
 .flush { padding-bottom: 0 }
 .flush .body { justify-content: flex-end }
-.h200 { height: 200px }
 .fanwrap { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: end }
-.fanwrap .legend { padding-bottom: 22px }
-.fanwrap .plot { height: 190px; margin-right: -22px }
-.pulse { gap: 18px }
-.card table { border-collapse: collapse; width: 100%; font-size: .78rem; font-variant-numeric: tabular-nums }
-.card th, .card td { text-align: left; font-weight: 300; padding: 5px 12px 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--i) 14%, transparent) }
+.fanwrap .legend { padding-bottom: 20px }
+.fanwrap .plot { height: 190px; margin-right: -20px }
+.code { margin: 0; background: color-mix(in srgb, var(--i) 92%, transparent); color: var(--g); border-radius: 14px; padding: 12px 14px; overflow-x: auto; font: 400 .72rem/1.55 var(--mono); white-space: pre }
+.card table { border-collapse: collapse; width: 100%; font-size: .76rem; font-variant-numeric: tabular-nums }
+.card th, .card td { text-align: left; font-weight: 300; padding: 4px 12px 4px 0; border-bottom: 1px solid color-mix(in srgb, var(--i) 14%, transparent); white-space: nowrap }
 .card thead th { font-weight: 400; opacity: .7 }
 .card td { text-align: right; padding-right: 0 }
-.tbl { overflow-x: auto }
-.fills { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 14px }
-.fills figure { margin: 0; min-width: 0 }
-.fills svg { display: block; width: 100%; height: 76px; border-radius: 16px }
-.fills figcaption { font-size: .72rem; margin-top: 8px; display: flex; gap: .5em }
-.fills figcaption span { opacity: .55; font-variant-numeric: tabular-nums }
-.tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
-.tools button { font: inherit; font-size: .74rem; font-weight: 400; color: var(--i); background: color-mix(in srgb, var(--i) 9%, transparent); border: 0; border-radius: 999px; padding: 6px 13px; cursor: pointer }
-.tools button[aria-pressed="true"] { background: var(--i); color: var(--g) }
-.tools .legend { margin-left: auto }
-.tools .legend li { cursor: pointer; border-radius: 999px }
-.tools .legend li[aria-pressed="true"] { text-decoration: line-through; opacity: .55 }
-.graph { height: 400px }
+.card td:not(:last-child) { padding-right: 12px }
+.tbl { overflow: auto; max-height: 320px }
 .gantt { overflow-x: auto }
-pre { margin: 0; background: var(--code-bg); color: var(--code-fg); border-radius: 18px; padding: 18px 20px; overflow-x: auto; font: 400 .78rem/1.6 var(--mono) }
-.card.code { background: none; padding: 0 }
+.vocab { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 12px }
+.vocab figure { margin: 0; min-width: 0 }
+.vocab svg.tile { display: block; width: 100%; height: 70px; border-radius: 14px }
+.vocab figcaption, .keys span { font-size: .72rem; margin-top: 7px; display: flex; gap: .5em }
+.vocab figcaption i { font-style: normal; opacity: .55; font-variant-numeric: tabular-nums }
+.keys { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center }
+.keys > div { display: flex; align-items: center; gap: 8px }
+.keys span { margin: 0 }
+.keys b { font-weight: 400; font-size: .78rem; opacity: .6; margin-right: 2px }
+footer { margin-top: 40px; color: var(--muted); font-size: .78rem }
 
-@media (max-width: 960px) { .card { --span: 6 !important } .card.wide { --span: 12 !important } .fills { grid-template-columns: repeat(4, minmax(0, 1fr)) } }
-@media (max-width: 620px) { .card { --span: 12 !important } :root { --r: 24px } }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+@media (max-width: 960px) { .bento .card { --span: 6 !important } .bento .card.wide { --span: 12 !important } .vocab { grid-template-columns: repeat(4, minmax(0, 1fr)) } }
+@media (max-width: 620px) { .bento .card { --span: 12 !important } :root { --r: 22px } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } html { scroll-behavior: auto } }
 </style>
 <!--/page-->
 </head>
@@ -91,133 +105,85 @@ pre { margin: 0; background: var(--code-bg); color: var(--code-fg); border-radiu
   <header>
     <div>
       <h1>Viz kit</h1>
-      <p class="sub">ASOC.viz <span id="ver"></span> · example data</p>
+      <p class="sub">ASOC.viz <span id="ver"></span> · <span id="count"></span> charts · example data</p>
     </div>
-    <div class="seg" role="group" aria-label="Grounds">
-      <button type="button" id="set-reference" data-set="reference" aria-pressed="true">Reference</button>
-      <button type="button" id="set-hyle" data-set="hyle" aria-pressed="false">Hyle</button>
-      <button type="button" id="set-mono" data-set="mono" aria-pressed="false">Mono</button>
+    <div class="ctl">
+      <div class="seg" role="group" aria-label="Grounds">
+        <button type="button" id="set-reference" data-set="reference">Reference</button>
+        <button type="button" id="set-hyle" data-set="hyle">Hyle</button>
+        <button type="button" id="set-mono" data-set="mono">Mono</button>
+      </div>
+      <button type="button" class="chip" id="t-cells" aria-pressed="true">Cell marks</button>
+      <button type="button" class="chip" id="t-brands" aria-pressed="true">Brand marks</button>
+      <button type="button" class="chip" id="t-sound" aria-pressed="false">Sound</button>
     </div>
   </header>
-
-  <main class="grid" id="grid">
-    <section class="card flush" style="--span:5" data-slot="A" data-chart="builds">
-      <div class="head"><h2>Builds <small>this week</small></h2></div>
-      <div class="body"><div class="plot h200"></div></div>
-    </section>
-
-    <section class="card flush" style="--span:4" data-slot="B" data-chart="storage">
-      <div class="head"><h2>Storage <small>GB</small></h2></div>
-      <div class="body"><div class="fanwrap"><div class="legend"></div><div class="plot"></div></div></div>
-    </section>
-
-    <section class="card" style="--span:3" data-slot="C" data-chart="pulse">
-      <div class="head"><h2>Stability</h2></div>
-      <div class="body pulse"><div class="stat"></div><div class="plot spark"></div><div class="plot meter"></div></div>
-    </section>
-
-    <section class="card wide" style="--span:7" data-slot="N" data-chart="commits">
-      <div class="head"><h2>Commits <small>per day, 30 days</small></h2></div>
-      <div class="body"><div class="legend"></div><div class="plot h200"></div></div>
-    </section>
-
-    <section class="card wide" style="--span:5" data-slot="N" data-chart="repos">
-      <div class="head"><h2>Repository size <small>MB</small></h2></div>
-      <div class="body"><div class="plot"></div></div>
-    </section>
-
-    <section class="card wide" style="--span:8" data-slot="N" data-chart="modules">
-      <div class="head"><h2>Modules <small>and what they import</small></h2></div>
-      <div class="body">
-        <div class="tools"><button type="button" id="g-mode" aria-pressed="false">3D</button><button type="button" id="g-fit">Fit</button><button type="button" id="g-undo">Undo</button><div class="legend"></div></div>
-        <div class="plot graph"></div>
-      </div>
-    </section>
-
-    <section class="card wide" style="--span:4" data-slot="A" data-chart="focus">
-      <div class="head"><h2>Focus <small>minutes by hour</small></h2></div>
-      <div class="body"><div class="legend"></div><div class="plot"></div></div>
-    </section>
-
-    <section class="card wide" style="--span:12" data-slot="N" data-chart="runway">
-      <div class="head"><h2>Runway <small>next two weeks</small></h2></div>
-      <div class="body"><div class="plot gantt"></div></div>
-    </section>
-
-    <section class="card wide" style="--span:7" data-slot="N" data-chart="time">
-      <div class="head"><h2>Hours <small>by project, this week</small></h2></div>
-      <div class="body"><div class="plot"></div><div class="legend"></div></div>
-    </section>
-
-    <section class="card wide" style="--span:5" data-slot="C" data-chart="hours">
-      <div class="head"><h2>Sessions <small>by hour</small></h2></div>
-      <div class="body"><div class="plot"></div></div>
-    </section>
-
-    <section class="card wide" style="--span:12" data-slot="N" data-chart="fills">
-      <div class="head"><h2>Textures <small>in their fixed order</small></h2></div>
-      <div class="body"><div class="fills" id="fills"></div></div>
-    </section>
-
-    <section class="card code wide" style="--span:12">
-<pre><code>&lt;script src="viz.js"&gt;&lt;/script&gt;
-
-ASOC.viz.steps(el, [
-  { label: 'Failed', value: 1 }, { label: 'Flaky', value: 3 },
-  { label: 'Running', value: 14 }, { label: 'Passed', value: 94 }
-], { tone: 'sun' });
-
-ASOC.viz.fan(el, parts, { tone: 'ember', sweep: 90 });   // or { ink, ground, accent }
-
-&lt;script src="../orrery-kit/graph.js"&gt;&lt;/script&gt;         // before viz.js, for graph; rose.js and gantt.js likewise
-var g = ASOC.viz.graph(el, { nodes, links }, { mode: '2d' });   // g.setMode('3d'), g.fit(), g.undo(), g.toggle(group)</code></pre>
-    </section>
-  </main>
+  <nav id="nav" aria-label="Sections"></nav>
+  <main id="main"></main>
+  <footer>Every figure on this page is example data. Marks belong to their owners and identify a technology; they sit behind the Brand marks switch.</footer>
 </div>
 
+<script src="../orrery-kit/cells.js"></script>
+<script src="../orrery-kit/brands.js"></script>
+<script src="../orrery-kit/sfx.js"></script>
 <script src="../orrery-kit/graph.js"></script>
 <script src="../orrery-kit/rose.js"></script>
 <script src="../orrery-kit/gantt.js"></script>
 <script src="viz.js"></script>
+<script src="viz-charts.js"></script>
 <script>
 (function () {
-  var V = ASOC.viz, live = [], current = { hyle: 1, mono: 1 }[location.hash.slice(1)] ? location.hash.slice(1) : 'reference';
-  document.getElementById('ver').textContent = V.version;
-
+  var V = ASOC.viz, live = [], current = { hyle: 1, mono: 1 }[location.hash.slice(1)] ? location.hash.slice(1) : 'reference', flags = { cells: true, brands: true, sound: false };
   var SETS = {
     reference: { A: V.tones.sun, B: V.tones.ember, C: V.tones.night },
     hyle: { A: V.tones.radium, B: V.tones.violet, C: { ground: '#000000', ink: '#ecebe6', accent: '#ccec75' } },
     mono: { A: null, B: null, C: { ground: '#0c0c0d', ink: '#f2efe9' } }
   };
+  function mix(a, b) { var o = {}, k; for (k in a) o[k] = a[k]; for (k in b) o[k] = b[k]; return o; }
+  function q(card, s) { return card.querySelector(s); }
+  var seed = 11; function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+  function gauss() { return (rnd() + rnd() + rnd() + rnd() - 2) / 0.58; }
 
-  /* example data */
-  var builds = [{ label: 'Failed', value: 1 }, { label: 'Flaky', value: 3 }, { label: 'Running', value: 14 }, { label: 'Passed', value: 94 }];
-  var storage = [{ label: 'Photos', value: 61, fill: 'fade' }, { label: 'Video', value: 38, fill: 'dots' }, { label: 'Apps', value: 23, fill: 'hatch' }, { label: 'Cache', value: 12, fill: 'solid' }];
-  var crashFree = [98.1, 98.4, 98.2, 98.6, 98.5, 98.9, 98.7, 98.8, 99.0, 98.8, 99.1, 99.0, 99.3, 99.2];
-  var main = [4, 6, 5, 9, 7, 2, 1, 6, 8, 11, 9, 12, 3, 2, 8, 10, 13, 11, 14, 4, 3, 12, 15, 13, 17, 16, 5, 4, 18, 21];
-  var side = [9, 8, 10, 7, 9, 3, 2, 8, 7, 9, 6, 8, 2, 1, 7, 6, 8, 5, 6, 2, 1, 5, 6, 4, 5, 4, 1, 1, 4, 3];
-  var days = main.map(function (_, i) { var d = new Date(2026, 9, 12 + i); return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); });
-  var hourly = (function () {
-    var rows = [], seed = 7;
-    function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
-    for (var d = 0; d < 7; d++) { var r = []; for (var h = 0; h < 24; h++) { var day = Math.exp(-Math.pow(h - 11, 2) / 18) + 0.8 * Math.exp(-Math.pow(h - 21, 2) / 6); r.push(h < 6 ? (rnd() < 0.15 ? 1 : 0) : Math.round(day * (d > 4 ? 14 : 26) * (0.6 + rnd() * 0.6))); } rows.push(r); }
-    return rows;
-  })();
-  var time = [{ label: 'Atlas', value: 18.5 }, { label: 'Birch', value: 11 }, { label: 'Cinder', value: 7.5 }, { label: 'Dune', value: 5 }, { label: 'Ember', value: 3.5 }, { label: 'Fjord', value: 2.5 }, { label: 'Grove', value: 1.5 }, { label: 'Heron', value: 1 }, { label: 'Islet', value: 0.5 }];
-  var repos = [{ label: 'atlas-android', value: 412 }, { label: 'shared-libraries', value: 131 }, { label: 'birch-web', value: 88 }, { label: 'cinder-engine', value: 54 }, { label: 'dune-watch', value: 19 }];
-
-  var modules = (function () {
+  /* ── example data ─────────────────────────────────────────────────────────────────────────────────────────── */
+  var D = {};
+  D.builds = [{ label: 'Failed', value: 1 }, { label: 'Flaky', value: 3 }, { label: 'Running', value: 14 }, { label: 'Passed', value: 94 }];
+  D.storage = [{ label: 'Photos', value: 61, fill: 'fade' }, { label: 'Video', value: 38, fill: 'dots' }, { label: 'Apps', value: 23, fill: 'hatch' }, { label: 'Cache', value: 12, fill: 'solid' }];
+  D.crash = [98.1, 98.4, 98.2, 98.6, 98.5, 98.9, 98.7, 98.8, 99.0, 98.8, 99.1, 99.0, 99.3, 99.2];
+  D.main = [4, 6, 5, 9, 7, 2, 1, 6, 8, 11, 9, 12, 3, 2, 8, 10, 13, 11, 14, 4, 3, 12, 15, 13, 17, 16, 5, 4, 18, 21];
+  D.side = [9, 8, 10, 7, 9, 3, 2, 8, 7, 9, 6, 8, 2, 1, 7, 6, 8, 5, 6, 2, 1, 5, 6, 4, 5, 4, 1, 1, 4, 3];
+  D.days = D.main.map(function (_, i) { return new Date(2026, 9, 12 + i).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); });
+  D.langs = [{ label: 'Kotlin', value: 184, brand: 'Kotlin' }, { label: 'TypeScript', value: 96, brand: 'TypeScript' }, { label: 'Python', value: 41, brand: 'Python' }, { label: 'Rust', value: 33, brand: 'Rust' }, { label: 'Swift', value: 22, brand: 'Swift' }, { label: 'Shell', value: 6, brand: 'Shell' }];
+  D.quarters = { categories: ['Q1', 'Q2', 'Q3', 'Q4'], series: [{ label: 'Android', values: [12, 18, 22, 27] }, { label: 'Web', values: [8, 9, 14, 13] }, { label: 'Watch', values: [2, 5, 4, 9] }] };
+  D.water = [{ label: 'Start', value: 120, total: true }, { label: 'New', value: 46 }, { label: 'Upgrades', value: 18 }, { label: 'Refunds', value: -9 }, { label: 'Churn', value: -31 }, { label: 'End', total: true }];
+  D.bullets = [{ label: 'Cold start, ms', value: 410, target: 350, ranges: [300, 500, 800] }, { label: 'Crash-free, %', value: 99.2, target: 99.5, ranges: [98, 99, 100] }, { label: 'APK size, MB', value: 18, target: 20, ranges: [15, 25, 40] }];
+  D.ranges = [{ label: 'Design', lo: 2, hi: 9 }, { label: 'Build', lo: 6, hi: 21 }, { label: 'Review', lo: 18, hi: 24 }, { label: 'Beta', lo: 22, hi: 34 }, { label: 'Release', lo: 33, hi: 36 }];
+  D.radial = [{ label: 'Android', value: 82 }, { label: 'Web', value: 64 }, { label: 'Watch', value: 41 }, { label: 'Desktop', value: 27 }];
+  D.funnel = [{ label: 'Store views', value: 12400 }, { label: 'Installs', value: 4100 }, { label: 'First open', value: 3300 }, { label: 'Week-two active', value: 1450 }, { label: 'Paid', value: 310 }];
+  D.time = [{ label: 'Atlas', value: 18.5 }, { label: 'Birch', value: 11 }, { label: 'Cinder', value: 7.5 }, { label: 'Dune', value: 5 }, { label: 'Ember', value: 3.5 }, { label: 'Fjord', value: 2.5 }, { label: 'Grove', value: 1.5 }, { label: 'Heron', value: 1 }, { label: 'Islet', value: 0.5 }];
+  D.areas = ['Android', 'Web', 'Watch', 'Desktop'].map(function (label, k) { var v = 6 + k * 2; return { label: label, values: D.days.map(function (_, i) { v = Math.max(1, v + (rnd() - 0.45) * 4); return Math.round(v + Math.sin(i / 4 + k) * 3 + 4); }) }; });
+  D.candles = (function () { var out = [], p = 100; for (var i = 0; i < 28; i++) { var o = p, c = Math.max(60, o + (rnd() - 0.47) * 9), h = Math.max(o, c) + rnd() * 4, l = Math.min(o, c) - rnd() * 4; out.push({ t: D.days[i], o: +o.toFixed(1), h: +h.toFixed(1), l: +l.toFixed(1), c: +c.toFixed(1) }); p = c; } return out; })();
+  D.cal = (function () { var out = []; for (var i = 0; i < 126; i++) { var d = new Date(2026, 6, 6 + i), wk = d.getDay() === 0 || d.getDay() === 6; out.push({ date: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2), value: rnd() < (wk ? 0.55 : 0.12) ? 0 : Math.round(rnd() * rnd() * (wk ? 8 : 22)) }); } return out; })();
+  D.hourly = (function () { var rows = []; for (var d = 0; d < 7; d++) { var r = []; for (var h = 0; h < 24; h++) { var day = Math.exp(-Math.pow(h - 11, 2) / 18) + 0.8 * Math.exp(-Math.pow(h - 21, 2) / 6); r.push(h < 6 ? (rnd() < 0.15 ? 1 : 0) : Math.round(day * (d > 4 ? 14 : 26) * (0.6 + rnd() * 0.6))); } rows.push(r); } return rows; })();
+  D.focus = [{ label: 'Deep work', values: [0, 0, 0, 0, 0, 0, 10, 35, 50, 55, 50, 40, 10, 15, 45, 50, 40, 20, 5, 0, 20, 35, 25, 5] }, { label: 'Meetings', values: [0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 10, 20, 15, 30, 15, 10, 20, 25, 10, 0, 0, 0, 0, 0] }];
+  D.latency = (function () { var v = []; for (var i = 0; i < 260; i++) v.push(Math.round(Math.max(40, 180 + gauss() * 55 + (rnd() < 0.08 ? rnd() * 260 : 0)))); return v; })();
+  D.spreads = ['Cold start', 'Warm start', 'Search', 'Sync'].map(function (label, k) { var v = []; for (var i = 0; i < 70; i++) v.push(Math.round(Math.max(20, [420, 180, 260, 340][k] + gauss() * [70, 30, 90, 50][k] + (rnd() < 0.05 ? 220 : 0)))); return { label: label, values: v }; });
+  D.points = (function () { var out = [], g = ['Phone', 'Tablet', 'Watch']; for (var i = 0; i < 54; i++) { var k = i % 3, x = 20 + rnd() * 180, y = 30 + x * [0.9, 0.6, 0.35][k] + gauss() * 22; out.push({ x: Math.round(x), y: Math.round(Math.max(5, y)), group: g[k], label: g[k] + ' ' + (Math.floor(i / 3) + 1), size: Math.round(5 + rnd() * rnd() * 90) }); } return out; })();
+  D.radar = { axes: ['Speed', 'Stability', 'Size', 'Battery', 'Access', 'Offline'], max: 10, series: [{ label: 'This release', values: [8, 9, 6, 7, 8, 9] }, { label: 'Last release', values: [6, 7, 7, 5, 6, 9] }] };
+  D.parallel = { dims: ['Start, ms', 'Size, MB', 'Crash-free, %', 'Rating', 'Sessions/day'], rows: ['Atlas', 'Birch', 'Cinder', 'Dune', 'Ember', 'Fjord', 'Grove', 'Heron'].map(function (label, i) { return { label: label, group: i % 2 ? 'Web' : 'Android', values: [Math.round(250 + rnd() * 400), Math.round(8 + rnd() * 40), +(97 + rnd() * 2.9).toFixed(1), +(3.4 + rnd() * 1.5).toFixed(1), Math.round(1 + rnd() * 8)] }; }) };
+  D.tree = [{ label: 'Android', children: [{ label: 'app', value: 46 }, { label: 'search', value: 28 }, { label: 'sync', value: 19 }, { label: 'media', value: 14 }] }, { label: 'Web', children: [{ label: 'kit', value: 31 }, { label: 'site', value: 17 }, { label: 'docs', value: 8 }] }, { label: 'Shared', children: [{ label: 'crash', value: 12 }, { label: 'shell', value: 11 }, { label: 'schema', value: 6 }] }, { label: 'Watch', children: [{ label: 'faces', value: 13 }, { label: 'tiles', value: 5 }] }];
+  D.pack = ['store', 'index', 'queue', 'decode', 'app', 'merge', 'thumbs', 'query', 'rank', 'cache', 'prefs', 'nav', 'theme', 'keys', 'exif', 'dates', 'crash', 'tokens'].map(function (label, i) { return { label: label, value: Math.round(90 / (i + 1.4) + rnd() * 6) + 2 }; });
+  D.org = { label: 'app', children: [{ label: 'shell', children: [{ label: 'nav' }, { label: 'theme' }, { label: 'settings' }] }, { label: 'data', children: [{ label: 'store', children: [{ label: 'schema' }, { label: 'migrate' }] }, { label: 'cache' }] }, { label: 'search', children: [{ label: 'index' }, { label: 'query' }, { label: 'rank' }] }, { label: 'sync', children: [{ label: 'queue' }, { label: 'merge' }] }] };
+  D.sankey = { nodes: ['Organic', 'Referral', 'Store search', 'Listing', 'Install', 'Bounce', 'Free', 'Paid', 'Lapsed'].map(function (id) { return { id: id }; }), links: [['Organic', 'Listing', 46], ['Referral', 'Listing', 18], ['Store search', 'Listing', 36], ['Listing', 'Install', 41], ['Listing', 'Bounce', 59], ['Install', 'Free', 27], ['Install', 'Paid', 6], ['Install', 'Lapsed', 8]].map(function (l) { return { a: l[0], b: l[1], value: l[2] }; }) };
+  D.chord = { nodes: ['Atlas', 'Birch', 'Cinder', 'Shared', 'Design', 'Morning', 'Evening'].map(function (id) { return { id: id }; }), links: [['Atlas', 'Shared', 14], ['Birch', 'Shared', 9], ['Cinder', 'Shared', 6], ['Atlas', 'Design', 7], ['Birch', 'Design', 4], ['Atlas', 'Morning', 11], ['Atlas', 'Evening', 5], ['Birch', 'Evening', 8], ['Cinder', 'Morning', 4], ['Design', 'Morning', 3]].map(function (l) { return { a: l[0], b: l[1], value: l[2] }; }) };
+  D.words = ['sovereign', 'local-first', 'texture', 'ink', 'ground', 'cell', 'graph', 'search', 'offline', 'sync', 'haptic', 'calm', 'on-device', 'schema', 'facet', 'lasso', 'fisheye', 'gantt', 'rose', 'chord', 'halftone', 'membrane', 'nucleus', 'runway', 'lens', 'orbit', 'fold', 'pin', 'brush', 'tone', 'radium', 'violet', 'kit', 'mark'].map(function (label, i) { return { label: label, value: Math.round(60 / (i * 0.35 + 1)) + 2 }; });
+  D.modules = (function () {
     var groups = { shell: ['app', 'nav', 'settings', 'theme', 'crash'], data: ['store', 'schema', 'migrate', 'cache', 'export', 'prefs'], sync: ['queue', 'merge', 'transport', 'keys', 'conflict'], search: ['index', 'query', 'rank', 'facets', 'tokens', 'dates'], media: ['decode', 'thumbs', 'exif', 'player', 'waveform', 'gallery'] };
-    var nodes = [], links = [], hub = { shell: 'app', data: 'store', sync: 'queue', search: 'index', media: 'decode' };
-    Object.keys(groups).forEach(function (g) { groups[g].forEach(function (id, i) { nodes.push({ id: id, group: g, size: id === hub[g] ? 2.2 : 1 }); if (id !== hub[g]) links.push({ a: hub[g], b: id }); if (i > 1 && i % 2 === 0) links.push({ a: groups[g][i - 1], b: id }); }); });
+    var nodes = [], links = [], hub = { shell: 'app', data: 'store', sync: 'queue', search: 'index', media: 'decode' }, brand = { app: 'Kotlin', store: 'SQLite', index: 'Android', decode: 'Git', queue: 'Gradle' };
+    Object.keys(groups).forEach(function (g) { groups[g].forEach(function (id, i) { nodes.push({ id: id, group: g, size: id === hub[g] ? 2.4 : brand[id] ? 1.7 : 1, rings: id === hub[g] ? 1 : 0, brand: brand[id] }); if (id !== hub[g]) links.push({ a: hub[g], b: id }); if (i > 1 && i % 2 === 0) links.push({ a: groups[g][i - 1], b: id }); }); });
     [['app', 'store'], ['app', 'index'], ['nav', 'gallery'], ['store', 'queue'], ['merge', 'schema'], ['index', 'store'], ['thumbs', 'cache'], ['query', 'prefs'], ['player', 'decode'], ['gallery', 'query'], ['crash', 'export'], ['transport', 'keys'], ['exif', 'facets']].forEach(function (l) { links.push({ a: l[0], b: l[1] }); });
     return { nodes: nodes, links: links };
   })();
-  var focus = [
-    { label: 'Deep work', values: [0, 0, 0, 0, 0, 0, 10, 35, 50, 55, 50, 40, 10, 15, 45, 50, 40, 20, 5, 0, 20, 35, 25, 5] },
-    { label: 'Meetings', values: [0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 10, 20, 15, 30, 15, 10, 20, 25, 10, 0, 0, 0, 0, 0] }
-  ];
-  var runway = (function () {
+  D.runway = (function () {
     var days = [], used = [3, 4, 4, 2, 0, 0, 3, 4, 5, 3, 2, 0, 0, 1];
     for (var i = 0; i < 14; i++) { var d = new Date(2026, 10, 11 + i), wk = d.getDay() === 0 || d.getDay() === 6; days.push({ k: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2), cap: wk ? 0 : 4, used: used[i] }); }
     return { days: days, rows: [
@@ -226,109 +192,161 @@ var g = ASOC.viz.graph(el, { nodes, links }, { mode: '2d' });   // g.setMode('3d
       { id: 'audit', label: 'Security audit', date: '20 Nov', dueIdx: 9, kind: 'plan', fits: false, late: 2, slots: 9, items: [{ id: 'a1', kind: 'task', title: 'Dependency sweep', runs: [{ a: 7, b: 8, slots: 4 }] }, { id: 'a2', kind: 'gate', title: 'Fix findings', runs: [{ a: 9, b: 11, slots: 5 }] }] }
     ] };
   })();
+  var hours = []; for (var hh = 0; hh < 24; hh++) hours.push((hh < 10 ? '0' : '') + hh);
 
-  var draw = {
-    builds: function (card, t) { return [V.steps(card.querySelector('.plot'), builds, t)]; },
-    storage: function (card, t) {
-      V.legend(card.querySelector('.legend'), storage, t);
-      return [V.fan(card.querySelector('.plot'), storage, Object.assign({ sweep: 90, callout: '134 GB' }, t))];
-    },
-    pulse: function (card, t) {
-      V.stat(card.querySelector('.stat'), { label: 'Crash-free sessions', value: '99.2%', delta: 0.4, deltaUnit: ' pts', vs: 'vs last week' }, t);
-      V.spark(card.querySelector('.spark'), crashFree, Object.assign({ height: 44, label: 'Crash-free sessions, last 14 days' }, t));
-      return [V.meter(card.querySelector('.meter'), { value: 412, max: 500, label: 'beta seats' }, t)];
-    },
-    commits: function (card, t) {
-      var s = [{ label: 'main', values: main }, { label: 'branches', values: side }];
-      V.legend(card.querySelector('.legend'), s, Object.assign({ lines: true, row: true }, t));
-      return [V.line(card.querySelector('.plot'), s, Object.assign({ x: days, xTitle: 'Day' }, t))];
-    },
-    hours: function (card, t) {
-      var cols = []; for (var h = 0; h < 24; h++) cols.push((h < 10 ? '0' : '') + h);
-      return [V.halftone(card.querySelector('.plot'), { rows: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], cols: cols, values: hourly }, t)];
-    },
-    time: function (card, t) {
-      V.legend(card.querySelector('.legend'), time, Object.assign({ row: true }, t));
-      return [V.stack(card.querySelector('.plot'), time, Object.assign({ unit: 'Hours' }, t))];
-    },
-    repos: function (card, t) { return [V.bars(card.querySelector('.plot'), repos, Object.assign({ unit: 'MB' }, t))]; },
-    modules: function (card, t) {
-      var api = V.graph(card.querySelector('.plot'), modules, Object.assign({ on: { change: sync } }, t)), leg = card.querySelector('.legend'), mode = document.getElementById('g-mode');
-      function sync() {
-        if (!api) return;
-        V.legend(leg, api.legend(), Object.assign({ row: true }, t));
-        Array.prototype.forEach.call(leg.querySelectorAll('li'), function (li, i) {
-          var g = api.legend()[i]; li.tabIndex = 0; li.setAttribute('role', 'button'); li.setAttribute('aria-pressed', String(!!g.collapsed)); li.setAttribute('aria-label', (g.collapsed ? 'Unfold ' : 'Fold ') + g.label);
-          li.onclick = function () { api.toggle(g.label); }; li.onkeydown = function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); api.toggle(g.label); } };
-        });
-        mode.setAttribute('aria-pressed', String(api.mode() === '3d'));
-      }
-      mode.onclick = function () { api.setMode(api.mode() === '3d' ? '2d' : '3d'); };
-      document.getElementById('g-fit').onclick = function () { api.fit(); };
-      document.getElementById('g-undo').onclick = function () { api.undo(); sync(); };
-      sync();
-      return [api];
-    },
-    focus: function (card, t) {
-      V.legend(card.querySelector('.legend'), focus, Object.assign({ row: true, shades: true }, t));
-      return [V.rose(card.querySelector('.plot'), focus, Object.assign({ height: 330 }, t))];
-    },
-    runway: function (card, t) { live.push(V.gantt(card.querySelector('.plot'), runway, t)); return []; },
-    fills: function (card, t) {
-      var host = card.querySelector('.fills'); host.textContent = '';
-      V.order.forEach(function (kind, i) {
-        var fig = document.createElement('figure'), svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        r.setAttribute('width', '100%'); r.setAttribute('height', '100%'); r.setAttribute('fill', V.fills(svg, { ink: t.ink, scale: 1.25 })(kind, 'up'));
-        svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', kind); svg.appendChild(r); fig.appendChild(svg);
-        var cap = document.createElement('figcaption'), n = document.createElement('span'); n.textContent = String(i + 1);
-        cap.appendChild(n); cap.appendChild(document.createTextNode(kind)); fig.appendChild(cap); host.appendChild(fig);
-      });
-      return [];
-    }
-  };
+  /* ── the cards: [section, id, title, small, options, make(plot, tone, variant, card) → api | [api]] ───────────── */
+  var SECTIONS = [['compare', 'Compare'], ['whole', 'Parts of a whole'], ['time', 'Over time'], ['spread', 'Spread'], ['relate', 'Relate'], ['tree', 'Hierarchy'], ['flow', 'Flow'], ['graph', 'Graph'], ['words', 'Vocabulary']];
+  var CARDS = [
+    ['compare', 'bars', 'Lines of code', 'thousands', { code: "V.bars(el, [{label, value, brand?}], { brands: true })" }, function (p, t) { return V.bars(p, D.langs, mix(t, { brands: flags.brands, unit: 'kLOC' })); }],
+    ['compare', 'columns', 'Releases', 'by quarter', { h: 190, legend: D.quarters.series, vars: ['Group', 'Stack', 'Percent'], code: "V.columns(el, {categories, series: [{label, values}]}, { mode: 'group' | 'stack' | 'percent' })" }, function (p, t, v) { return V.columns(p, D.quarters, mix(t, { mode: ['group', 'stack', 'percent'][v] })); }],
+    ['compare', 'waterfall', 'Subscribers', 'this month', { h: 190, code: "V.waterfall(el, [{label, value, total?}])" }, function (p, t) { return V.waterfall(p, D.water, t); }],
+    ['compare', 'bullet', 'Against target', '', { code: "V.bullet(el, [{label, value, target, ranges: [a, b, c]}])" }, function (p, t) { return V.bullet(p, D.bullets, t); }],
+    ['compare', 'range', 'Phases', 'day of the cycle', { code: "V.range(el, [{label, lo, hi}])" }, function (p, t) { return V.range(p, D.ranges, t); }],
+    ['compare', 'funnel', 'Acquisition', 'last 30 days', { code: "V.funnel(el, [{label, value}])" }, function (p, t) { return V.funnel(p, D.funnel, t); }],
+    ['compare', 'radial', 'Coverage', '% of screens', { h: 230, slot: 'A', code: "V.radial(el, [{label, value}])" }, function (p, t) { return V.radial(p, D.radial, t); }],
+    ['compare', 'gauge', 'Beta seats', '', { h: 170, code: "V.gauge(el, {value, max, label})\nV.meter(el, {value, max, label})" }, function (p, t, v, card) { live.push(V.meter(q(card, '.extra'), { value: 412, max: 500, label: 'beta seats' }, t)); return V.gauge(p, { value: 412, max: 500, label: 'of 500 seats taken' }, t); }],
 
-  var ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12M6 4v8"/></svg>';
+    ['whole', 'fan', 'Storage', 'GB', { h: 210, legend: D.storage, vars: ['Half', 'Ring', 'Quarter'], code: "V.fan(el, [{label, value, fill?}], { sweep: 180 | 360 | 90, callout })" }, function (p, t, v) { return V.fan(p, D.storage, mix(t, { sweep: [180, 360, 90][v], callout: v === 1 ? '134' : '134 GB', caption: 'GB used' })); }],
+    ['whole', 'stack', 'Hours', 'by project', { legend: D.time, code: "V.stack(el, [{label, value}])   // a ninth part folds into Other" }, function (p, t) { return V.stack(p, D.time, mix(t, { unit: 'Hours' })); }],
+    ['whole', 'treemap', 'Source by module', 'kLOC', { h: 260, slot: 'B', code: "V.treemap(el, [{label, value, children?}])" }, function (p, t) { return V.treemap(p, D.tree, t); }],
+    ['tree', 'sunburst', 'Source by platform', 'kLOC', { h: 260, code: "V.sunburst(el, [{label, value, children?}])" }, function (p, t) { return V.sunburst(p, D.tree, t); }],
+    ['tree', 'pack', 'Module weight', '', { h: 260, code: "V.pack(el, [{label, value}])" }, function (p, t) { return V.pack(p, D.pack, t); }],
 
+    ['time', 'line', 'Commits', 'per day', { h: 200, legend: [{ label: 'main' }, { label: 'branches' }], lines: true, vars: ['Smooth', 'Straight', 'Step'], code: "V.line(el, [{label, values}], { x, smooth, step, grid, zero, area })" }, function (p, t, v) { return V.line(p, [{ label: 'main', values: D.main }, { label: 'branches', values: D.side }], mix(t, { x: D.days, xTitle: 'Day', smooth: v === 0, step: v === 2 })); }],
+    ['time', 'area', 'Sessions', 'by platform', { h: 200, legend: D.areas, vars: ['Stack', 'Percent', 'Stream'], code: "V.area(el, [{label, values}], { x, mode: 'stack' | 'percent' | 'stream' })" }, function (p, t, v) { return V.area(p, D.areas, mix(t, { x: D.days, xTitle: 'Day', mode: ['stack', 'percent', 'stream'][v] })); }],
+    ['time', 'candle', 'Build time', 'seconds', { h: 200, code: "V.candle(el, [{t, o, h, l, c}])   // a rise is hollow, a fall is solid" }, function (p, t) { return V.candle(p, D.candles, t); }],
+    ['time', 'calendar', 'Commits', 'eighteen weeks', { slot: 'C', code: "V.calendar(el, [{date: 'yyyy-mm-dd', value}])" }, function (p, t) { return V.calendar(p, D.cal, mix(t, { unit: 'Commits' })); }],
+    ['time', 'halftone', 'Sessions', 'by hour and weekday', { code: "V.halftone(el, {rows, cols, values})" }, function (p, t) { return V.halftone(p, { rows: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], cols: hours, values: D.hourly }, t); }],
+    ['time', 'rose', 'Focus', 'minutes by hour', { slot: 'A', legend: D.focus, shades: true, code: "V.rose(el, [{label, values[24]}])   // needs orrery-kit/rose.js" }, function (p, t) { return V.rose(p, D.focus, mix(t, { height: 300 })); }],
+    ['time', 'gantt', 'Runway', 'next two weeks', { wide: true, cls: 'gantt', code: "V.gantt(el, {days, rows, groups})   // needs orrery-kit/gantt.js" }, function (p, t) { live.push(V.gantt(p, D.runway, t)); return null; }],
+
+    ['spread', 'histogram', 'Response time', 'ms, 260 requests', { h: 190, code: "V.histogram(el, number[], { bins })" }, function (p, t) { return V.histogram(p, D.latency, t); }],
+    ['spread', 'box', 'Timings', 'ms', { code: "V.box(el, [{label, values}])   // whiskers at 1.5 IQR" }, function (p, t) { return V.box(p, D.spreads, t); }],
+    ['spread', 'violin', 'Timings', 'ms, as densities', { code: "V.violin(el, [{label, values}])" }, function (p, t) { return V.violin(p, D.spreads, t); }],
+
+    ['relate', 'scatter', 'Start time against size', '', { h: 240, vars: ['Points', 'Bubbles', 'Trend'], keys: 'shapes', code: "V.scatter(el, [{x, y, size?, group?, label?}], { fit, marks })" }, function (p, t, v) { return V.scatter(p, D.points.map(function (d) { return v === 1 ? d : { x: d.x, y: d.y, group: d.group, label: d.label }; }), mix(t, { xTitle: 'MB', yTitle: 'ms', fit: v === 2, marks: flags.cells ? 'cell' : 'disc' })); }],
+    ['relate', 'radar', 'Release quality', 'out of 10', { h: 260, legend: D.radar.series, lines: true, code: "V.radar(el, {axes, series: [{label, values}], max})" }, function (p, t) { return V.radar(p, D.radar, t); }],
+    ['relate', 'parallel', 'Apps across five measures', '', { h: 230, wide: false, legend: [{ label: 'Android' }, { label: 'Web' }], lines: true, code: "V.parallel(el, {dims, rows: [{label, values, group?}]})" }, function (p, t) { return V.parallel(p, D.parallel, t); }],
+
+    ['tree', 'tree', 'Modules', 'as a tree', { code: "V.tree(el, {label, children})" }, function (p, t) { return V.tree(p, D.org, mix(t, { marks: flags.cells ? 'cell' : 'disc' })); }],
+
+    ['flow', 'sankey', 'From visit to plan', '% of visits', { h: 280, code: "V.sankey(el, {nodes: [{id}], links: [{a, b, value}]})" }, function (p, t) { return V.sankey(p, D.sankey, t); }],
+    ['flow', 'chord', 'Projects, what they share and when', 'hours', { h: 320, slot: 'C', code: "V.chord(el, {nodes: [{id}], links: [{a, b, value}]})" }, function (p, t) { return V.chord(p, D.chord, mix(t, { unit: 'Hours' })); }],
+
+    ['graph', 'graph', 'Modules', 'and what they import', { wide: true, h: 480, tools: true, code: "var g = V.graph(el, {nodes: [{id, group, size?, rings?, brand?}], links: [{a, b}]}, { mode: '2d', directed: true })\nV.graphTools(toolsEl, g)          // or drive it yourself:\ng.layout('radial'); g.set('fisheye', true); g.setMode('3d'); g.toggle('search'); g.undo()" }, function (p, t, v, card) {
+      var g = V.graph(p, D.modules, mix(t, { marks: flags.cells ? 'cell' : 'disc', brands: flags.brands, minimap: true, on: { change: function () { if (tools) tools.update(); } } })), tools = V.graphTools(q(card, '.tools'), g, t);
+      live.push(tools); return g;
+    }],
+
+    ['words', 'words', 'Terms', 'in the READMEs', { h: 230, code: "V.words(el, [{label, value}])" }, function (p, t) { return V.words(p, D.words, t); }]
+  ];
+
+  var ICON = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12M6 4v8"/></svg>';
+  function h(tag, cls, parent, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; if (parent) parent.appendChild(e); return e; }
   function toneFor(card) {
     var t = SETS[current][card.dataset.slot], root = getComputedStyle(document.documentElement);
     if (!t) t = { ground: root.getPropertyValue('--card').trim(), ink: root.getPropertyValue('--fg').trim() };
     card.style.setProperty('--g', t.ground); card.style.setProperty('--i', t.ink);
     return { ink: t.ink, ground: t.ground, accent: t.accent || (card.dataset.slot === 'B' && SETS[current].A ? SETS[current].A.ground : null) };
   }
-
-  function build() {
-    live.forEach(function (a) { a.destroy(); }); live = [];
-    Array.prototype.forEach.call(document.querySelectorAll('.card[data-chart]'), function (card) {
-      var apis = draw[card.dataset.chart](card, toneFor(card)), head = card.querySelector('.head'), btn = head.querySelector('.tbl-btn'), body = card.querySelector('.body'), tbl = card.querySelector('.tbl');
-      live = live.concat(apis);
-      if (!apis.length) return;
-      if (!btn) {
-        btn = document.createElement('button'); btn.type = 'button'; btn.className = 'tbl-btn'; btn.id = 'tbl-' + card.dataset.chart; btn.innerHTML = ICON;
-        btn.setAttribute('aria-label', 'Show as table'); btn.setAttribute('aria-pressed', 'false'); head.appendChild(btn);
-        tbl = document.createElement('div'); tbl.className = 'tbl'; tbl.hidden = true; card.appendChild(tbl);
-        btn.addEventListener('click', function () {
-          var on = btn.getAttribute('aria-pressed') !== 'true';
-          btn.setAttribute('aria-pressed', String(on)); body.hidden = on; tbl.hidden = !on;
-          if (on) { tbl.textContent = ''; tbl.appendChild(card._api.table()); }
-        });
-      }
-      card._api = apis[0];
-      if (!tbl.hidden) { tbl.textContent = ''; tbl.appendChild(card._api.table()); }
+  function shell(parent, def) {
+    var o = def[4], card = h('section', 'card' + (o.wide ? ' wide' : '') + (o.flush ? ' flush' : ''), parent), head = h('div', 'head', card), title = h('h3', '', head, def[2]);
+    card.id = 'c-' + def[1]; card.dataset.slot = o.slot || 'N'; card._def = def; card._v = 0;
+    if (def[3]) h('small', '', title, def[3]);
+    var ib = h('button', 'ib', head, 'i'), tb = h('button', 'ib', head);
+    ib.type = tb.type = 'button'; ib.id = 'i-' + def[1]; tb.id = 't-' + def[1]; tb.innerHTML = ICON;
+    ib.setAttribute('aria-label', 'Show the call'); ib.setAttribute('aria-pressed', 'false'); tb.setAttribute('aria-label', 'Show as table'); tb.setAttribute('aria-pressed', 'false');
+    var code = h('pre', 'code', card, o.code.replace(/\bV\./g, 'ASOC.viz.')); code.hidden = true;
+    var body = h('div', 'body', card), tbl = h('div', 'tbl', card); tbl.hidden = true;
+    if (o.vars) { var vars = h('div', 'vars', body); vars.setAttribute('role', 'group'); o.vars.forEach(function (name, i) { var b = h('button', '', vars, name); b.type = 'button'; b.id = 'v-' + def[1] + '-' + i; b.setAttribute('aria-pressed', String(i === 0)); b.addEventListener('click', function () { card._v = i; Array.prototype.forEach.call(vars.children, function (x, k) { x.setAttribute('aria-pressed', String(k === i)); }); draw(card); }); }); }
+    if (o.tools) h('div', 'tools', body);
+    if (o.legend || o.keys) h('div', 'legend', body);
+    var plot = h('div', 'plot' + (o.cls ? ' ' + o.cls : ''), body); if (o.h) plot.style.height = o.h + 'px';
+    if (def[1] === 'gauge') h('div', 'plot extra', body);
+    ib.addEventListener('click', function () { var on = ib.getAttribute('aria-pressed') !== 'true'; ib.setAttribute('aria-pressed', String(on)); code.hidden = !on; });
+    tb.addEventListener('click', function () { var on = tb.getAttribute('aria-pressed') !== 'true'; tb.setAttribute('aria-pressed', String(on)); body.hidden = on; tbl.hidden = !on; if (on && card._api && card._api.table) { tbl.textContent = ''; tbl.appendChild(card._api.table()); } });
+    if (def[1] === 'gantt') tb.hidden = true;
+    return card;
+  }
+  function draw(card) {
+    var def = card._def, o = def[4], t = toneFor(card), leg = q(card, '.legend'), plot = q(card, '.plot');
+    if (card._api) { card._api.destroy(); live = live.filter(function (a) { return a !== card._api; }); }
+    if (leg && o.legend) V.legend(leg, o.legend, mix(t, { row: true, lines: !!o.lines, shades: !!o.shades }));
+    if (leg && o.keys === 'shapes') V.legend(leg, [{ label: 'Phone', fill: 'solid' }, { label: 'Tablet', fill: 'solid', alpha: 0 }, { label: 'Watch', fill: 'solid' }], mix(t, { row: true })), shapesKey(leg, t);
+    card._api = def[5](plot, t, card._v, card);
+    if (card._api) live.push(card._api);
+    var tbl = q(card, '.tbl'); if (!tbl.hidden && card._api && card._api.table) { tbl.textContent = ''; tbl.appendChild(card._api.table()); }
+  }
+  /* the scatter's key shows the shapes its groups take */
+  function shapesKey(leg, t) {
+    var marks = ['M7 1.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11z', null, 'M2.2 2.2h9.6v9.6H2.2z'];
+    Array.prototype.forEach.call(leg.querySelectorAll('li'), function (li, i) {
+      var svg = li.querySelector('svg'); svg.textContent = '';
+      var e = document.createElementNS('http://www.w3.org/2000/svg', i === 1 ? 'circle' : 'path');
+      if (i === 1) { e.setAttribute('cx', 7); e.setAttribute('cy', 7); e.setAttribute('r', 4.6); e.setAttribute('fill', 'none'); e.setAttribute('stroke', t.ink); e.setAttribute('stroke-width', 1.8); } else { e.setAttribute('d', marks[i]); e.setAttribute('fill', t.ink); }
+      svg.appendChild(e);
     });
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function (b) {
-    b.addEventListener('click', function () {
-      current = b.dataset.set;
-      try { history.replaceState(null, '', '#' + current); } catch (e) {}
-      press(); build();
+  /* ── the hero bento, in the three loud grounds ────────────────────────────────────────────────────────────── */
+  function hero(main) {
+    var sec = h('section', 'sec', main); sec.id = 'overview';
+    var grid = h('div', 'bento', sec), a, b, c;
+    a = shell(grid, ['', 'steps', 'Builds', 'this week', { slot: 'A', flush: true, h: 200, code: "V.steps(el, [{label, value}], { tone: 'sun' })" }, function (p, t) { return V.steps(p, D.builds, t); }]); a.style.setProperty('--span', 5);
+    b = shell(grid, ['', 'quarter', 'Storage', 'GB', { slot: 'B', flush: true, code: "V.fan(el, parts, { tone: 'ember', sweep: 90, callout: '134 GB' })\nV.legend(keyEl, parts)" }, function (p, t, v, card) { V.legend(q(card, '.fanwrap .legend'), D.storage, t); return V.fan(q(card, '.fanwrap .plot'), D.storage, mix(t, { sweep: 90, callout: '134 GB' })); }]); b.style.setProperty('--span', 4);
+    var fw = h('div', 'fanwrap', q(b, '.body')); h('div', 'legend', fw); h('div', 'plot', fw); q(b, '.body > .plot').remove();
+    c = shell(grid, ['', 'pulse', 'Stability', '', { slot: 'C', code: "V.stat(el, {value, label, delta, vs})\nV.spark(el, number[])\nV.meter(el, {value, max, label})" }, function (p, t, v, card) {
+      V.stat(q(card, '.stat'), { label: 'Crash-free sessions', value: '99.2%', delta: 0.4, deltaUnit: ' pts', vs: 'vs last week' }, t);
+      live.push(V.spark(q(card, '.spark'), D.crash, mix(t, { height: 44, label: 'Crash-free sessions, last 14 days' })));
+      return V.meter(q(card, '.meter'), { value: 412, max: 500, label: 'beta seats' }, t);
+    }]); c.style.setProperty('--span', 3);
+    var cb = q(c, '.body'); q(c, '.body > .plot').remove(); h('div', 'stat', cb); h('div', 'plot spark', cb); h('div', 'plot meter', cb); cb.style.gap = '18px';
+    return [a, b, c];
+  }
+
+  /* ── the vocabulary: textures, shades, dashes, shapes, tones ──────────────────────────────────────────────── */
+  function vocab(card, t) {
+    var body = q(card, '.body'); body.textContent = '';
+    var grid = h('div', 'vocab', body), NS = 'http://www.w3.org/2000/svg';
+    V.order.forEach(function (kind, i) {
+      var fig = h('figure', '', grid), svg = document.createElementNS(NS, 'svg'), r = document.createElementNS(NS, 'rect');
+      svg.setAttribute('class', 'tile'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', kind);
+      r.setAttribute('width', '100%'); r.setAttribute('height', '100%'); r.setAttribute('fill', V.fills(svg, { ink: t.ink, scale: 1.25 })(kind, 'up')); svg.appendChild(r); fig.appendChild(svg);
+      var cap = h('figcaption', '', fig); h('i', '', cap, String(i + 1)); cap.appendChild(document.createTextNode(kind));
     });
+    var keys = h('div', 'keys', body), row;
+    row = h('div', '', keys); h('b', '', row, 'Shades'); V.shades.forEach(function (a) { row.appendChild(V.swatch('solid', { ink: t.ink, alpha: a, size: 18 })); });
+    row = h('div', '', keys); h('b', '', row, 'Dashes'); V.dashes.forEach(function (d) { row.appendChild(V.swatch('solid', { ink: t.ink, dash: d || '', size: 30 })); });
+    row = h('div', '', keys); h('b', '', row, 'Shapes'); V.shapes.forEach(function (s) { h('span', '', row, s); });
+    row = h('div', '', keys); h('b', '', row, 'Tones'); Object.keys(V.tones).forEach(function (k) { var s = h('span', '', row, k); s.style.cssText = 'padding:3px 10px;border-radius:999px;background:' + V.tones[k].ground + ';color:' + V.tones[k].ink; });
+  }
+
+  var main = document.getElementById('main'), nav = document.getElementById('nav'), cards = hero(main), counts = {};
+  SECTIONS.forEach(function (s) {
+    var sec = h('section', 'sec', main); sec.id = s[0];
+    var mine = CARDS.filter(function (c) { return c[0] === s[0]; }), hd = h('h2', '', sec, s[1]);
+    counts[s[0]] = mine.length;
+    var gal = h('div', 'gal', sec); gal.style.columns = Math.min(3, mine.length + (s[0] === 'words' ? 1 : 0)) + ' 330px';
+    mine.forEach(function (def) { cards.push(shell(gal, def)); });
+    if (s[0] === 'words') { var vc = h('section', 'card wide', gal); vc.dataset.slot = 'N'; vc.id = 'c-vocab'; var hd2 = h('div', 'head', vc); h('h3', '', hd2, 'Textures, shades, dashes, shapes, tones'); h('div', 'body', vc); vc._vocab = true; cards.push(vc); }
+    var a = h('a', '', nav, s[1]); a.href = '#' + s[0];
   });
+  document.getElementById('ver').textContent = V.version;
+  document.getElementById('count').textContent = '35';
+
+  function build() {
+    live.forEach(function (a) { if (a && a.destroy) a.destroy(); }); live = [];
+    cards.forEach(function (card) { card._api = null; if (card._vocab) vocab(card, toneFor(card)); else draw(card); });
+  }
   function press() { Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function (x) { x.setAttribute('aria-pressed', String(x.dataset.set === current)); }); }
-  press();
+  Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function (b) { b.addEventListener('click', function () { current = b.dataset.set; press(); build(); }); });
+  [['cells', 't-cells'], ['brands', 't-brands'], ['sound', 't-sound']].forEach(function (f) {
+    var b = document.getElementById(f[1]);
+    b.addEventListener('click', function () { flags[f[0]] = !flags[f[0]]; b.setAttribute('aria-pressed', String(flags[f[0]])); if (f[0] === 'sound') { V.sound(flags.sound); } else build(); });
+  });
   if (window.matchMedia) { var mq = matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', build); }
   new MutationObserver(build).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  build();
+  press(); build();
 })();
 </script>
 <!--/page-->

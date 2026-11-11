@@ -7,7 +7,7 @@
      bars(el, [{label, value, fill?}])             ranked rows; the chart sets its own height
      fan(el, [{label, value, fill?}])              parts of a whole; opts.sweep 90 | 180 | 360, opts.inner 0–0.9, opts.callout
      stack(el, [{label, value, fill?}])            one pill split into parts, labelled where the label fits
-     line(el, [{label, values, fill?}] | number[]) one y axis; opts.x labels, opts.zero, opts.area, opts.grid, opts.smooth
+     line(el, [{label, values, fill?}] | number[]) one y axis; opts.x labels, opts.zero, opts.area, opts.grid, opts.smooth, opts.step
      spark(el, number[])                           a line with nothing but its end
      halftone(el, {rows, cols, values})            a matrix where magnitude is dot area
      meter(el, {value, max, label})                a figure against its ceiling
@@ -20,7 +20,11 @@
    its engine loaded first and says so if it is not:
      graph(el, {nodes: [{id, label?, group?, size?}], links: [{a, b, w?}]})   needs graph.js — every interaction the
         engine has (the AntV G6 set); groups are textures; opts.mode '2d' | '3d', opts.options → engine options
-        → { el, engine, fit(), reset(), setMode(m), mode(), undo(), redo(), legend(), toggle(group), table(), destroy() }
+        → { el, engine, fit(), reset(), setMode(m), mode(), layout(kind), set(key, on), get(key), undo(), redo(),
+            select(ids), focus(id), legend(), toggle(group), table(), destroy() }
+        layout: force | circular | grid | concentric | radial | layered | tree; set: fisheye, edgeLens, grid, snap,
+        forceDrag, bundle, bubbles, labels, directed, minimap; nodes may carry rings, hollow, brand, size
+     graphTools(el, graph)                         the controls for one: dimension, arrangement, view, switches, legend
      rose(el, [{label, values[24]}])               needs rose.js — a day as a rose; stacked series are steps of one ink
      gantt(el, {days, rows, groups})               needs gantt.js — its data, this kit's ink and ground
    ASOC.viz.order is the fixed texture order — a ninth part folds into "Other", never a ninth texture.
@@ -68,7 +72,7 @@
   function nice(v) {
     if (v <= 0) return 1;
     var p = Math.pow(10, Math.floor(Math.log(v) / Math.LN10)), m = v / p;
-    return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p;
+    return (m <= 1 ? 1 : m <= 1.5 ? 1.5 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 3 ? 3 : m <= 4 ? 4 : m <= 5 ? 5 : m <= 6 ? 6 : m <= 8 ? 8 : 10) * p;
   }
   function est(str, size) { return String(str).length * size * 0.56; }
   function clip(str, size, room) {
@@ -163,13 +167,13 @@
       t.setAttribute('tabindex', '0'); t.setAttribute('role', 'img'); t.setAttribute('aria-label', label + ': ' + txt);
       t.style.outlineOffset = '2px'; node.style.transition = 'opacity .15s';
       if (on.select) t.style.cursor = 'pointer';
-      function show(x, y) { c.marks.forEach(function (m) { m.style.opacity = m === node ? '' : 0.3; }); c.tip.show(x, y, [{ v: txt, l: label }]); if (on.hover) on.hover(d); }
-      function hide() { c.marks.forEach(function (m) { m.style.opacity = ''; }); c.tip.hide(); if (on.hover) on.hover(null); }
+      function show(x, y) { if (c.lit !== node) { c.lit = node; play('hover'); } c.marks.forEach(function (m) { m.style.opacity = m === node ? '' : 0.3; }); c.tip.show(x, y, [{ v: txt, l: label }]); if (on.hover) on.hover(d); }
+      function hide() { c.lit = null; c.marks.forEach(function (m) { m.style.opacity = ''; }); c.tip.hide(); if (on.hover) on.hover(null); }
       function at(ev) { var r = el.getBoundingClientRect(); show(ev.clientX - r.left, ev.clientY - r.top); }
       t.addEventListener('pointerenter', at); t.addEventListener('pointermove', at); t.addEventListener('pointerleave', hide);
       t.addEventListener('focus', function () { var r = el.getBoundingClientRect(), b = node.getBoundingClientRect(); show(b.left + b.width / 2 - r.left, b.top - r.top); });
       t.addEventListener('blur', hide);
-      t.addEventListener('click', function () { if (on.select) on.select(d); });
+      t.addEventListener('click', function () { play('select'); if (on.select) on.select(d); });
       t.addEventListener('keydown', function (ev) { if ((ev.key === 'Enter' || ev.key === ' ') && on.select) { ev.preventDefault(); on.select(d); } });
     };
     function render() {
@@ -237,9 +241,11 @@
       d.forEach(function (it, i) {
         var v = +it.value || 0, y = i * row, bw = v > 0 ? Math.max(3, v / (max || 1) * c.w) : 0, r = Math.min(th / 2, bw), val = c.fmt(v);
         var g = S('g', {}, c.svg), hit = S('rect', { x: 0, y: f(y), width: f(c.w), height: f(row), fill: 'transparent' }, g);
-        c.text(0, y + small, clip(it.label, small, c.w - est(val, small) - rem), small, { op: 0.8, parent: g });
+        var B = c.o.brands && it.brand && typeof window !== 'undefined' && window.ASOC && window.ASOC.brands && window.ASOC.brands.get(it.brand), lx = 0;
+        if (B && B.path) { S('path', { d: B.path, fill: c.ink, transform: 'translate(0 ' + f(y + small * 0.12) + ') scale(' + f(small / 24 * 1.05) + ')', 'pointer-events': 'none' }, g); lx = small * 1.5; }
+        c.text(lx, y + small, clip(it.label, small, c.w - lx - est(val, small) - rem), small, { op: 0.8, parent: g });
         c.text(c.w, y + small, val, small, { anchor: 'end', weight: 500, parent: g });
-        if (bw) S('path', { d: 'M0,' + f(y + small + rem * 0.45) + 'h' + f(bw - r) + 'a' + f(r) + ',' + f(th / 2) + ' 0 0 1 0,' + f(th) + 'H0Z', fill: c.o.fill === 'each' || it.fill ? c.fillOf(it, i, 'right') : c.paint(c.o.fill || 'solid', 'right') }, g);
+        if (bw) S('path', { d: 'M0,' + f(y + small + rem * 0.45) + 'h' + f(bw - r) + 'a' + f(r) + ',' + f(th / 2) + ' 0 0 1 0,' + f(th) + 'H0Z', fill: B && c.o.brands === 'colour' ? '#' + B.on : c.o.fill === 'each' || it.fill ? c.fillOf(it, i, 'right') : c.paint(c.o.fill || 'solid', 'right') }, g);
         c.rows.push([it.label, val]);
         c.mark(g, it.label, v, it, hit);
       });
@@ -256,6 +262,7 @@
       if (full) { cx = c.w / 2; cy = c.h / 2; R = Math.min(c.w, c.h) / 2 - 1; a0 = -Math.PI / 2; }
       else if (quarter) { cx = c.w; cy = c.h; R = Math.min(c.w - (call ? est(call, rem) / 2 + rem : 0), c.h - (call ? ph / 2 : 0)) / 1; R = Math.min(R, Math.min(c.w, c.h) * 1.25); a0 = Math.PI; }
       else { cx = c.w / 2; cy = c.h; R = Math.min(c.w / 2, c.h - (call ? ph / 2 : 0)); a0 = Math.PI; }
+      R = Math.max(2, R);
       inner = (c.o.inner == null ? (full ? 0.6 : 0) : c.o.inner) * R;
       var span = (full ? 360 : quarter ? 90 : 180) * Math.PI / 180, a = a0;
       c.head = ['', c.o.unit || 'Value', 'Share'];
@@ -360,7 +367,7 @@
         var pts = [];
         s.values.forEach(function (v, i) { if (v != null) pts.push([X(i), Y(v)]); });
         if (!pts.length) return;
-        var path = c.o.smooth === false ? 'M' + pts.map(function (p) { return f(p[0]) + ',' + f(p[1]); }).join('L') : curve(pts), last = pts[pts.length - 1];
+        var path = c.o.step ? 'M' + pts.map(function (p, i) { return (i ? 'H' + f(p[0]) + 'V' + f(p[1]) : f(p[0]) + ',' + f(p[1])); }).join('') : c.o.smooth === false ? 'M' + pts.map(function (p) { return f(p[0]) + ',' + f(p[1]); }).join('L') : curve(pts), last = pts[pts.length - 1];
         if (si === 0 && c.o.area !== false && !bare) S('path', { d: path + 'L' + f(last[0]) + ',' + f(Y(lo)) + 'L' + f(pts[0][0]) + ',' + f(Y(lo)) + 'Z', fill: c.paint(s.fill || 'fade', 'up'), opacity: s.fill && s.fill !== 'fade' ? 0.5 : 0.42 }, c.svg);
         S('path', { d: path, fill: 'none', stroke: c.ink, 'stroke-width': bare ? 1.6 : 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'stroke-dasharray': DASH[si] }, c.svg);
         S('circle', { cx: f(last[0]), cy: f(last[1]), r: bare ? 3 : 4, fill: c.ink, stroke: c.ground, 'stroke-width': 2 }, c.svg);
@@ -539,10 +546,13 @@
   }
 
   /* graph: the engine lays out, projects and turns input into selection, focus, drags, brushes, lassos, folds and
-     history; this draws what it reports. A group is a texture; a link is the ink, fainter. */
+     history; this draws what it reports and adds what a host would otherwise have to: arrangements other than force,
+     a context menu, arrows, and marks that carry more than one facet. A group is a texture; a link is the ink, fainter. */
+  var LAYOUTS = ['force', 'circular', 'grid', 'concentric', 'radial', 'layered', 'tree'];
   function graph(el, data, o) {
     o = o || {};
-    var Engine = kit('Graph', 'graph.js'), c = {}, cv, ctx, dpr = 1, W = 0, Hh = 0, paint, eng, ro, INK, font, kinds = {}, names = {}, on = o.on || {};
+    var Engine = kit('Graph', 'graph.js'), c = {}, cv, ctx, dpr = 1, W = 0, Hh = 0, paint, eng, ro, INK, font, kinds = {}, names = {}, on = o.on || {}, home = {}, arranged = 'force', tween = 0, menu = null;
+    function A(n) { return typeof window !== 'undefined' && window.ASOC && window.ASOC[n]; }
     function colours() { var t = tone(o); c.ink = o.ink || t.ink || '#0c0c0c'; c.ground = o.ground || t.ground || '#f6ee2d'; c.rem = o.rem || 16; INK = rgb(c.ink); font = o.font || getComputedStyle(el).fontFamily || 'sans-serif'; }
     function index() {
       kinds = {}; names = {};
@@ -556,26 +566,34 @@
     }
     function frame() {
       var G = eng.state, nodes = eng.project().filter(function (n) { return !n.hidden; }), hov = G.hover, near = hov != null ? eng.neighbours(hov) : [], base = o.nodeR || c.rem * 0.5;
+      var cells = o.marks !== 'disc' && A('cells'), brands = o.brands && A('brands');
       function dimmed(n) { return hov != null && n.id !== hov && near.indexOf(n.id) < 0; }
+      function body(n, r, style) { if (cells) cells.cell(ctx, 0, 0, r, n.id, style); else { ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); if (style.fill) { ctx.fillStyle = style.fill; ctx.fill(); } if (style.stroke) { ctx.strokeStyle = style.stroke; ctx.lineWidth = style.width || 1; ctx.stroke(); } } }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, Hh);
+      nodes.forEach(function (n) { n._r = base * Math.sqrt(n.size || 1) * (G.mode === '3d' ? (n.sk || 1) / (G.zoom || 1) : 1); n.hitR = n._r + 2; });
       eng.drawOverlays(ctx, INK);
-      if (o.bubbles && G.mode === '2d') Object.keys(G.groups).forEach(function (g) { var ids = eng.groupMembers(g); if (ids.length > 1) eng.drawBubble(ctx, ids, 'rgba(' + INK + ',.05)', null, c.rem * 1.1); });
+      if (o.bubbles && G.mode === '2d') Object.keys(G.groups).forEach(function (g) { var ids = eng.groupMembers(g); if (ids.length > 1) eng.drawBubble(ctx, ids, 'rgba(' + INK + ',.06)', 'rgba(' + INK + ',.18)', c.rem * 1.1); });
       ctx.lineCap = 'round';
       eng.visibleLinks().forEach(function (l) {
-        var lit = hov == null || l.a.id === hov || l.b.id === hov, m = eng.linkPath(l);
-        ctx.strokeStyle = 'rgba(' + INK + ',' + (lit ? (hov == null ? 0.32 : 0.85) : 0.08) + ')'; ctx.lineWidth = Math.max(0.75, l.w || 1);
+        var lit = hov == null || l.a.id === hov || l.b.id === hov, m = eng.linkPath(l), alpha = lit ? (hov == null ? 0.32 : 0.85) : 0.08;
+        ctx.strokeStyle = 'rgba(' + INK + ',' + alpha + ')'; ctx.lineWidth = Math.max(0.75, l.w || 1);
         ctx.beginPath(); ctx.moveTo(l.a.sx, l.a.sy); if (m) ctx.quadraticCurveTo(m[0], m[1], l.b.sx, l.b.sy); else ctx.lineTo(l.b.sx, l.b.sy); ctx.stroke();
+        if (o.directed) {
+          var fx = m ? m[0] : l.a.sx, fy = m ? m[1] : l.a.sy, dx = l.b.sx - fx, dy = l.b.sy - fy, len = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / len, uy = dy / len, tx = l.b.sx - ux * ((l.b._r || 6) + 3), ty = l.b.sy - uy * ((l.b._r || 6) + 3), s = 6;
+          ctx.fillStyle = 'rgba(' + INK + ',' + Math.min(1, alpha + 0.3) + ')'; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx - ux * s - uy * s * 0.5, ty - uy * s + ux * s * 0.5); ctx.lineTo(tx - ux * s + uy * s * 0.5, ty - uy * s - ux * s * 0.5); ctx.closePath(); ctx.fill();
+        }
       });
       nodes.sort(function (a, b) { return (b.sz || 0) - (a.sz || 0); });
       nodes.forEach(function (n) {
-        var r = base * Math.sqrt(n.size || 1) * (G.mode === '3d' ? (n.sk || 1) / (G.zoom || 1) : 1);
-        n.hitR = r + 2; n._r = r;
+        var r = n._r, k;
         ctx.save(); ctx.translate(n.sx, n.sy); ctx.globalAlpha = dimmed(n) ? 0.22 : 1;
-        ctx.beginPath(); ctx.arc(0, 0, r + 2, 0, TAU); ctx.fillStyle = c.ground; ctx.fill();
-        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fillStyle = paint(kinds[n.group] || 'solid', r); ctx.fill();
-        ctx.strokeStyle = c.ink; ctx.lineWidth = n.isGroup ? 2 : 1.2; ctx.stroke();
-        if (eng.isSelected(n.id)) { ctx.beginPath(); ctx.arc(0, 0, r + 4.5, 0, TAU); ctx.lineWidth = 1.6; ctx.stroke(); }
-        if (n.pinned) { ctx.beginPath(); ctx.arc(r * 0.8, -r * 0.8, 2.2, 0, TAU); ctx.fillStyle = c.ink; ctx.fill(); }
+        body(n, r + 2, { fill: c.ground });
+        body(n, r, { fill: n.hollow ? c.ground : paint(kinds[n.group] || 'solid', r), stroke: c.ink, width: n.isGroup ? 2 : 1.2 });
+        if (n.isGroup) { ctx.beginPath(); ctx.arc(0, 0, r * 0.32, 0, TAU); ctx.fillStyle = c.ground; ctx.fill(); ctx.strokeStyle = c.ink; ctx.lineWidth = 1.2; ctx.stroke(); }
+        for (k = 1; k <= Math.min(3, n.rings || 0); k++) { ctx.beginPath(); ctx.arc(0, 0, r + 2 + k * 3, 0, TAU); ctx.strokeStyle = 'rgba(' + INK + ',.5)'; ctx.lineWidth = 1; ctx.stroke(); }
+        if (brands && n.brand && r > 6 && (brands.get(n.brand) || {}).path) { ctx.beginPath(); ctx.arc(0, 0, r * 0.78, 0, TAU); ctx.fillStyle = c.ground; ctx.fill(); brands.draw(ctx, n.brand, 0, 0, r * 1.05, o.brands === 'colour' ? null : c.ink); }
+        if (eng.isSelected(n.id)) { ctx.beginPath(); ctx.arc(0, 0, r + 5 + Math.min(3, n.rings || 0) * 3, 0, TAU); ctx.strokeStyle = c.ink; ctx.lineWidth = 1.8; ctx.stroke(); }
+        if (n.pinned) { ctx.beginPath(); ctx.arc(r * 0.85, -r * 0.85, 2.4, 0, TAU); ctx.fillStyle = c.ink; ctx.fill(); }
         ctx.restore();
       });
       eng.labelBoxes = {};
@@ -590,29 +608,96 @@
           ctx.fillStyle = 'rgba(' + INK + ',' + (dimmed(n) ? 0.25 : 0.9) + ')'; ctx.fillText(name(n), n.sx, n.sy + n._r + 4); eng.labelBoxes[n.id] = boxes[n.id];
         });
       }
-      if (o.minimap !== false && eng.viewInfo().inside < 0.999) eng.drawMinimap(ctx, W - c.rem * 7.5, Hh - c.rem * 5.5, c.rem * 7, c.rem * 5, { ink: INK });
+      if (o.minimap !== false && (o.minimap === 'always' || eng.viewInfo().inside < 0.999)) eng.drawMinimap(ctx, W - c.rem * 7.5, Hh - c.rem * 5.5, c.rem * 7, c.rem * 5, { ink: INK });
     }
+
+    /* arrangements other than force: where each node should sit, then every node travels there */
+    function keep() { home[eng.state.mode] = {}; eng.state.nodes.forEach(function (n) { home[eng.state.mode][n.id] = [n.x, n.y, n.z]; }); }
+    function arrange(kind) {
+      var G = eng.state, ns = G.nodes.filter(function (n) { return !n.hidden; }), N = ns.length, adj = {}, out = {}, to = {}, ax = Math.max(1, Math.min(2.2, W / Hh)) * 0.95, ay = 0.95, i;
+      if (LAYOUTS.indexOf(kind) < 0 || !N) return;
+      G.links.forEach(function (l) { if (l.hidden) return; (adj[l.a.id] = adj[l.a.id] || []).push(l.b); (adj[l.b.id] = adj[l.b.id] || []).push(l.a); (out[l.a.id] = out[l.a.id] || []).push(l.b); });
+      var ordered = ns.slice().sort(function (a, b) { return String(a.group).localeCompare(String(b.group)) || (b.deg || 0) - (a.deg || 0); });
+      var byDeg = ns.slice().sort(function (a, b) { return (b.deg || 0) - (a.deg || 0); }), root = (G.selected[0] && G.byId[G.selected[0]]) || byDeg[0];
+      /* a spanning forest from the root: each node's depth, parent and children */
+      function forest(edges) {
+        var depth = {}, kids = {}, roots = [], q, starts = [root].concat(byDeg);
+        starts.forEach(function (s) {
+          if (s.hidden || depth[s.id] != null) return;
+          depth[s.id] = 0; roots.push(s); q = [s];
+          while (q.length) { var m = q.shift(); (edges[m.id] || []).forEach(function (t) { if (t.hidden || depth[t.id] != null) return; depth[t.id] = depth[m.id] + 1; (kids[m.id] = kids[m.id] || []).push(t); q.push(t); }); }
+        });
+        return { depth: depth, kids: kids, roots: roots };
+      }
+      function spread(fr) { var leaf = 0, pos = {}; fr.roots.forEach(function (r) { (function walk(m) { var k = fr.kids[m.id] || []; k.forEach(walk); pos[m.id] = k.length ? k.reduce(function (s, q) { return s + pos[q.id]; }, 0) / k.length : leaf++; })(r); }); return { pos: pos, leaves: Math.max(1, leaf) }; }
+      if (kind === 'force') { var hm = home[G.mode] || {}; ns.forEach(function (n) { var p = hm[n.id]; to[n.id] = p ? p : [n.x, n.y, n.z]; }); }
+      else if (kind === 'circular') ordered.forEach(function (n, k) { var a = k / N * TAU - Math.PI / 2; to[n.id] = [Math.cos(a) * ay, Math.sin(a) * ay, 0]; });
+      else if (kind === 'grid') { var cols = Math.ceil(Math.sqrt(N * ax / ay)), rows = Math.ceil(N / cols); ordered.forEach(function (n, k) { to[n.id] = [cols > 1 ? ((k % cols) / (cols - 1) * 2 - 1) * ax : 0, rows > 1 ? (Math.floor(k / cols) / (rows - 1) * 2 - 1) * ay : 0, 0]; }); }
+      else if (kind === 'concentric') { var ring = 0, used = 0, cap = 1, rings = []; byDeg.forEach(function (n) { if (used >= cap) { ring++; used = 0; cap = ring * 6; } (rings[ring] = rings[ring] || []).push(n); used++; }); rings.forEach(function (list, r) { list.forEach(function (n, k) { var a = k / list.length * TAU - Math.PI / 2, rad = rings.length > 1 ? r / (rings.length - 1) * ay : 0; to[n.id] = [Math.cos(a) * rad, Math.sin(a) * rad, 0]; }); }); }
+      else {
+        var fr = forest(kind === 'layered' && o.directed ? out : adj), sp = spread(fr), maxD = 0;
+        ns.forEach(function (n) { if (fr.depth[n.id] == null) fr.depth[n.id] = 0; maxD = Math.max(maxD, fr.depth[n.id]); });
+        if (kind === 'radial') ns.forEach(function (n) { var a = (sp.pos[n.id] || 0) / sp.leaves * TAU - Math.PI / 2, rad = maxD ? fr.depth[n.id] / maxD * ay : 0; to[n.id] = [Math.cos(a) * rad, Math.sin(a) * rad, 0]; });
+        else if (kind === 'tree') ns.forEach(function (n) { to[n.id] = [maxD ? (fr.depth[n.id] / maxD * 2 - 1) * ax : 0, sp.leaves > 1 ? ((sp.pos[n.id] || 0) / (sp.leaves - 1) * 2 - 1) * ay : 0, 0]; });
+        else { var layers = []; ns.forEach(function (n) { (layers[fr.depth[n.id]] = layers[fr.depth[n.id]] || []).push(n); }); layers.forEach(function (list, dpt) { list.sort(function (a, b) { return (sp.pos[a.id] || 0) - (sp.pos[b.id] || 0); }); list.forEach(function (n, k) { to[n.id] = [maxD ? (dpt / maxD * 2 - 1) * ax : 0, list.length > 1 ? (k / (list.length - 1) * 2 - 1) * ay : 0, 0]; }); }); }
+      }
+      arranged = kind;
+      var from = {}, t0 = performance.now(), mine = ++tween, still = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      ns.forEach(function (n) { from[n.id] = [n.x, n.y, n.z]; });
+      (function step(now) {
+        if (mine !== tween) return;
+        var t = still ? 1 : Math.max(0, Math.min(1, (now - t0) / 480)), e = 1 - Math.pow(1 - t, 3);
+        ns.forEach(function (n) { var a = from[n.id], b = to[n.id]; if (!b) return; n.x = a[0] + (b[0] - a[0]) * e; n.y = a[1] + (b[1] - a[1]) * e; n.z = a[2] + (b[2] - a[2]) * e; });
+        eng.kick();
+        if (t < 1) requestAnimationFrame(step); else { eng.fit(); if (on.change) on.change('layout'); }
+      })(t0);
+    }
+
+    /* the context menu: what can be done to the thing under the pointer */
+    function closeMenu() { if (menu && menu.parentNode) menu.parentNode.removeChild(menu); menu = null; }
+    function openMenu(id, x, y) {
+      closeMenu();
+      var n = id == null ? null : eng.state.byId[id], r = el.getBoundingClientRect(), items = [];
+      if (n && n.isGroup) items.push(['Unfold ' + n.group, function () { eng.expand(n.group); }]);
+      else if (n) {
+        items.push(['Focus', function () { eng.focus(n.id); }], [n.pinned ? 'Unpin' : 'Pin', function () { eng.pin(n.id); }], ['Select neighbours', function () { eng.select([n.id].concat(eng.neighbours(n.id))); }]);
+        if (n.group != null) items.push(['Fold ' + n.group, function () { eng.collapse(n.group); }]);
+      } else items.push(['Fit', function () { eng.fit(); }], ['Reset view', function () { eng.reset(); }], ['Undo', function () { eng.undo(); }], ['Clear selection', function () { eng.select([]); }]);
+      menu = H('div', 'position:absolute;z-index:6;min-width:9em;padding:.3em;border-radius:.9em;box-shadow:0 6px 20px rgba(0,0,0,.22);font-size:' + f(c.rem * 0.74) + 'px;background:' + c.ink, el);
+      menu.setAttribute('role', 'menu');
+      items.forEach(function (it) {
+        var b = H('button', 'display:block;width:100%;text-align:left;font:inherit;border:0;background:none;padding:.45em .8em;border-radius:.6em;cursor:pointer;color:' + c.ground, menu, it[0]);
+        b.type = 'button'; b.setAttribute('role', 'menuitem');
+        b.addEventListener('pointerenter', function () { b.style.background = 'rgba(' + rgb(c.ground) + ',.14)'; }); b.addEventListener('pointerleave', function () { b.style.background = 'none'; });
+        b.addEventListener('click', function () { closeMenu(); it[1](); eng.kick(); play('select'); if (on.change) on.change('menu'); });
+      });
+      menu.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closeMenu(); cv.focus(); } });
+      menu.style.left = f(Math.max(0, Math.min(W - menu.offsetWidth, x - r.left))) + 'px'; menu.style.top = f(Math.max(0, Math.min(Hh - menu.offsetHeight, y - r.top))) + 'px';
+      menu.firstChild.focus(); play('open');
+    }
+
     function make() {
       colours(); index();
       eng = Engine.create({
         nodes: data.nodes, links: data.links, mode: '3d', onFrame: frame, options: Object.assign({ bundle: true }, o.options),
         on: {
-          select: function (ids) { if (on.select) on.select(ids); eng.kick(); },
-          hover: function (id) { if (on.hover) on.hover(id); eng.kick(); },
+          select: function (ids) { play('select'); if (on.select) on.select(ids); eng.kick(); },
+          hover: function (id) { if (id != null) play('hover'); if (on.hover) on.hover(id); eng.kick(); },
           tooltip: function (id) {
             var n = id == null ? null : eng.state.byId[id];
-            if (!n) return c.tip.hide();
+            if (!n || menu) return c.tip.hide();
             c.tip.show(n.sx, n.sy - (n._r || 8) - 2, [{ v: name(n), l: (n.isGroup ? '' : (n.group != null ? n.group + ' · ' : '')) + (n.deg || 0) + (n.deg === 1 ? ' link' : ' links') }]);
           },
           focus: function (id) { if (on.focus) on.focus(id); },
-          context: on.context || null,
+          context: on.context || (o.menu === false ? null : function (id, x, y) { c.tip.hide(); openMenu(id, x, y); }),
           link: function (a, b) { if (on.link) on.link(a, b); },
-          change: function (kind) { if (on.change) on.change(kind); if (eng) eng.kick(); }
+          change: function (kind) { if (kind === 'mode') { arranged = 'force'; } if (on.change) on.change(kind); if (eng) eng.kick(); }
         }
       });
-      eng.layout(); size(); eng.attach(cv);
-      if ((o.mode || '2d') === '2d') eng.setMode('2d', true);
-      eng.fit(); eng.kick();
+      eng.layout(); size(); eng.attach(cv); keep();
+      if ((o.mode || '2d') === '2d') { eng.setMode('2d', true); keep(); }
+      if (o.layout && o.layout !== 'force') arrange(o.layout); else eng.fit();
+      eng.kick();
     }
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
     cv = H('canvas', 'display:block;width:100%;touch-action:none;outline-offset:2px', null); el.insertBefore(cv, el.firstChild); ctx = cv.getContext('2d');
@@ -620,19 +705,26 @@
     cv.setAttribute('aria-label', o.label || 'Graph of ' + data.nodes.length + ' nodes and ' + data.links.length + ' links. Arrow keys walk the selection, Enter focuses, plus and minus zoom, 0 fits.');
     c.tip = tipper(el, c);
     cv.addEventListener('keydown', function (ev) { if (eng.key(ev)) { ev.preventDefault(); eng.kick(); } });
+    cv.addEventListener('pointerdown', function () { closeMenu(); });
     /* the wheel belongs to the page until the graph is focused (or ctrl/⌘ is held), so a graph never traps a scroll */
     function wheel(ev) { if (o.wheel !== 'always' && !ev.ctrlKey && !ev.metaKey && document.activeElement !== cv) ev.stopPropagation(); }
     el.addEventListener('wheel', wheel, true);
     make();
     if (o.responsive !== false && typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(function () { if (Math.abs(el.clientWidth - W) > 0.5) { size(); eng.kick(); } }); ro.observe(el); }
+    var ENGINE = { fisheye: 1, edgeLens: 1, grid: 1, snap: 1, forceDrag: 1, bundle: 1, hull: 1, fixSize: 1, wheel: 1, history: 1 };
     return {
-      el: cv, get engine() { return eng; },
+      el: cv, get engine() { return eng; }, layouts: LAYOUTS,
       fit: function () { eng.fit(); }, reset: function () { eng.reset(); },
-      setMode: function (m) { eng.setMode(m); }, mode: function () { return eng.state.mode; },
+      setMode: function (m) { var was = eng.state.mode; eng.setMode(m); if (was !== m && !home[m]) keep(); }, mode: function () { return eng.state.mode; },
+      layout: function (kind) { if (kind == null) return arranged; arrange(kind); return this; },
+      /* one switch for everything that can be turned on: the engine's options and this drawing's own */
+      set: function (k, v) { if (ENGINE[k]) eng.set(k, v); else { o[k] = v; eng.kick(); } return this; },
+      get: function (k) { return ENGINE[k] ? eng.options[k] : o[k]; },
       undo: function () { var r = eng.undo(); eng.kick(); return r; }, redo: function () { var r = eng.redo(); eng.kick(); return r; },
+      select: function (ids) { eng.select(ids || []); eng.kick(); }, focus: function (id) { eng.focus(id); },
       legend: function () { return eng.legend().map(function (g) { return { label: g.group, fill: kinds[g.group], value: g.n, collapsed: g.collapsed }; }); },
       toggle: function (group) { if (eng.isCollapsed(group)) eng.expand(group); else eng.collapse(group); eng.kick(); },
-      update: function (d, o2) { if (d) data = d; if (o2) for (var k in o2) o[k] = o2[k]; eng.destroy(); make(); return this; },
+      update: function (d, o2) { if (d) data = d; if (o2) for (var k in o2) o[k] = o2[k]; tween++; closeMenu(); eng.destroy(); home = {}; arranged = 'force'; make(); return this; },
       table: function () {
         var tb = document.createElement('table'), tr = H('tr', '', H('thead', '', tb)), body, deg = {};
         ['Node', 'Group', 'Links'].forEach(function (h) { H('th', '', tr, h).scope = 'col'; });
@@ -641,8 +733,53 @@
         data.nodes.forEach(function (n) { tr = H('tr', '', body); H('th', '', tr, names[n.id]).scope = 'row'; H('td', '', tr, n.group == null ? '' : n.group); H('td', '', tr, String(deg[n.id] || 0)); });
         return tb;
       },
-      destroy: function () { if (ro) ro.disconnect(); eng.destroy(); el.removeEventListener('wheel', wheel, true); c.tip.remove(); if (cv.parentNode) cv.parentNode.removeChild(cv); }
+      destroy: function () { tween++; closeMenu(); if (ro) ro.disconnect(); eng.destroy(); el.removeEventListener('wheel', wheel, true); c.tip.remove(); if (cv.parentNode) cv.parentNode.removeChild(cv); }
     };
+  }
+
+  /* graphTools: the controls a graph owes its reader, as one row — dimension, arrangement, view, the switches, the
+     groups as a legend that folds them, and the gestures behind a "?" */
+  function graphTools(el, g, o) {
+    o = o || {};
+    var t = tone(o), ink = o.ink || t.ink || '#0c0c0c', ground = o.ground || t.ground || '#f6ee2d', rem = o.rem || 16, INK = rgb(ink), help = null;
+    var SW = [['fisheye', 'Fisheye'], ['edgeLens', 'Edge lens'], ['grid', 'Grid'], ['snap', 'Snap'], ['forceDrag', 'Force drag'], ['bundle', 'Bundle'], ['bubbles', 'Bubbles'], ['labels', 'Labels'], ['directed', 'Arrows']];
+    var GEST = [['Drag a node', 'move it; it pins where dropped'], ['Drag the ground', 'pan (2D) or orbit (3D)'], ['Wheel or pinch', 'zoom, once the graph has focus'], ['Click, shift-click', 'select, add to the selection'], ['Shift-drag ground', 'brush a rectangle'], ['Alt-drag ground', 'lasso a shape'], ['Shift-drag node to node', 'link them'], ['Double-click a node', 'focus it'], ['Double-click the ground', 'fit'], ['Right-click', 'menu: pin, fold, neighbours'], ['Arrow keys', 'walk the selection'], ['Enter · P · 0 · R', 'focus, pin, fit, reset'], ['⌘Z · ⇧⌘Z', 'undo, redo']];
+    function chip(parent, label, fn, pressed) {
+      var b = H('button', 'font:inherit;border:0;border-radius:999px;padding:.42em .95em;cursor:pointer;white-space:nowrap', parent, label);
+      b.type = 'button';
+      function paintChip() { var onNow = pressed ? pressed() : false; if (pressed) b.setAttribute('aria-pressed', String(!!onNow)); b.style.background = onNow ? ink : 'rgba(' + INK + ',.09)'; b.style.color = onNow ? ground : ink; }
+      b.addEventListener('click', function () { play('tick'); if (fn() !== false) render(); });
+      paintChip();
+      return b;
+    }
+    function render() {
+      el.textContent = ''; help = null;
+      var bar = H('div', 'display:flex;flex-wrap:wrap;gap:.4em;align-items:center;font-size:' + f(rem * 0.74) + 'px;color:' + ink, el);
+      chip(bar, '2D', function () { g.setMode('2d'); }, function () { return g.mode() === '2d'; });
+      chip(bar, '3D', function () { g.setMode('3d'); }, function () { return g.mode() === '3d'; });
+      var sel = H('select', 'font:inherit;border:0;border-radius:999px;padding:.42em .7em;cursor:pointer;color:' + ink + ';background:rgba(' + INK + ',.09)', bar);
+      sel.setAttribute('aria-label', 'Arrangement');
+      g.layouts.forEach(function (k) { var op = H('option', '', sel, k.charAt(0).toUpperCase() + k.slice(1)); op.value = k; if (g.layout() === k) op.selected = true; });
+      sel.addEventListener('change', function () { g.layout(sel.value); play('tick'); });
+      chip(bar, 'Fit', function () { g.fit(); }); chip(bar, 'Reset', function () { g.reset(); }); chip(bar, 'Undo', function () { g.undo(); }); chip(bar, 'Redo', function () { g.redo(); });
+      H('span', 'flex:0 0 .4em', bar);
+      SW.forEach(function (s) { chip(bar, s[1], function () { g.set(s[0], !(s[0] === 'labels' ? g.get('labels') !== false : g.get(s[0]))); }, function () { return s[0] === 'labels' ? g.get('labels') !== false : !!g.get(s[0]); }); });
+      var q = chip(bar, '?', function () { help.hidden = !help.hidden; q.setAttribute('aria-expanded', String(!help.hidden)); q.style.background = help.hidden ? 'rgba(' + INK + ',.09)' : ink; q.style.color = help.hidden ? ink : ground; return false; });
+      q.setAttribute('aria-label', 'Gestures'); q.setAttribute('aria-expanded', 'false');
+      help = H('dl', 'margin:.7em 0 0;display:grid;grid-template-columns:auto 1fr;gap:.25em 1em;font-size:' + f(rem * 0.72) + 'px;color:' + ink, el); help.hidden = true;
+      GEST.forEach(function (r) { H('dt', 'font-weight:500', help, r[0]); H('dd', 'margin:0;opacity:.75', help, r[1]); });
+      if (o.legend !== false) {
+        var leg = H('div', 'display:flex;flex-wrap:wrap;gap:.3em .5em;margin-top:.7em;font-size:' + f(rem * 0.72) + 'px;color:' + ink, el);
+        g.legend().forEach(function (it) {
+          var b = H('button', 'font:inherit;border:0;background:none;color:inherit;display:inline-flex;align-items:center;gap:.5em;padding:.2em .5em .2em .2em;border-radius:999px;cursor:pointer;opacity:' + (it.collapsed ? 0.5 : 1), leg);
+          b.type = 'button'; b.setAttribute('aria-pressed', String(!!it.collapsed)); b.setAttribute('aria-label', (it.collapsed ? 'Unfold ' : 'Fold ') + it.label);
+          b.appendChild(swatch(it.fill, { ink: ink, ground: ground })); H('span', it.collapsed ? 'text-decoration:line-through' : '', b, it.label); H('span', 'opacity:.6', b, String(it.value));
+          b.addEventListener('click', function () { g.toggle(it.label); play('tick'); render(); });
+        });
+      }
+    }
+    render();
+    return { el: el, update: function (o2) { if (o2) { for (var k in o2) o[k] = o2[k]; t = tone(o); ink = o.ink || t.ink || ink; ground = o.ground || t.ground || ground; INK = rgb(ink); } render(); return this; }, destroy: function () { el.textContent = ''; } };
   }
 
   /* rose: twenty-four hours as a rose. Stacked series are steps of the one ink, darkest at the hub. */
@@ -724,5 +861,10 @@
     return { get el() { return out && out.svg; }, update: function (d, o2) { if (d) data = d; if (o2) for (var k in o2) o[k] = o2[k]; draw(); return this; }, destroy: function () { if (ro) ro.disconnect(); el.textContent = ''; } };
   }
 
-  return { version: '0.2.0', order: ORDER, dashes: DASH, shades: SHADES, tones: TONES, fills: fills, canvasFills: canvasFills, swatch: swatch, graph: graph, rose: rose, gantt: gantt, steps: steps, bars: bars, fan: fan, stack: stack, line: line, spark: spark, halftone: halftone, meter: meter, stat: stat, legend: legend };
+  /* interface tones through ../orrery-kit/sfx.js: ASOC.viz.sound(true) makes one, or pass your own instance; false stops */
+  var SFX = null;
+  function sound(v) { SFX = v === true ? (typeof window !== 'undefined' && window.ASOC && window.ASOC.sfx ? window.ASOC.sfx.create({}) : null) : v || null; return SFX; }
+  function play(kind) { if (SFX) { try { SFX.play(kind); } catch (e) {} } }
+
+  return { version: '0.3.0', sound: sound, _: { S: S, H: H, f: f, fmt: fmt, nice: nice, est: est, clip: clip, fold: fold, mount: mount, tone: tone, rgb: rgb, tipper: tipper, curve: curve, kit: kit, play: play }, order: ORDER, dashes: DASH, shades: SHADES, tones: TONES, fills: fills, canvasFills: canvasFills, swatch: swatch, graph: graph, graphTools: graphTools, layouts: LAYOUTS, rose: rose, gantt: gantt, steps: steps, bars: bars, fan: fan, stack: stack, line: line, spark: spark, halftone: halftone, meter: meter, stat: stat, legend: legend };
 });
