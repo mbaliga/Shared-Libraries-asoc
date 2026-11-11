@@ -68,6 +68,14 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid currentColor
 .fills svg { display: block; width: 100%; height: 76px; border-radius: 16px }
 .fills figcaption { font-size: .72rem; margin-top: 8px; display: flex; gap: .5em }
 .fills figcaption span { opacity: .55; font-variant-numeric: tabular-nums }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.tools button { font: inherit; font-size: .74rem; font-weight: 400; color: var(--i); background: color-mix(in srgb, var(--i) 9%, transparent); border: 0; border-radius: 999px; padding: 6px 13px; cursor: pointer }
+.tools button[aria-pressed="true"] { background: var(--i); color: var(--g) }
+.tools .legend { margin-left: auto }
+.tools .legend li { cursor: pointer; border-radius: 999px }
+.tools .legend li[aria-pressed="true"] { text-decoration: line-through; opacity: .55 }
+.graph { height: 400px }
+.gantt { overflow-x: auto }
 pre { margin: 0; background: var(--code-bg); color: var(--code-fg); border-radius: 18px; padding: 18px 20px; overflow-x: auto; font: 400 .78rem/1.6 var(--mono) }
 .card.code { background: none; padding: 0 }
 
@@ -118,6 +126,24 @@ pre { margin: 0; background: var(--code-bg); color: var(--code-fg); border-radiu
       <div class="body"><div class="plot"></div></div>
     </section>
 
+    <section class="card wide" style="--span:8" data-slot="N" data-chart="modules">
+      <div class="head"><h2>Modules <small>and what they import</small></h2></div>
+      <div class="body">
+        <div class="tools"><button type="button" id="g-mode" aria-pressed="false">3D</button><button type="button" id="g-fit">Fit</button><button type="button" id="g-undo">Undo</button><div class="legend"></div></div>
+        <div class="plot graph"></div>
+      </div>
+    </section>
+
+    <section class="card wide" style="--span:4" data-slot="A" data-chart="focus">
+      <div class="head"><h2>Focus <small>minutes by hour</small></h2></div>
+      <div class="body"><div class="legend"></div><div class="plot"></div></div>
+    </section>
+
+    <section class="card wide" style="--span:12" data-slot="N" data-chart="runway">
+      <div class="head"><h2>Runway <small>next two weeks</small></h2></div>
+      <div class="body"><div class="plot gantt"></div></div>
+    </section>
+
     <section class="card wide" style="--span:7" data-slot="N" data-chart="time">
       <div class="head"><h2>Hours <small>by project, this week</small></h2></div>
       <div class="body"><div class="plot"></div><div class="legend"></div></div>
@@ -141,11 +167,17 @@ ASOC.viz.steps(el, [
   { label: 'Running', value: 14 }, { label: 'Passed', value: 94 }
 ], { tone: 'sun' });
 
-ASOC.viz.fan(el, parts, { tone: 'ember', sweep: 90 });   // or { ink, ground, accent }</code></pre>
+ASOC.viz.fan(el, parts, { tone: 'ember', sweep: 90 });   // or { ink, ground, accent }
+
+&lt;script src="../orrery-kit/graph.js"&gt;&lt;/script&gt;         // before viz.js, for graph; rose.js and gantt.js likewise
+var g = ASOC.viz.graph(el, { nodes, links }, { mode: '2d' });   // g.setMode('3d'), g.fit(), g.undo(), g.toggle(group)</code></pre>
     </section>
   </main>
 </div>
 
+<script src="../orrery-kit/graph.js"></script>
+<script src="../orrery-kit/rose.js"></script>
+<script src="../orrery-kit/gantt.js"></script>
 <script src="viz.js"></script>
 <script>
 (function () {
@@ -174,6 +206,27 @@ ASOC.viz.fan(el, parts, { tone: 'ember', sweep: 90 });   // or { ink, ground, ac
   var time = [{ label: 'Atlas', value: 18.5 }, { label: 'Birch', value: 11 }, { label: 'Cinder', value: 7.5 }, { label: 'Dune', value: 5 }, { label: 'Ember', value: 3.5 }, { label: 'Fjord', value: 2.5 }, { label: 'Grove', value: 1.5 }, { label: 'Heron', value: 1 }, { label: 'Islet', value: 0.5 }];
   var repos = [{ label: 'atlas-android', value: 412 }, { label: 'shared-libraries', value: 131 }, { label: 'birch-web', value: 88 }, { label: 'cinder-engine', value: 54 }, { label: 'dune-watch', value: 19 }];
 
+  var modules = (function () {
+    var groups = { shell: ['app', 'nav', 'settings', 'theme', 'crash'], data: ['store', 'schema', 'migrate', 'cache', 'export', 'prefs'], sync: ['queue', 'merge', 'transport', 'keys', 'conflict'], search: ['index', 'query', 'rank', 'facets', 'tokens', 'dates'], media: ['decode', 'thumbs', 'exif', 'player', 'waveform', 'gallery'] };
+    var nodes = [], links = [], hub = { shell: 'app', data: 'store', sync: 'queue', search: 'index', media: 'decode' };
+    Object.keys(groups).forEach(function (g) { groups[g].forEach(function (id, i) { nodes.push({ id: id, group: g, size: id === hub[g] ? 2.2 : 1 }); if (id !== hub[g]) links.push({ a: hub[g], b: id }); if (i > 1 && i % 2 === 0) links.push({ a: groups[g][i - 1], b: id }); }); });
+    [['app', 'store'], ['app', 'index'], ['nav', 'gallery'], ['store', 'queue'], ['merge', 'schema'], ['index', 'store'], ['thumbs', 'cache'], ['query', 'prefs'], ['player', 'decode'], ['gallery', 'query'], ['crash', 'export'], ['transport', 'keys'], ['exif', 'facets']].forEach(function (l) { links.push({ a: l[0], b: l[1] }); });
+    return { nodes: nodes, links: links };
+  })();
+  var focus = [
+    { label: 'Deep work', values: [0, 0, 0, 0, 0, 0, 10, 35, 50, 55, 50, 40, 10, 15, 45, 50, 40, 20, 5, 0, 20, 35, 25, 5] },
+    { label: 'Meetings', values: [0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 10, 20, 15, 30, 15, 10, 20, 25, 10, 0, 0, 0, 0, 0] }
+  ];
+  var runway = (function () {
+    var days = [], used = [3, 4, 4, 2, 0, 0, 3, 4, 5, 3, 2, 0, 0, 1];
+    for (var i = 0; i < 14; i++) { var d = new Date(2026, 10, 11 + i), wk = d.getDay() === 0 || d.getDay() === 6; days.push({ k: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2), cap: wk ? 0 : 4, used: used[i] }); }
+    return { days: days, rows: [
+      { id: 'beta', label: 'Beta build', date: '14 Nov', dueIdx: 3, kind: 'hard', fits: true, slots: 7, items: [{ id: 'b1', kind: 'task', title: 'Crash triage', runs: [{ a: 0, b: 1, slots: 4 }] }, { id: 'b2', kind: 'review', title: 'Release review', runs: [{ a: 2, b: 2, slots: 3 }] }] },
+      { id: 'store', label: 'Store listing', date: '19 Nov', dueIdx: 8, kind: 'send', fits: true, slots: 6, items: [{ id: 's1', kind: 'brief', title: 'Screenshots brief', runs: [{ a: 3, b: 3, slots: 2 }] }, { id: 's2', kind: 'task', title: 'Listing copy', runs: [{ a: 6, b: 7, slots: 4 }] }] },
+      { id: 'audit', label: 'Security audit', date: '20 Nov', dueIdx: 9, kind: 'plan', fits: false, late: 2, slots: 9, items: [{ id: 'a1', kind: 'task', title: 'Dependency sweep', runs: [{ a: 7, b: 8, slots: 4 }] }, { id: 'a2', kind: 'gate', title: 'Fix findings', runs: [{ a: 9, b: 11, slots: 5 }] }] }
+    ] };
+  })();
+
   var draw = {
     builds: function (card, t) { return [V.steps(card.querySelector('.plot'), builds, t)]; },
     storage: function (card, t) {
@@ -199,6 +252,28 @@ ASOC.viz.fan(el, parts, { tone: 'ember', sweep: 90 });   // or { ink, ground, ac
       return [V.stack(card.querySelector('.plot'), time, Object.assign({ unit: 'Hours' }, t))];
     },
     repos: function (card, t) { return [V.bars(card.querySelector('.plot'), repos, Object.assign({ unit: 'MB' }, t))]; },
+    modules: function (card, t) {
+      var api = V.graph(card.querySelector('.plot'), modules, Object.assign({ on: { change: sync } }, t)), leg = card.querySelector('.legend'), mode = document.getElementById('g-mode');
+      function sync() {
+        if (!api) return;
+        V.legend(leg, api.legend(), Object.assign({ row: true }, t));
+        Array.prototype.forEach.call(leg.querySelectorAll('li'), function (li, i) {
+          var g = api.legend()[i]; li.tabIndex = 0; li.setAttribute('role', 'button'); li.setAttribute('aria-pressed', String(!!g.collapsed)); li.setAttribute('aria-label', (g.collapsed ? 'Unfold ' : 'Fold ') + g.label);
+          li.onclick = function () { api.toggle(g.label); }; li.onkeydown = function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); api.toggle(g.label); } };
+        });
+        mode.setAttribute('aria-pressed', String(api.mode() === '3d'));
+      }
+      mode.onclick = function () { api.setMode(api.mode() === '3d' ? '2d' : '3d'); };
+      document.getElementById('g-fit').onclick = function () { api.fit(); };
+      document.getElementById('g-undo').onclick = function () { api.undo(); sync(); };
+      sync();
+      return [api];
+    },
+    focus: function (card, t) {
+      V.legend(card.querySelector('.legend'), focus, Object.assign({ row: true, shades: true }, t));
+      return [V.rose(card.querySelector('.plot'), focus, Object.assign({ height: 330 }, t))];
+    },
+    runway: function (card, t) { live.push(V.gantt(card.querySelector('.plot'), runway, t)); return []; },
     fills: function (card, t) {
       var host = card.querySelector('.fills'); host.textContent = '';
       V.order.forEach(function (kind, i) {

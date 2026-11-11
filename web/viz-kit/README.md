@@ -34,6 +34,35 @@ fills the width of `el` and redraws when that width changes.
 | `stat` | `{value, label, delta?, deltaUnit?, vs?}` | The number itself (HTML). Direction is an arrow, never a colour. |
 | `legend` | `[{label, fill?, value?}]` | Keys in the same textures (HTML). `row`, `values`, and `lines: true` for dash keys beside a `line`. |
 
+### With the Orrery engines
+
+Three charts draw with the engines in [`../orrery-kit`](../orrery-kit/README.md), in this kit's ink and textures. The
+engines stay where Orrery's build reads them — nothing is copied — so load the one a chart needs before calling it; a
+missing engine throws an error that names the file.
+
+```html
+<script src="../orrery-kit/graph.js"></script>
+<script src="viz.js"></script>
+<script>
+  var g = ASOC.viz.graph(el, { nodes: [{ id: 'app', group: 'shell' }, { id: 'store', group: 'data' }], links: [{ a: 'app', b: 'store' }] });
+</script>
+```
+
+| Chart | Needs | Data | What it is |
+|---|---|---|---|
+| `graph` | `graph.js` | `{nodes: [{id, label?, group?, size?}], links: [{a, b, w?}]}` | The force graph, 2D or 3D. A group is a texture; links are the ink, fainter. Every interaction the engine has is live: drag, pan, orbit, zoom, click/brush/lasso select, hover lighting neighbours, focus, fold and unfold groups, create a link, snap, history, minimap when part of the graph is off the ground, keyboard walking (the full AntV G6 mapping is in the orrery-kit README). |
+| `rose` | `rose.js` | `[{label, values[24]}]` | A day as a rose. Stacked series are steps of the one ink (`ASOC.viz.shades`), since they stack in order; pair it with `legend(el, series, { shades: true })`. |
+| `gantt` | `gantt.js` | `{days, rows, groups}` as the gantt takes them | The Orrery gantt with this kit's ink, ground and type. |
+
+`graph` returns `{ el, engine, fit(), reset(), setMode('2d' | '3d'), mode(), undo(), redo(), legend(), toggle(group),
+update(), table(), destroy() }`; `engine` is the `ASOC.Graph` instance for anything not wrapped. Its options: `mode`
+(`'2d'`), `options` (passed to the engine: `fisheye`, `edgeLens`, `grid`, `snap`, `forceDrag`, …), `bubbles`, `labels`,
+`minimap`, `nodeR`, and `on: { select(ids), hover(id), focus(id), link(a, b), context(id, x, y, ev), change(kind) }`.
+The wheel zooms only once the graph has focus or with ctrl/⌘ held, so a graph in a page never traps the scroll;
+`wheel: 'always'` lifts that.
+
+`ASOC.viz.canvasFills(ctx, { ink, scale, dpr })` gives the same eight textures to any canvas drawing.
+
 Shared options:
 
 | Option | Default | |
@@ -80,5 +109,5 @@ a convenience — a host with its own design system passes `ink` and `ground` an
 
 ## Versioning
 
-`viz.js` carries a `version` (0.1.0); bump it in the file when the API changes. Consume by copying the file or by a
+`viz.js` carries a `version` (0.2.0); bump it in the file when the API changes. Consume by copying the file or by a
 submodule, as with [`orrery-kit`](../orrery-kit/README.md).

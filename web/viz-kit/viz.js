@@ -12,12 +12,20 @@
      halftone(el, {rows, cols, values})            a matrix where magnitude is dot area
      meter(el, {value, max, label})                a figure against its ceiling
      stat(el, {value, label, delta, vs})           the number itself (HTML)
-     legend(el, [{label, fill?, dash?, value?}])   the keys, in the same textures (HTML)
+     legend(el, [{label, fill?, dash?, value?}])   the keys, in the same textures (HTML); opts.lines, opts.shades, opts.row
    Shared opts: tone ('sun' | 'ember' | 'night' | 'bone' | 'radium' | 'violet' | {ink, ground, accent}), or ink, ground,
      accent directly; rem (16); font; weight (300); format(n); height; scale (texture scale, 1); fill (one texture for
      every mark, or 'each'); label (accessible name); on: { hover(d), select(d) }; responsive (true).
+   Three more draw with the Orrery engines beside this file (../orrery-kit), in the same ink and textures; each needs
+   its engine loaded first and says so if it is not:
+     graph(el, {nodes: [{id, label?, group?, size?}], links: [{a, b, w?}]})   needs graph.js — every interaction the
+        engine has (the AntV G6 set); groups are textures; opts.mode '2d' | '3d', opts.options → engine options
+        → { el, engine, fit(), reset(), setMode(m), mode(), undo(), redo(), legend(), toggle(group), table(), destroy() }
+     rose(el, [{label, values[24]}])               needs rose.js — a day as a rose; stacked series are steps of one ink
+     gantt(el, {days, rows, groups})               needs gantt.js — its data, this kit's ink and ground
    ASOC.viz.order is the fixed texture order — a ninth part folds into "Other", never a ninth texture.
-   ASOC.viz.fills(svg, {ink, ground, scale}) → paint(kind, dir) for hosts that draw their own marks. */
+   ASOC.viz.fills(svg, {ink, ground, scale}) → paint(kind, dir) for hosts that draw their own marks;
+   ASOC.viz.canvasFills(ctx, {ink, scale, dpr}) → paint(kind, r) is the same set for a canvas. */
 (function (root, factory) {
   var api = factory();
   root.ASOC = root.ASOC || {}; root.ASOC.viz = api;
@@ -27,6 +35,7 @@
   var NS = 'http://www.w3.org/2000/svg', uid = 0;
   var ORDER = ['solid', 'hatch', 'dots', 'fade', 'cross', 'lines', 'checks', 'stipple'];
   var DASH = [null, '7 5', '1.5 5', '11 4 2 4'];
+  var SHADES = [0.92, 0.55, 0.3, 0.16];   // steps of the one ink, for series that stack in order (rose)
   var TONES = {
     sun: { ground: '#f6ee2d', ink: '#0c0c0c' },
     ember: { ground: '#ff8f4c', ink: '#0c0c0c', accent: '#f6ee2d' },
@@ -111,11 +120,10 @@
     };
   }
 
-  /* ── the frame every chart shares: sizing, tooltip, hover, focus, table ───────────────────────────────────── */
-  function mount(el, data, o, defH, draw) {
-    o = o || {};
-    var c = { el: el, marks: [], rows: [] }, tipEl = null, ro = null, lastW = -1;
-    c.tip = {
+  /* one tooltip per chart: the value leads, the name follows; names go in as text, never as markup */
+  function tipper(el, c) {
+    var tipEl = null;
+    return {
       show: function (x, y, rows, head) {
         if (!tipEl) tipEl = H('div', 'position:absolute;z-index:5;pointer-events:none;padding:.4em .8em;border-radius:1em;white-space:nowrap;font-size:' + f(c.rem * 0.72) + 'px;line-height:1.35;box-shadow:0 4px 14px rgba(0,0,0,.18)', el);
         tipEl.style.background = c.ink; tipEl.style.color = c.ground; tipEl.textContent = '';
@@ -131,8 +139,16 @@
         if (top < 0 && y + 18 + th <= el.clientHeight) top = y + 18;
         tipEl.style.left = f(Math.max(0, Math.min(W - tw, x - tw / 2))) + 'px'; tipEl.style.top = f(top) + 'px';
       },
-      hide: function () { if (tipEl) tipEl.style.display = 'none'; }
+      hide: function () { if (tipEl) tipEl.style.display = 'none'; },
+      remove: function () { if (tipEl && tipEl.parentNode) tipEl.parentNode.removeChild(tipEl); tipEl = null; }
     };
+  }
+
+  /* ── the frame every chart shares: sizing, tooltip, hover, focus, table ───────────────────────────────────── */
+  function mount(el, data, o, defH, draw) {
+    o = o || {};
+    var c = { el: el, marks: [], rows: [] }, ro = null, lastW = -1;
+    c.tip = tipper(el, c);
     c.text = function (x, y, str, size, a) {
       a = a || {};
       var t = S('text', { x: f(x), y: f(y), 'font-size': f(size), fill: c.ink, 'text-anchor': a.anchor, 'font-weight': a.weight, opacity: a.op, 'pointer-events': 'none' }, a.parent || c.svg);
@@ -188,7 +204,7 @@
         c.rows.forEach(function (r) { tr = H('tr', '', body); r.forEach(function (v, i) { H(i ? 'td' : 'th', '', tr, v).scope = i ? '' : 'row'; }); });
         return tb;
       },
-      destroy: function () { if (ro) ro.disconnect(); if (c.svg && c.svg.parentNode) c.svg.parentNode.removeChild(c.svg); if (tipEl && tipEl.parentNode) tipEl.parentNode.removeChild(tipEl); }
+      destroy: function () { if (ro) ro.disconnect(); if (c.svg && c.svg.parentNode) c.svg.parentNode.removeChild(c.svg); c.tip.remove(); }
     };
   }
 
@@ -457,7 +473,7 @@
     var k = colours(o), s = o.size || 14, svg = S('svg', { width: s, height: s, viewBox: '0 0 ' + s + ' ' + s, 'aria-hidden': 'true' });
     svg.style.flex = 'none';
     if (o.dash !== undefined) S('line', { x1: 0, y1: s / 2, x2: s, y2: s / 2, stroke: k.ink, 'stroke-width': 2, 'stroke-dasharray': o.dash, 'stroke-linecap': 'round' }, svg);
-    else S('rect', { x: 0.5, y: 0.5, width: s - 1, height: s - 1, rx: o.round === false ? 3 : s / 2, fill: fills(svg, { ink: k.ink, scale: o.scale || (s < 20 ? 0.62 : 1) })(kind, 'up'), stroke: k.ink, 'stroke-opacity': kind === 'solid' ? 0 : 0.35 }, svg);
+    else S('rect', { x: 0.5, y: 0.5, width: s - 1, height: s - 1, rx: o.round === false ? 3 : s / 2, fill: fills(svg, { ink: k.ink, scale: o.scale || (s < 20 ? 0.62 : 1) })(kind, 'up'), 'fill-opacity': o.alpha, stroke: k.ink, 'stroke-opacity': kind === 'solid' && o.alpha == null ? 0 : 0.35 }, svg);
     return svg;
   }
   function legend(el, items, o) {
@@ -468,7 +484,7 @@
       var list = H('ul', 'list-style:none;margin:0;padding:0;display:flex;flex-direction:' + (o.row ? 'row;flex-wrap:wrap;gap:.4em 1.1em' : 'column;gap:.55em') + ';font-size:' + f(rem * 0.72) + 'px;color:' + k.ink, el);
       fold(items).forEach(function (it, i) {
         var li = H('li', 'display:flex;align-items:center;gap:.55em;min-width:0', list);
-        li.appendChild(swatch(it.fill || ORDER[i % ORDER.length], { ink: k.ink, ground: k.ground, dash: o.lines ? (it.dash === undefined ? (DASH[i] || '') : it.dash) : undefined, size: o.lines ? 18 : 14 }));
+        li.appendChild(swatch(o.shades ? 'solid' : it.fill || ORDER[i % ORDER.length], { ink: k.ink, ground: k.ground, dash: o.lines ? (it.dash === undefined ? (DASH[i] || '') : it.dash) : undefined, size: o.lines ? 18 : 14, alpha: o.shades ? SHADES[i % SHADES.length] : it.alpha }));
         H('span', 'opacity:.85', li, it.label);
         if (it.value != null && o.values) H('span', 'margin-left:auto;font-weight:500;font-variant-numeric:tabular-nums', li, (o.format || fmt)(it.value));
       });
@@ -477,5 +493,236 @@
     return { el: el, update: function (i2, o2) { if (i2) items = i2; if (o2) for (var k in o2) o[k] = o2[k]; render(); return this; }, destroy: function () { el.textContent = ''; } };
   }
 
-  return { version: '0.1.0', order: ORDER, dashes: DASH, tones: TONES, fills: fills, swatch: swatch, steps: steps, bars: bars, fan: fan, stack: stack, line: line, spark: spark, halftone: halftone, meter: meter, stat: stat, legend: legend };
+
+  /* ── the Orrery engines, drawn in this kit's ink ──────────────────────────────────────────────────────────── */
+  var TAU = Math.PI * 2;
+  function rgb(c) {
+    c = String(c).trim(); var m;
+    if ((m = /^#([0-9a-f]{3})$/i.exec(c))) return m[1].split('').map(function (h) { return parseInt(h + h, 16); }).join(',');
+    if ((m = /^#([0-9a-f]{6})/i.exec(c))) return [0, 2, 4].map(function (i) { return parseInt(m[1].substr(i, 2), 16); }).join(',');
+    if ((m = /rgba?\(([^)]+)\)/.exec(c))) return m[1].split(/[\s,\/]+/).filter(Boolean).slice(0, 3).map(Number).join(',');
+    return '12,12,12';
+  }
+  function kit(name, file) {
+    var A = typeof window !== 'undefined' && window.ASOC;
+    if (!A || !A[name]) throw new Error('ASOC.viz: load orrery-kit/' + file + ' before calling this chart');
+    return A[name];
+  }
+  function canvasFills(ctx, o) {
+    o = o || {};
+    var ink = o.ink || '#0c0c0c', k = o.scale || 1, dpr = o.dpr || 1, made = {}, INK = rgb(ink);
+    function tile(s, build) {
+      var c = document.createElement('canvas'); c.width = c.height = Math.max(2, Math.round(s * dpr));
+      var g = c.getContext('2d'), q = c.width / s; g.scale(q, q); g.fillStyle = ink; g.strokeStyle = ink; build(g, s);
+      var p = ctx.createPattern(c, 'repeat');
+      if (p.setTransform && typeof DOMMatrix !== 'undefined') p.setTransform(new DOMMatrix().scale(1 / q));
+      return p;
+    }
+    function seg(g, a, b, c2, d) { g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke(); }
+    function up(g, s) { seg(g, 0, s, s, 0); seg(g, -s / 2, s / 2, s / 2, -s / 2); seg(g, s / 2, s * 1.5, s * 1.5, s / 2); }
+    function down(g, s) { seg(g, 0, 0, s, s); seg(g, -s / 2, s / 2, s / 2, s * 1.5); seg(g, s / 2, -s / 2, s * 1.5, s / 2); }
+    var make = {
+      solid: function () { return ink; },
+      hatch: function () { return tile(7 * k, function (g, s) { g.lineWidth = s * 0.32; g.lineCap = 'square'; up(g, s); }); },
+      dots: function () { return tile(9 * k, function (g, s) { [[0.25, 0.25], [0.75, 0.75]].forEach(function (q) { g.beginPath(); g.arc(s * q[0], s * q[1], 1.5 * k, 0, TAU); g.fill(); }); }); },
+      cross: function () { return tile(7 * k, function (g, s) { g.lineWidth = s * 0.13; g.lineCap = 'square'; up(g, s); down(g, s); }); },
+      lines: function () { return tile(6 * k, function (g, s) { g.fillRect(0, 0, s, s * 0.3); }); },
+      checks: function () { return tile(8 * k, function (g, s) { g.fillRect(0, 0, s / 2, s / 2); g.fillRect(s / 2, s / 2, s / 2, s / 2); }); },
+      stipple: function () { return tile(4.5 * k, function (g, s) { g.beginPath(); g.arc(s / 2, s / 2, 0.85 * k, 0, TAU); g.fill(); }); }
+    };
+    /* fade is drawn for a mark of half-height r centred on the current origin */
+    return function (kind, r) {
+      if (kind === 'fade') { var gr = ctx.createLinearGradient(0, r || 10, 0, -(r || 10)); gr.addColorStop(0, 'rgba(' + INK + ',.07)'); gr.addColorStop(0.55, 'rgba(' + INK + ',.5)'); gr.addColorStop(1, 'rgba(' + INK + ',1)'); return gr; }
+      if (!make[kind]) kind = 'solid';
+      return made[kind] || (made[kind] = make[kind]());
+    };
+  }
+
+  /* graph: the engine lays out, projects and turns input into selection, focus, drags, brushes, lassos, folds and
+     history; this draws what it reports. A group is a texture; a link is the ink, fainter. */
+  function graph(el, data, o) {
+    o = o || {};
+    var Engine = kit('Graph', 'graph.js'), c = {}, cv, ctx, dpr = 1, W = 0, Hh = 0, paint, eng, ro, INK, font, kinds = {}, names = {}, on = o.on || {};
+    function colours() { var t = tone(o); c.ink = o.ink || t.ink || '#0c0c0c'; c.ground = o.ground || t.ground || '#f6ee2d'; c.rem = o.rem || 16; INK = rgb(c.ink); font = o.font || getComputedStyle(el).fontFamily || 'sans-serif'; }
+    function index() {
+      kinds = {}; names = {};
+      data.nodes.forEach(function (n) { names[n.id] = n.label || String(n.id); if (n.group != null && kinds[n.group] == null) kinds[n.group] = ORDER[Math.min(Object.keys(kinds).length, ORDER.length - 1)]; });
+    }
+    function name(n) { return n.isGroup ? n.group + ' · ' + n.superOf.length : names[n.id]; }
+    function size() {
+      W = el.clientWidth || 320; Hh = o.height || (el.clientHeight > 80 ? el.clientHeight : c.rem * 22); dpr = window.devicePixelRatio || 1;
+      cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr); cv.style.height = f(Hh) + 'px';
+      paint = canvasFills(ctx, { ink: c.ink, scale: o.scale || 0.62, dpr: dpr }); eng.size(W, Hh);
+    }
+    function frame() {
+      var G = eng.state, nodes = eng.project().filter(function (n) { return !n.hidden; }), hov = G.hover, near = hov != null ? eng.neighbours(hov) : [], base = o.nodeR || c.rem * 0.5;
+      function dimmed(n) { return hov != null && n.id !== hov && near.indexOf(n.id) < 0; }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, Hh);
+      eng.drawOverlays(ctx, INK);
+      if (o.bubbles && G.mode === '2d') Object.keys(G.groups).forEach(function (g) { var ids = eng.groupMembers(g); if (ids.length > 1) eng.drawBubble(ctx, ids, 'rgba(' + INK + ',.05)', null, c.rem * 1.1); });
+      ctx.lineCap = 'round';
+      eng.visibleLinks().forEach(function (l) {
+        var lit = hov == null || l.a.id === hov || l.b.id === hov, m = eng.linkPath(l);
+        ctx.strokeStyle = 'rgba(' + INK + ',' + (lit ? (hov == null ? 0.32 : 0.85) : 0.08) + ')'; ctx.lineWidth = Math.max(0.75, l.w || 1);
+        ctx.beginPath(); ctx.moveTo(l.a.sx, l.a.sy); if (m) ctx.quadraticCurveTo(m[0], m[1], l.b.sx, l.b.sy); else ctx.lineTo(l.b.sx, l.b.sy); ctx.stroke();
+      });
+      nodes.sort(function (a, b) { return (b.sz || 0) - (a.sz || 0); });
+      nodes.forEach(function (n) {
+        var r = base * Math.sqrt(n.size || 1) * (G.mode === '3d' ? (n.sk || 1) / (G.zoom || 1) : 1);
+        n.hitR = r + 2; n._r = r;
+        ctx.save(); ctx.translate(n.sx, n.sy); ctx.globalAlpha = dimmed(n) ? 0.22 : 1;
+        ctx.beginPath(); ctx.arc(0, 0, r + 2, 0, TAU); ctx.fillStyle = c.ground; ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fillStyle = paint(kinds[n.group] || 'solid', r); ctx.fill();
+        ctx.strokeStyle = c.ink; ctx.lineWidth = n.isGroup ? 2 : 1.2; ctx.stroke();
+        if (eng.isSelected(n.id)) { ctx.beginPath(); ctx.arc(0, 0, r + 4.5, 0, TAU); ctx.lineWidth = 1.6; ctx.stroke(); }
+        if (n.pinned) { ctx.beginPath(); ctx.arc(r * 0.8, -r * 0.8, 2.2, 0, TAU); ctx.fillStyle = c.ink; ctx.fill(); }
+        ctx.restore();
+      });
+      eng.labelBoxes = {};
+      if (o.labels !== false) {
+        var fs = c.rem * 0.66, boxes = {};
+        ctx.font = '400 ' + f(fs) + 'px ' + font; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        function rank(n) { return n.id === hov ? 1e6 : eng.isSelected(n.id) ? 1e5 : near.indexOf(n.id) >= 0 ? 1e4 : (n.deg || 0) + (n.isGroup ? 50 : 0); }
+        eng.labelsFor(nodes.slice().sort(function (a, b) { return rank(b) - rank(a); }), function (n) {
+          var w = ctx.measureText(name(n)).width;
+          return (boxes[n.id] = [n.sx - w / 2 - 3, n.sy + n._r + 3, n.sx + w / 2 + 3, n.sy + n._r + 6 + fs]);
+        }).forEach(function (n) {
+          ctx.fillStyle = 'rgba(' + INK + ',' + (dimmed(n) ? 0.25 : 0.9) + ')'; ctx.fillText(name(n), n.sx, n.sy + n._r + 4); eng.labelBoxes[n.id] = boxes[n.id];
+        });
+      }
+      if (o.minimap !== false && eng.viewInfo().inside < 0.999) eng.drawMinimap(ctx, W - c.rem * 7.5, Hh - c.rem * 5.5, c.rem * 7, c.rem * 5, { ink: INK });
+    }
+    function make() {
+      colours(); index();
+      eng = Engine.create({
+        nodes: data.nodes, links: data.links, mode: '3d', onFrame: frame, options: Object.assign({ bundle: true }, o.options),
+        on: {
+          select: function (ids) { if (on.select) on.select(ids); eng.kick(); },
+          hover: function (id) { if (on.hover) on.hover(id); eng.kick(); },
+          tooltip: function (id) {
+            var n = id == null ? null : eng.state.byId[id];
+            if (!n) return c.tip.hide();
+            c.tip.show(n.sx, n.sy - (n._r || 8) - 2, [{ v: name(n), l: (n.isGroup ? '' : (n.group != null ? n.group + ' · ' : '')) + (n.deg || 0) + (n.deg === 1 ? ' link' : ' links') }]);
+          },
+          focus: function (id) { if (on.focus) on.focus(id); },
+          context: on.context || null,
+          link: function (a, b) { if (on.link) on.link(a, b); },
+          change: function (kind) { if (on.change) on.change(kind); if (eng) eng.kick(); }
+        }
+      });
+      eng.layout(); size(); eng.attach(cv);
+      if ((o.mode || '2d') === '2d') eng.setMode('2d', true);
+      eng.fit(); eng.kick();
+    }
+    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    cv = H('canvas', 'display:block;width:100%;touch-action:none;outline-offset:2px', null); el.insertBefore(cv, el.firstChild); ctx = cv.getContext('2d');
+    cv.tabIndex = 0; cv.setAttribute('role', 'img');
+    cv.setAttribute('aria-label', o.label || 'Graph of ' + data.nodes.length + ' nodes and ' + data.links.length + ' links. Arrow keys walk the selection, Enter focuses, plus and minus zoom, 0 fits.');
+    c.tip = tipper(el, c);
+    cv.addEventListener('keydown', function (ev) { if (eng.key(ev)) { ev.preventDefault(); eng.kick(); } });
+    /* the wheel belongs to the page until the graph is focused (or ctrl/⌘ is held), so a graph never traps a scroll */
+    function wheel(ev) { if (o.wheel !== 'always' && !ev.ctrlKey && !ev.metaKey && document.activeElement !== cv) ev.stopPropagation(); }
+    el.addEventListener('wheel', wheel, true);
+    make();
+    if (o.responsive !== false && typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(function () { if (Math.abs(el.clientWidth - W) > 0.5) { size(); eng.kick(); } }); ro.observe(el); }
+    return {
+      el: cv, get engine() { return eng; },
+      fit: function () { eng.fit(); }, reset: function () { eng.reset(); },
+      setMode: function (m) { eng.setMode(m); }, mode: function () { return eng.state.mode; },
+      undo: function () { var r = eng.undo(); eng.kick(); return r; }, redo: function () { var r = eng.redo(); eng.kick(); return r; },
+      legend: function () { return eng.legend().map(function (g) { return { label: g.group, fill: kinds[g.group], value: g.n, collapsed: g.collapsed }; }); },
+      toggle: function (group) { if (eng.isCollapsed(group)) eng.expand(group); else eng.collapse(group); eng.kick(); },
+      update: function (d, o2) { if (d) data = d; if (o2) for (var k in o2) o[k] = o2[k]; eng.destroy(); make(); return this; },
+      table: function () {
+        var tb = document.createElement('table'), tr = H('tr', '', H('thead', '', tb)), body, deg = {};
+        ['Node', 'Group', 'Links'].forEach(function (h) { H('th', '', tr, h).scope = 'col'; });
+        data.links.forEach(function (l) { deg[l.a] = (deg[l.a] || 0) + 1; deg[l.b] = (deg[l.b] || 0) + 1; });
+        body = H('tbody', '', tb);
+        data.nodes.forEach(function (n) { tr = H('tr', '', body); H('th', '', tr, names[n.id]).scope = 'row'; H('td', '', tr, n.group == null ? '' : n.group); H('td', '', tr, String(deg[n.id] || 0)); });
+        return tb;
+      },
+      destroy: function () { if (ro) ro.disconnect(); eng.destroy(); el.removeEventListener('wheel', wheel, true); c.tip.remove(); if (cv.parentNode) cv.parentNode.removeChild(cv); }
+    };
+  }
+
+  /* rose: twenty-four hours as a rose. Stacked series are steps of the one ink, darkest at the hub. */
+  function rose(el, series, o) {
+    o = o || {};
+    var Rose = kit('rose', 'rose.js'), c = {}, cv, ctx, ro, W = 0, Sz = 0, geo = null, hov = null, STEPS = SHADES, INK;
+    function draw() {
+      var t = tone(o), dpr = window.devicePixelRatio || 1, font = o.font || getComputedStyle(el).fontFamily || 'sans-serif';
+      c.ink = o.ink || t.ink || '#0c0c0c'; c.ground = o.ground || t.ground || '#f6ee2d'; c.rem = o.rem || 16; INK = rgb(c.ink);
+      W = el.clientWidth || 280; Sz = o.height || Math.min(W, c.rem * 18);
+      cv.width = Math.round(W * dpr); cv.height = Math.round(Sz * dpr); cv.style.height = f(Sz) + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, Sz);
+      var foot = o.caption ? c.rem * (o.sub ? 1.9 : 1.2) : 0, R = Math.min(W, Sz - foot) / 2 - c.rem * 0.2;
+      geo = Rose.draw(ctx, W / 2, (Sz - foot) / 2, R, series.slice(0, STEPS.length).map(function (s, i) { return { vals: s.values, col: INK, a: STEPS[i] }; }),
+        { rem: c.rem, ink: INK, hour: hov, range: o.range, now: !!o.now, caption: o.caption, sub: o.sub, sans: font, mono: font });
+    }
+    function show(h) {
+      if (h === hov) return; hov = h; draw();
+      if (h == null) { c.tip.hide(); if (o.on && o.on.hover) o.on.hover(null); return; }
+      var a = (h + 0.5) / 24 * TAU - Math.PI / 2, fmtv = o.format || fmt;
+      c.tip.show(geo.cx + Math.cos(a) * geo.R * 0.7, geo.cy + Math.sin(a) * geo.R * 0.7, series.map(function (s) { return { v: fmtv(s.values[h] || 0), l: s.label }; }), (h < 10 ? '0' : '') + h + ':00');
+      if (o.on && o.on.hover) o.on.hover({ hour: h });
+    }
+    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    cv = H('canvas', 'display:block;width:100%;outline-offset:2px', null); el.insertBefore(cv, el.firstChild); ctx = cv.getContext('2d');
+    cv.tabIndex = 0; cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', o.label || 'Values by hour of the day; arrow keys step through the hours');
+    c.tip = tipper(el, c);
+    draw();
+    cv.addEventListener('pointermove', function (ev) { var b = cv.getBoundingClientRect(); show(Rose.hit(geo.cx, geo.cy, geo.R, ev.clientX - b.left, ev.clientY - b.top)); });
+    cv.addEventListener('pointerleave', function () { show(null); });
+    cv.addEventListener('blur', function () { show(null); });
+    cv.addEventListener('keydown', function (ev) {
+      if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') show(((hov == null ? -1 : hov) + 1) % 24); else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') show(((hov == null ? 24 : hov) + 23) % 24); else if (ev.key === 'Escape') show(null); else return;
+      ev.preventDefault();
+    });
+    cv.addEventListener('click', function () { if (hov != null && o.on && o.on.select) o.on.select({ hour: hov }); });
+    if (o.responsive !== false && typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(function () { if (Math.abs(el.clientWidth - W) > 0.5) draw(); }); ro.observe(el); }
+    return {
+      el: cv,
+      update: function (s2, o2) { if (s2) series = s2; if (o2) for (var k in o2) o[k] = o2[k]; draw(); return this; },
+      table: function () {
+        var tb = document.createElement('table'), tr = H('tr', '', H('thead', '', tb)), body, fmtv = o.format || fmt;
+        H('th', '', tr, 'Hour').scope = 'col'; series.forEach(function (s, i) { H('th', '', tr, s.label || 'Series ' + (i + 1)).scope = 'col'; });
+        body = H('tbody', '', tb);
+        for (var h = 0; h < 24; h++) { tr = H('tr', '', body); H('th', '', tr, (h < 10 ? '0' : '') + h + ':00').scope = 'row'; series.forEach(function (s) { H('td', '', tr, fmtv(s.values[h] || 0)); }); }
+        return tb;
+      },
+      destroy: function () { if (ro) ro.disconnect(); c.tip.remove(); if (cv.parentNode) cv.parentNode.removeChild(cv); }
+    };
+  }
+
+  /* gantt: the Orrery gantt with this kit's ink and ground; its data and callbacks pass straight through */
+  function gantt(el, data, o) {
+    o = o || {};
+    var Gantt = kit('gantt', 'gantt.js'), ro, W = 0, out = null;
+    function draw() {
+      var t = tone(o), ink = o.ink || t.ink || '#0c0c0c', ground = o.ground || t.ground || '#f6ee2d', INK = rgb(ink), font = o.font || getComputedStyle(el).fontFamily || 'sans-serif', on = o.on || {};
+      function a(v) { return 'rgba(' + INK + ',' + v + ')'; }
+      W = el.clientWidth;
+      out = Gantt.render(el, Object.assign({}, data, {
+        rem: o.rem || 16, ink: 'rgba(' + INK, violet: ink, field: ground, sans: font, mono: font, height: o.height, compact: o.compact, maxDays: o.maxDays, loadLabel: o.loadLabel,
+        fill: Object.assign({ task: a(0.85), gate: ink, brief: a(0.32), review: a(0.55) }, o.fill), labels: o.labels,
+        onHover: on.hover, onClick: on.select, onBar: on.bar, onGroup: on.group
+      }));
+      if (!out || !out.svg) return;
+      /* the gantt leaves its type to the host's stylesheet; here the host is this kit */
+      var rem = o.rem || 16;
+      out.svg.style.fontFamily = font; out.svg.style.fontVariantNumeric = 'tabular-nums';
+      Array.prototype.forEach.call(out.svg.querySelectorAll('text'), function (tx) {
+        var k = tx.getAttribute('class') || '', strong = /rw-t|rw-gt/.test(k), late = /late|vio/.test(k);
+        if (!tx.getAttribute('fill')) tx.setAttribute('fill', a(strong || late ? 0.95 : 0.62));
+        tx.setAttribute('font-size', f(rem * (/rw-mo|rw-dy/.test(k) ? 0.62 : 0.74)));
+        if (late) tx.setAttribute('font-weight', 500);
+      });
+      Array.prototype.forEach.call(out.svg.querySelectorAll('.rw-r'), function (r) { r.style.outlineOffset = '2px'; });
+    }
+    draw();
+    if (o.responsive !== false && typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(function () { if (Math.abs(el.clientWidth - W) > 0.5) draw(); }); ro.observe(el); }
+    return { get el() { return out && out.svg; }, update: function (d, o2) { if (d) data = d; if (o2) for (var k in o2) o[k] = o2[k]; draw(); return this; }, destroy: function () { if (ro) ro.disconnect(); el.textContent = ''; } };
+  }
+
+  return { version: '0.2.0', order: ORDER, dashes: DASH, shades: SHADES, tones: TONES, fills: fills, canvasFills: canvasFills, swatch: swatch, graph: graph, rose: rose, gantt: gantt, steps: steps, bars: bars, fan: fan, stack: stack, line: line, spark: spark, halftone: halftone, meter: meter, stat: stat, legend: legend };
 });
