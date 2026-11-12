@@ -67,6 +67,11 @@ jobs:
       - name: Cell-shell tests (:cell-shell:test)
         run: ./gradlew --no-daemon :cell-shell:test
 
+      # The native chart layer. Robolectric renders every chart (native graphics), so these tests
+      # pin the data contract, texture determinism, geometry and the accessibility nodes.
+      - name: Viz-kit-android tests (:viz-kit-android:testDebugUnitTest)
+        run: ./gradlew --no-daemon :viz-kit-android:testDebugUnitTest
+
       # Guards the composite-build contract every consumer relies on: the release variant
       # must actually assemble, not just compile under test.
       - name: Assemble crash-recovery release (:crash-recovery:assembleRelease)
@@ -77,3 +82,6 @@ jobs:
 
       - name: Assemble feedback release (:feedback:assembleRelease)
         run: ./gradlew --no-daemon :feedback:assembleRelease
+
+      - name: Assemble viz-kit-android release (:viz-kit-android:assembleRelease)
+        run: ./gradlew --no-daemon :viz-kit-android:assembleRelease

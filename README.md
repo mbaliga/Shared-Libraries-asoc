@@ -11,6 +11,7 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:crash-recovery` | `dev.aarso:crash-recovery` | Android library | Capture an uncaught crash to a file; show a recovery screen on the next launch instead of bricking. Zero Hyle dependency. |
 | `:cell-shell` | `dev.aarso:cell-shell` | Android library (Compose) | The constellation's shared navigation and motion shell — spatial layout (nav-bar-aware edge zones, optional two-stage bottom room), edge timeline scrubber, shake-to-refresh. |
 | `:feedback` | `dev.aarso:feedback` | Android library | Opt-in feedback for experimental features: a fully user-readable draft, delivered only by a share/mail chooser the user launches. No telemetry, no network, ever. |
+| `:viz-kit-android` | `dev.aarso:viz-kit-android` | Android library (Views + Canvas) | Native chart layer of the shared dashboard: a port of `web/viz-kit` (one ink, identity by texture; steps, bars, fan, stack, line, spark, halftone, meter, stat, legend) with the same JSON data contract and virtual accessibility nodes on every mark. No Compose, no WebView, no network. |
 | `:evidence-schema` | `dev.aarso:evidence-schema` | pure JVM/resources | Versioned portable JSON schemas for evidence/event exchange across Baseline, Crocodyl, and Ebbflow. |
 
 **Web modules** live under [`web/orrery-kit/`](web/orrery-kit/README.md): dependency-free browser files
@@ -41,6 +42,7 @@ includeBuild("shared-libraries")
 // app/build.gradle.kts
 implementation("dev.aarso:search-core:0.2.0")
 implementation("dev.aarso:crash-recovery:1.4.0")
+implementation("dev.aarso:viz-kit-android:0.1.0")
 ```
 
 Gradle substitutes any `dev.aarso:<name>` dependency with the matching project in the included
