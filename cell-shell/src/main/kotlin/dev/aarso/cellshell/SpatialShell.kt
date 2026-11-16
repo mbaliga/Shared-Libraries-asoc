@@ -161,6 +161,13 @@ internal fun parkVeil(lift: Float): Float {
  *   with [OpenPark.keepFraction] of the window still showing it, no scrim, no veil, no ring and no
  *   grip, and the room narrowed to the part of the window the card leaves. Null (the default) keeps
  *   the contract park for the left room too. The other three rooms are never affected.
+ * @param parkedCardOffsetY an extra vertical offset, in px, added to the card's placement while
+ *   the left room is open with a [leftPark] (hProgress > 0). It is read inside the placement
+ *   lambda, so a host can drive it from a `MutableFloatState` every frame without recomposing the
+ *   shell; hit-testing follows because the card is moved with `Modifier.offset`, not a layer.
+ *   Zero by default, and ignored in every other state (home, the other rooms, the contract park).
+ *   Non-finite values count as zero. The case it exists for: a room that scrolls a column of cards
+ *   whose current one is this card. See [combinedParkTy].
  * @param topReserve a strip below the status bar that the HOST owns, which the top-edge gesture
  *   must start beneath. Zero by default. The case it exists for: a host that reveals its own
  *   pull-down surface at the top of the pane — a status band, a notification layer — would
@@ -208,6 +215,7 @@ fun SpatialShell(
     bottom: (@Composable () -> Unit)? = null,
     parkStyle: ParkStyle = ParkStyle.SLIDE,
     leftPark: OpenPark? = null,
+    parkedCardOffsetY: () -> Float = { 0f },
     topReserve: Dp = 0.dp,
     bottomPeek: Dp? = null,
     bottomReserve: Dp = 0.dp,
@@ -376,7 +384,7 @@ fun SpatialShell(
                 // whole reason the parked card still works as a target: layer translation moves
                 // pixels but leaves hit-testing where the card used to be, so the card would
                 // draw over there and answer touches over here.
-                .offset { IntOffset(tx, ty) }
+                .offset { IntOffset(tx, combinedParkTy(ty, openLeft, parkedCardOffsetY())) }
                 // The swivel is its OWN layer, ahead of the scale/shape one below, and the two
                 // must not be merged. transformOrigin is per-layer: hinging the rotation on an
                 // edge would drag the *scale* pivot onto that edge too, and parkDistance's

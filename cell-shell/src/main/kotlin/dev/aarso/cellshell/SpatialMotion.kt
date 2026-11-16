@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Which room a settle should land in.
@@ -710,3 +711,11 @@ fun rememberSpatialController(): SpatialController {
     val scope = rememberCoroutineScope()
     return remember(scope) { SpatialController(scope) }
 }
+
+/**
+ * The card's vertical placement in px: the shell's own [baseTy] plus the host's
+ * `parkedCardOffsetY`, but only while the left room is open with an open park ([openLeft]).
+ * A NaN or infinite host value counts as zero, so a bad frame cannot throw the card off screen.
+ */
+internal fun combinedParkTy(baseTy: Int, openLeft: Boolean, hostOffsetPx: Float): Int =
+    if (openLeft && hostOffsetPx.isFinite()) baseTy + hostOffsetPx.roundToInt() else baseTy
