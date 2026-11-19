@@ -4,7 +4,9 @@ Dependency-free browser files attaching to `window.ASOC.viz`. Every mark is draw
 is carried by texture — solid, hatch, dots, fade and their kin — by shape, by dash, or by a step of the one ink, never
 by hue alone. A chart reads the same in print, in forced colours and to any colour vision, and the ground is free to
 be as loud as the host likes. SVG and canvas out, nothing fetched. Open [`demo.html`](demo.html) for every chart, its
-variants, its call and its table view (the demo page loads one web font; the modules load nothing).
+variants, its call and its table view, and [`examples.html`](examples.html) for three sample dashboards — a release
+desk, a training log and a studio week — each laid out for phone, tablet and desktop from one set of markup with
+container queries (the two pages load one web font; the modules load nothing).
 
 | File | What it holds |
 |---|---|

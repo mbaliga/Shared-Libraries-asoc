@@ -519,11 +519,12 @@
         c.rows.push([l.a.label, l.b.label, c.fmt(l.v)]); c.mark(rib, l.a.label + ' → ' + l.b.label, l.v, l);
       });
       Object.keys(by).forEach(function (id) {
-        var n = by[id], last = n.depth === maxD;
+        var n = by[id], last = n.depth === maxD, ty = n.y + n.h / 2;
         S('rect', { x: f(n.x), y: f(n.y), width: f(nw), height: f(Math.max(2, n.h)), rx: 2, fill: c.ink, 'pointer-events': 'none' }, c.svg);
-        c.text(last ? n.x + nw + 6 : n.x + nw + 6, n.y + n.h / 2 + small * 0.36, n.label, small, { op: 0.9 }).setAttribute('paint-order', 'stroke');
+        /* the last column's names stand in the margin; the others sit on the ribbons, so they get a plate */
+        if (last) c.text(n.x + nw + 6, ty + small * 0.36, n.label, small, { op: 0.9 });
+        else plate(c, n.x + nw + 5, ty - (small + 6) / 2, n.label, small);
       });
-      Array.prototype.forEach.call(c.svg.querySelectorAll('text'), function (t) { t.setAttribute('stroke', c.ground); t.setAttribute('stroke-width', 3); t.setAttribute('stroke-linejoin', 'round'); });
     });
   }
 
