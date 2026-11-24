@@ -1,0 +1,33 @@
+{
+  "licenseStatus": "LICENSE-PENDING",
+  "registryId": "fb-semantic-digest-1",
+  "registryVersion": "1.0.0",
+  "semanticDigestVersion": "fb-semantic-digest-1",
+  "title": "Semantic digest definition — v1 (frozen)",
+  "status": "FROZEN",
+  "frozenBy": "WP-1L-G0",
+  "decisionRefs": ["FB-RAT-PKG-004", "FB-RAT-LOOP-001"],
+  "description": "Defines the 'semantic digest' used 12 times as normative in the source pack but never defined there (10_DUAL_VALIDATION_ADDENDUM §B1). Distinct from packageContentDigest (floop-container-format.v1.json), which covers the whole archive. semanticDigest covers ONLY definition.json, minus presentation-only fields, and is what the P0 gate 'layout-only edits MUST NOT alter semantic digest' (LOOP_ENGINEERING_SPEC_V2.1 §3/§14) is checked against.",
+  "inputFile": "definition.json (the canonical LoopDefinition — see LOOP_ENGINEERING_SPEC_V2.1 §2.2/§3)",
+  "algorithm": [
+    "1. Parse definition.json as JSON.",
+    "2. EXCLUDE: walk the parsed structure and remove, at every depth, any object member whose key exactly matches an entry in exclusionListV1 below, along with its entire subtree. There is no per-field override in v1 (a future semanticDigestVersion may add an explicit 'semantic: true' escape hatch; v1 does not have one — see limitations).",
+    "3. CANONICALIZE the remaining structure per the fb-loop-canon-1 profile (see canonicalization.v1.json): sort object keys by UTF-16 code unit; NFC-normalize every string; forbid IEEE-754 doubles (integers and constrained decimal strings only — a definition.json containing a bare JSON float at this stage is a LOOP-PKG-003 canonicalization error, not silently coerced); no insignificant whitespace; UTF-8 encode.",
+    "4. DIGEST: SHA-256 the canonical UTF-8 bytes. Format as 'sha256:<lowercase-hex>'.",
+    "5. The result is semanticDigest. It is reported alongside semanticDigestVersion (this document's registryId) in every validation report, build receipt, and installation record, so a verifier without this document can still tell which exclusion list + canonicalization profile produced a given digest."
+  ],
+  "exclusionListV1": [
+    "presentation",
+    "layout",
+    "x",
+    "y",
+    "notes"
+  ],
+  "exclusionSemantics": "A key is matched by exact name at ANY depth in the definition.json tree (node objects, edge objects, gateway objects, the definition root). Matching is structural, not path-scoped: a node's 'presentation' object and the definition root's 'presentation' object are both dropped by the same rule. This is deliberately coarse for v1 — see limitations.",
+  "limitationsV1": [
+    "No per-field override: if a future authoring surface needs a field literally named 'notes' to be semantic (e.g. a verifier's required note-taking output, as opposed to authoring UI notes), it must be renamed to avoid collision with this exclusion list, or a v2 registry must add an explicit override mechanism. Renaming is the v1-safe path.",
+    "Exclusion is unconditional and un-namespaced: a 'layout' key on a NON-presentation object (if one is ever introduced) would still be silently dropped. Spec authors adding new fields to LoopDefinition MUST avoid these five key names for anything semantic.",
+    "This registry does not define presentation-vs-semantic for definition.bpmn — that file is excluded entirely at the container level (floop-container-format.v1.json), not filtered at the key level."
+  ],
+  "conformanceRule": "LOOP_ENGINEERING_SPEC_V2.1 §12: a loop-engine release is non-conformant if it produces a different semanticDigest for a package that differs only in excluded fields, or a different digest across two runs of the same canonicalization over byte-identical input (determinism — golden vectors in fixtures/canonicalization/ prove this over 1,000 repeated runs per 07_TEST_CONFORMANCE_PLAN §4b)."
+}

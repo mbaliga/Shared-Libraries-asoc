@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-adv-0001",
+  "definitionDigest": "sha256:bd0744455f140b0c49f72b83b21489ea512354a54ae7d43bef4e0489fd31181e",
+  "sourceRef": { "draftId": "draft-01HXYZFRESH0000000000000", "draftRevisionNumber": 2 },
+  "bindingProfileRef": { "objectId": "binding-profile-adv-0001" },
+  "eventLog": [
+    { "eventId": "ev-1", "occurredAtUtc": "2026-08-07T09:30:00Z", "toState": "CREATED", "description": "Run started." },
+    { "eventId": "ev-2", "occurredAtUtc": "2026-08-07T09:30:20Z", "fromState": "RUNNING", "toState": "SUCCEEDED_VERIFIED", "description": "Claims every required verifier passed." }
+  ],
+  "nodeAttempts": [
+    { "nodeId": "n1", "attemptNumber": 1, "startedAtUtc": "2026-08-07T09:30:01Z", "endedAtUtc": "2026-08-07T09:30:10Z", "outcome": "SUCCEEDED", "nodeCategory": "TYPED_TOOL" }
+  ],
+  "outputs": { "primaryResult": { "status": "ok" }, "artifacts": [], "receipts": [], "warnings": [] },
+  "terminalReason": { "category": "ALL_REQUIRED_VERIFIERS_PASSED", "detail": "Claimed, but no verifier node attempt exists in nodeAttempts at all." },
+  "runState": "SUCCEEDED_VERIFIED",
+  "createdAtUtc": "2026-08-07T09:30:00Z"
+}

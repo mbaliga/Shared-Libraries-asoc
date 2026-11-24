@@ -1,0 +1,20 @@
+Schema validation: PASSES (this document is schema-valid against loop-definition.v2.schema.json).
+
+Real rejection code: LOOP-GRAPH-002 (namespace LOOP-GRAPH, severity WARNING, loop-validation-rules.v1.json)
+  messageTemplate: "Node 'n3' is unreachable from the start node."
+  remediation: "Connect the node into the graph or remove it."
+  sourceObligation: LOOP_ENGINEERING_SPEC_V2.1 §7 'unreachable nodes'
+
+Why the schema cannot catch this: reachability from `startNodeId` is a graph-traversal property
+over `nodes`/`edges`/`gateways[].outcomes[].targetNodeId` considered together. JSON Schema
+validates one document's local shape; it has no keyword capable of walking a graph implied by
+string-valued cross-references (`startNodeId`, `edgeId.fromNodeId`/`toNodeId`,
+`gatewayOutcome.targetNodeId`) and computing reachability. `n3` is itself a perfectly valid
+NodeDefinition — the defect is entirely in what does NOT reference it. A validator MUST perform
+a breadth-first/depth-first walk from `startNodeId` and flag any `nodes[].nodeId` never visited.
+
+Note: this same document would also warrant a LOOP-GRAPH-001 check ("missing start or terminal
+paths") if `n3` had instead been named in `terminalNodeIds` with nothing reaching it — that is a
+distinct rule code from LOOP-GRAPH-002 (an unreachable non-terminal node) and is not the case
+demonstrated by this fixture, which deliberately leaves `terminalNodeIds` correctly resolvable
+via `n1 -> n2` so only the LOOP-GRAPH-002 finding applies.

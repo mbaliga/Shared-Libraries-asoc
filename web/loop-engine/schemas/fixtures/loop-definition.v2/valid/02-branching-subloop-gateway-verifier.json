@@ -1,0 +1,151 @@
+{
+  "loopId": "loop.demo.approval-then-retry-fetch",
+  "semanticVersion": "1.2.0",
+  "objective": "Ask a human to approve a fetch; on approval, run a bounded-retry subloop; on timeout/no approval, wait for an external event instead; then verify the result.",
+  "documentationRef": null,
+  "inputSchema": { "location": "PACKAGE_RELATIVE_PATH", "refPath": "schemas/input.schema.json" },
+  "outputSchema": { "location": "PACKAGE_RELATIVE_PATH", "refPath": "schemas/output.schema.json" },
+  "startNodeId": "n1",
+  "terminalNodeIds": ["n5"],
+  "nodes": [
+    {
+      "nodeId": "n1",
+      "category": "DETERMINISTIC_TRANSFORMATION",
+      "inputPorts": [],
+      "outputPorts": [{ "portId": "out", "mediaType": "application/json" }],
+      "implementation": { "kind": "CAPABILITY_BINDING", "capabilityId": "fb.workspace.observe" },
+      "requestedCapabilities": ["fb.workspace.observe"],
+      "authorityClass": "OBSERVE",
+      "preferredExecutionTargets": ["LOCAL_ANDROID"],
+      "permittedExecutionTargets": ["LOCAL_ANDROID"],
+      "timeoutPolicy": { "timeoutSeconds": 10, "onTimeout": "FAIL_SAFE" },
+      "retryPolicy": { "maxRetries": 0, "backoff": "NONE" },
+      "idempotencyMode": "PURE",
+      "compensation": { "compensable": false, "nonCompensabilityAcknowledged": true },
+      "verificationRequirements": { "requiredForSuccess": false, "verifierIds": [] },
+      "sideEffectClass": "NONE",
+      "onFailureTerminalState": "FAILED_SAFE",
+      "explanation": "Gathers workspace metadata needed for the approval prompt."
+    },
+    {
+      "nodeId": "n2",
+      "category": "HUMAN_DECISION",
+      "inputPorts": [{ "portId": "in", "mediaType": "application/json" }],
+      "outputPorts": [{ "portId": "decision", "mediaType": "text/plain" }],
+      "implementation": { "kind": "CAPABILITY_BINDING", "capabilityId": "fb.workspace.observe" },
+      "requestedCapabilities": [],
+      "authorityClass": "PROPOSE",
+      "preferredExecutionTargets": ["LOCAL_ANDROID"],
+      "permittedExecutionTargets": ["LOCAL_ANDROID"],
+      "timeoutPolicy": { "timeoutSeconds": null, "onTimeout": "ESCALATE_TO_USER" },
+      "retryPolicy": { "maxRetries": 0, "backoff": "NONE" },
+      "idempotencyMode": "NOT_IDEMPOTENT",
+      "compensation": { "compensable": false, "nonCompensabilityAcknowledged": true },
+      "verificationRequirements": { "requiredForSuccess": false, "verifierIds": [] },
+      "sideEffectClass": "NONE",
+      "onFailureTerminalState": "CANCELLED",
+      "explanation": "Presents the fetch request to the user for approval."
+    },
+    {
+      "nodeId": "n3",
+      "category": "BOUNDED_SUBLOOP",
+      "inputPorts": [{ "portId": "in", "mediaType": "application/json" }],
+      "outputPorts": [{ "portId": "out", "mediaType": "application/json" }],
+      "implementation": { "kind": "EMBEDDED_SUBLOOP", "subloopDefinitionRef": "subloops/retry-fetch.definition.json" },
+      "requestedCapabilities": ["fb.network.egress"],
+      "authorityClass": "EXECUTE_EXTERNAL",
+      "preferredExecutionTargets": ["LOCAL_ANDROID"],
+      "permittedExecutionTargets": ["LOCAL_ANDROID"],
+      "timeoutPolicy": { "timeoutSeconds": 60, "onTimeout": "FAIL_SAFE" },
+      "retryPolicy": { "maxRetries": 3, "backoff": "EXPONENTIAL", "baseDelaySeconds": 2 },
+      "idempotencyMode": "IDEMPOTENT_WITH_KEY",
+      "idempotencyKeyStrategy": "loopRunId+nodeId+iteration",
+      "compensation": { "compensable": false, "nonCompensabilityAcknowledged": true },
+      "verificationRequirements": { "requiredForSuccess": false, "verifierIds": [] },
+      "sideEffectClass": "EXTERNAL_VISIBLE",
+      "onFailureTerminalState": "FAILED_SAFE",
+      "maxRecursionDepth": 3,
+      "explanation": "Bounded-retry subloop that performs the approved network fetch."
+    },
+    {
+      "nodeId": "n4",
+      "category": "WAIT_EVENT_GATE",
+      "inputPorts": [{ "portId": "in", "mediaType": "application/json" }],
+      "outputPorts": [{ "portId": "out", "mediaType": "application/json" }],
+      "implementation": { "kind": "TYPED_SLOT", "slotId": "external-event-source" },
+      "requestedCapabilities": [],
+      "authorityClass": "OBSERVE",
+      "preferredExecutionTargets": ["LOCAL_ANDROID"],
+      "permittedExecutionTargets": ["LOCAL_ANDROID"],
+      "timeoutPolicy": { "timeoutSeconds": 3600, "onTimeout": "FAIL_SAFE" },
+      "retryPolicy": { "maxRetries": 0, "backoff": "NONE" },
+      "idempotencyMode": "PURE",
+      "compensation": { "compensable": false, "nonCompensabilityAcknowledged": true },
+      "verificationRequirements": { "requiredForSuccess": false, "verifierIds": [] },
+      "sideEffectClass": "NONE",
+      "onFailureTerminalState": "TARGET_STATE_UNKNOWN",
+      "explanation": "Waits for a declared external event when the user did not approve the fetch, bounded by a one-hour timeout."
+    },
+    {
+      "nodeId": "n5",
+      "category": "VERIFIER",
+      "inputPorts": [{ "portId": "in", "mediaType": "application/json" }],
+      "outputPorts": [{ "portId": "out", "mediaType": "application/json" }],
+      "implementation": { "kind": "CAPABILITY_BINDING", "capabilityId": "fb.workspace.observe" },
+      "requestedCapabilities": ["fb.workspace.observe"],
+      "authorityClass": "OBSERVE",
+      "preferredExecutionTargets": ["LOCAL_ANDROID"],
+      "permittedExecutionTargets": ["LOCAL_ANDROID"],
+      "timeoutPolicy": { "timeoutSeconds": 10, "onTimeout": "FAIL_SAFE" },
+      "retryPolicy": { "maxRetries": 0, "backoff": "NONE" },
+      "idempotencyMode": "PURE",
+      "compensation": { "compensable": false, "nonCompensabilityAcknowledged": true },
+      "verificationRequirements": { "requiredForSuccess": true, "verifierIds": ["v-fetch-shape"] },
+      "sideEffectClass": "NONE",
+      "onFailureTerminalState": "FAILED_SAFE",
+      "explanation": "Verifies the fetched (or awaited) result matches the declared output schema before the run may claim SUCCEEDED_VERIFIED."
+    }
+  ],
+  "edges": [
+    { "edgeId": "e1", "fromNodeId": "n1", "toNodeId": "n2", "label": "propose", "gatewayId": null },
+    { "edgeId": "e2", "fromNodeId": "n2", "toNodeId": "n3", "label": "approved", "gatewayId": "g1" },
+    { "edgeId": "e3", "fromNodeId": "n2", "toNodeId": "n4", "label": "default", "gatewayId": "g1" },
+    { "edgeId": "e4", "fromNodeId": "n3", "toNodeId": "n5", "label": "fetched", "gatewayId": null },
+    { "edgeId": "e5", "fromNodeId": "n4", "toNodeId": "n5", "label": "event-received", "gatewayId": null }
+  ],
+  "gateways": [
+    {
+      "gatewayId": "g1",
+      "outcomes": [
+        { "label": "approved", "conditionExpression": "decision == 'approved'", "priority": 1, "targetNodeId": "n3" }
+      ],
+      "exhaustive": false,
+      "defaultOrTerminalFailurePath": { "label": "default", "conditionExpression": null, "priority": null, "targetNodeId": "n4" }
+    }
+  ],
+  "budgets": { "steps": 25, "wallClockSeconds": 4200, "tokens": 0, "cost": { "amount": 0.00, "currency": "USD" }, "toolCalls": 5, "networkBytesTotal": 5242880 },
+  "bindingSlots": [
+    { "slotId": "external-event-source", "kind": "EXECUTION_TARGET", "required": false, "description": "Optional external target that can emit the awaited event.", "constraints": {} }
+  ],
+  "requiredCapabilities": ["fb.workspace.observe", "fb.network.egress"],
+  "executionTargetConstraints": { "permittedTargetTypes": ["LOCAL_ANDROID", "SSH_HOST"], "preferredTargetTypes": ["LOCAL_ANDROID"] },
+  "distributionConstraints": { "allowedDistFlavors": ["full"], "minAndroidApiLevel": 31, "requiredAbis": ["arm64-v8a"] },
+  "minEngineVersion": "1.0.0",
+  "maxEngineVersion": "1.99.99",
+  "verificationPolicy": {
+    "requireVerificationForSuccess": true,
+    "verifiers": [{ "verifierId": "v-fetch-shape", "appliesToNodeIds": ["n5"], "requiredForSuccess": true, "description": "Confirms the fetched payload matches outputSchema." }]
+  },
+  "terminalStateMapping": {
+    "unverifiedSuccessAllowed": false,
+    "nodeFailureEscalations": [
+      { "nodeId": "n1", "onFailure": "FAILED_SAFE" },
+      { "nodeId": "n2", "onFailure": "CANCELLED" },
+      { "nodeId": "n3", "onFailure": "FAILED_SAFE" },
+      { "nodeId": "n4", "onFailure": "TARGET_STATE_UNKNOWN" },
+      { "nodeId": "n5", "onFailure": "FAILED_SAFE" }
+    ]
+  },
+  "provenance": { "sourceLocation": "web-authored", "projectRevision": "n/a", "initiatingPrincipal": "user:demo", "evidenceLinks": [] },
+  "licenseRef": { "licenseFileRef": "LICENSE" }
+}

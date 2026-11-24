@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-bad-0002",
+  "definitionDigest": "sha256:bd0744455f140b0c49f72b83b21489ea512354a54ae7d43bef4e0489fd31181e",
+  "sourceRef": { "draftId": "draft-01HXYZFRESH0000000000000", "draftRevisionNumber": 1 },
+  "bindingProfileRef": { "objectId": "binding-profile-bad-0002" },
+  "runState": "RUNNING",
+  "terminalReason": { "category": "POLICY_BOUNDARY", "detail": "This run has not actually stopped." },
+  "createdAtUtc": "2026-08-07T09:25:00Z"
+}

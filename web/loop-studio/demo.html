@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Loop Studio - demo</title>
+<style>html,body{margin:0;height:100%;background:#0e1215}#app{position:absolute;inset:0}</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+// Serve this folder's parent over HTTP (ES modules do not load from file://):  python3 -m http.server -d web 8080
+import { mountStudio, newDefinition, makeNode, setPath, connect, autoLayout } from './studio.js';
+
+// A draft > critique > (approved? human sign-off > verify > end : draft again) loop, built with the editor's own ops.
+let d = newDefinition('loop.demo.draft-critique');
+d.objective = 'Draft a short answer, critique it until approved, get a human sign-off, then verify.';
+const add = (id, cat, config, over = {}) => d.nodes.push(makeNode(cat, id, { config, ...over }));
+add('draft', 'MODEL_INFERENCE', { name: 'Draft', role: 'proposer', mock: 'first draft|second draft|third draft', systemPrompt: 'Draft: ${topic}' });
+add('critique', 'MODEL_INFERENCE', { name: 'Critique', role: 'critic', mock: 'needs work|needs work|APPROVE, ship it' });
+add('signoff', 'HUMAN_DECISION', { name: 'Sign-off' });
+add('check', 'VERIFIER', { name: 'Check', mock: '{"passed":true}' }, { verificationRequirements: { requiredForSuccess: true, verifierIds: ['v-final'] } });
+d.edges = [];
+let r;
+for (const [a, b] of [['start', 'draft'], ['draft', 'critique'], ['critique', 'signoff'], ['critique', 'draft'], ['signoff', 'check'], ['check', 'end']]) { r = connect(d, a, b); d = r.def; }
+// the critique gateway: first exit (to sign-off) when approved; the second becomes the default path back to draft
+const gw = d.gateways[0]; gw.outcomes[0].label = 'approved'; gw.defaultOrTerminalFailurePath.label = 'refine';
+d.edges.forEach((e) => { if (e.gatewayId) e.label = e.toNodeId === 'signoff' ? 'approved' : 'refine'; });
+d.inputSchema.inlineSchema.properties.topic = { type: 'string' };
+d.verificationPolicy = { requireVerificationForSuccess: true, verifiers: [{ verifierId: 'v-final', appliesToNodeIds: ['check'], requiredForSuccess: true }] };
+d.terminalStateMapping.unverifiedSuccessAllowed = false;
+d = autoLayout(d);
+
+const auto = new URLSearchParams(location.search).has('autorun');   // ?autorun: run at once, answering the human prompt automatically
+window.studio = mountStudio(document.getElementById('app'), { definition: d, params: '{"topic":"why loops need budgets"}', objective: 'Explain why loops need budgets.', autoDecide: auto, mockDelayMs: auto ? 15 : 180 });
+if (auto) window.studio.run();
+</script>
+</body>
+</html>
