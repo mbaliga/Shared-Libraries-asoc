@@ -22,9 +22,22 @@ categories are textures rather than hues, in one ink on any ground — compariso
 hierarchy and flow — plus the orrery-kit graph (with arrangements, switches and a control row), rose and gantt drawn
 in that language, so one kit covers every chart the constellation has.
 
+[`web/loop-engine/`](web/loop-engine/README.md) is a dependency-free ES-module port of Fonebrew's loop engine
+(`domain/loop`): LoopDefinition v2 validation, a graph runner over host-supplied executors, the §9 17-state run
+machine, budgets, an append-only ledger and deterministic replay. [`web/loop-studio/`](web/loop-studio/README.md) is a
+minimal browser editor that runs on it. [`MIGRATION-loop-engine.md`](MIGRATION-loop-engine.md) describes how the Kotlin
+original would later move into a pure-JVM `:loop-engine` module here.
+
 `local-session-core` is the reserved home for Bocal's local multiplayer/session transport. It is
 not scaffolded here: the concurrent Bocal session remains authoritative, and its implementation
 should land once rather than be duplicated by a placeholder.
+
+| Web module | Where | What it is |
+|---|---|---|
+| orrery-kit | [`web/orrery-kit/`](web/orrery-kit/README.md) | `cells`, `sfx`, `rose`, `brands`, `Graph`, `gantt`, `ambience` — plain `<script>` files on `window.ASOC`. |
+| viz-kit | [`web/viz-kit/`](web/viz-kit/README.md) | `ASOC.viz`: thirty-five charts in one ink. |
+| loop-engine | [`web/loop-engine/`](web/loop-engine/README.md) | ES modules, no dependencies: loop definition validation, runner, run state machine, ledger, replay. `npm test` (125 tests). |
+| loop-studio | [`web/loop-studio/`](web/loop-studio/README.md) | ES module + demo: graph editor, inspector, validation and a mock-run panel over loop-engine. |
 
 One shared unit here is **not** a Gradle module and has no coordinate:
 

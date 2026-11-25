@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://android-ide-core.dev.fonebrew/schemas/loops/loop-run.schema.json",
+  "$comment": "LICENSE-PENDING — see docs/non_ratified/LICENSE_PENDING.md. LoopRun = the COMPLETE local run record (LOOP_ENGINEERING_SPEC_V2.1 §2.7). Kept ALONGSIDE loop-run-summary.schema.json per this work package's merged-artifact-list instruction — these are two distinct objects, not one object with an optional-fields toggle: LoopRun is the full, unredacted, phone-local record; LoopRunSummary (loop-run-summary.schema.json) is the strict, already-allowlisted-and-denylisted-but-still-unbucketed middle stage a Share Result flow builds FROM this record; LoopResultShare (loop-result-share.schema.json) is the final, bucketed, consented, optionally-signed artifact that actually leaves the phone. `runState` MUST be exactly the 17-state machine LOOP_ENGINEERING_SPEC_V2.1 §9 requires (CREATED, PREFLIGHT, WAITING_BINDING, WAITING_AUTHORITY, READY, RUNNING, WAITING_USER [non-terminal], SUSPENDED, CANCELLING, SUCCEEDED_VERIFIED, SUCCEEDED_UNVERIFIED, STOPPED_BUDGET, STOPPED_POLICY, FAILED_SAFE, FAILED_SIDE_EFFECTS_POSSIBLE, TARGET_STATE_UNKNOWN, CANCELLED) — state names copied VERBATIM from that document's §9 transition table, not re-derived or approximated; a conflict between this schema's enum and that document's table is this schema's error, and the document wins. The 8 terminal values here are BY-NAME-IDENTICAL to LoopDefinitionContracts.kt's pre-existing `TerminalRunState` enum (a node's own failure-to-terminal-state mapping, §4) and to this same work package's own `TerminalRunState` $def duplicated in loop-result-share.schema.json / loop-run-summary.schema.json — one closed 8-value vocabulary, three duplicated encodings, per this corpus's standalone-schema convention.",
+  "title": "LoopRun",
+  "description": "The complete, unredacted, phone-local record of one concrete execution of a LoopDraft or installed LoopRelease (LOOP_ENGINEERING_SPEC_V2.1 §2.7) against one binding profile, input set, authority set, and engine version. Nothing in this document is redacted, bucketed, or allowlisted — that happens downstream, first at LoopRunSummary (loop-run-summary.schema.json) and then at LoopResultShare (loop-result-share.schema.json). This document MUST NOT itself be uploaded, exported, or shared by any automated path (FB-RAT-MKT-008, no phone telemetry) — only the explicit Share Result flow (LOOP_RESULT_SHARING_CONTRACT.md §3) may derive a LoopRunSummary from it, under explicit user action.",
+  "type": "object",
+  "required": [
+    "schemaVersion", "runId", "definitionDigest", "sourceRef", "bindingProfileRef",
+    "runState", "createdAtUtc"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.\\d+\\.\\d+$",
+      "description": "MAJOR.MINOR.PATCH of this record's shape. A reader MUST reject an unrecognized MAJOR (FB-RAT-COM-003)."
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Globally unique stable ID for this run (FB-RAT-COM-002), stable across every RunState transition of the same execution."
+    },
+    "definitionDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "The semanticDigest (semantic-digest.v1.json) of the exact LoopDefinition this run executed — the value LOOP-VERIFY-002 ties a SUCCEEDED_VERIFIED claim to ('a passing result tied to this run's inputs, digest, and artifacts')."
+    },
+    "sourceRef": {
+      "$ref": "#/$defs/BaseRevisionRef",
+      "description": "Which draft revision or installed release this run executed against (§2.7 'one concrete execution of one draft or installed release') — the same draft-or-release union loop-semantic-diff.schema.json's BaseRevisionRef already models (duplicated locally here, not cross-file $ref'd)."
+    },
+    "bindingProfileRef": {
+      "$ref": "#/$defs/DurableObjectRef",
+      "description": "Pointer to the binding-profile.schema.json document resolved for this run — the device-specific resolution of the definition's abstract slots to actual models/repos/targets/devices/secrets/policies/budgets."
+    },
+    "parameters": {
+      "type": "object",
+      "default": {},
+      "description": "Typed input values bound to this run at READY (§9), matching the definition's declared input JSON Schema. Full and unredacted — this is exactly the category loop-run-summary.schema.json/loop-result-share.schema.json's default-excluded list drops ('prompt and model response content' MAY appear inside here for a model-inference node's own recorded input; never carried forward downstream)."
+    },
+    "targetDecisions": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/TargetDecision" },
+      "description": "Which concrete ExecutionTargetType was chosen for each binding slot or node with target flexibility, and by whom/when — the raw material a share-time localCloudRatio (loop-run-summary.schema.json §4) is computed FROM, not itself carried forward downstream (host identity/displayName never appear here beyond the coarse ExecutionTargetType)."
+    },
+    "eventLog": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/RunEvent" },
+      "description": "The full event log — one entry per §9 transition table row actually taken during this run, in order. This is the 'full event log' this work package's task brief asks for; LoopRunSummary/LoopResultShare never carry this array at all (they carry only the terminal outcome)."
+    },
+    "nodeAttempts": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/NodeAttempt" },
+      "description": "Per-node execution attempts (one or more per node — retries produce additional entries with an incremented attemptNumber, §4 retry policy)."
+    },
+    "userInterventions": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/UserIntervention" },
+      "description": "Every point a human acted on this run: a WAITING_USER decision supplied, a budget extension approved, an authority grant approved/declined, a cancel/suspend/resume request (§9, §18)."
+    },
+    "outputs": {
+      "oneOf": [{ "$ref": "#/$defs/RunOutputs" }, { "type": "null" }],
+      "default": null,
+      "description": "Full, unredacted primary result, artifacts, receipts, human-readable summary, and warnings (§16). Null only while the run has not yet produced any output (non-terminal, early states)."
+    },
+    "terminalReason": {
+      "oneOf": [{ "$ref": "#/$defs/TerminalReason" }, { "type": "null" }],
+      "default": null,
+      "description": "Populated exactly when runState is one of the 8 terminal values — see this schema's allOf. `category` MUST be one of the closed TerminalReasonCategory values below, grounded in §9's own per-row terminal-reason text; never a free-text-only reason."
+    },
+    "runState": {
+      "$ref": "#/$defs/RunState",
+      "description": "THE central field. LOOP_ENGINEERING_SPEC_V2.1 §9's 17-state machine, verbatim."
+    },
+    "authorityGrants": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Grant IDs (schemas/authority/grant.schema.json Grant.grantId) confirmed during this run's WAITING_AUTHORITY transition (§10) — referenced by ID only, matching loop-installation.schema.json's identical field-level convention for the same reason (the authority domain owns the full Grant shape)."
+    },
+    "sideEffectState": {
+      "oneOf": [
+        { "type": "string", "enum": ["NONE", "PARTIAL", "COMPLETED", "UNKNOWN"] },
+        { "type": "null" }
+      ],
+      "default": null,
+      "description": "Mirrors dev.fonebrew.contracts.common's SideEffectState/ErrorEnvelope.sideEffectState vocabulary, duplicated locally per this corpus's standalone-schema convention. UNKNOWN MUST be used rather than guessing NONE (FB-RAT-COM-007) — directly relevant to FAILED_SIDE_EFFECTS_POSSIBLE and TARGET_STATE_UNKNOWN (§9). Null only for a run still short of any side-effecting step."
+    },
+    "createdAtUtc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC instant this run entered CREATED (FB-RAT-COM-004)."
+    },
+    "updatedAtUtc": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "default": null,
+      "description": "UTC instant of the most recent runState transition. Null only for a record still exactly at CREATED."
+    },
+    "unknownFields": {
+      "type": "object",
+      "default": {},
+      "description": "Bag for fields a decoder received but did not recognize, preserved for round-trip (FB-RAT-COM-003)."
+    }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": { "properties": { "runState": { "$ref": "#/$defs/TerminalRunStateValue" } }, "required": ["runState"] },
+      "then": { "required": ["terminalReason"], "properties": { "terminalReason": { "type": "object" } } },
+      "$comment": "A terminal runState MUST carry a non-null terminalReason (§9's 'Terminal states MUST include a terminal reason...')."
+    },
+    {
+      "if": { "not": { "properties": { "runState": { "$ref": "#/$defs/TerminalRunStateValue" } }, "required": ["runState"] } },
+      "then": { "properties": { "terminalReason": { "const": null } } },
+      "$comment": "A non-terminal runState MUST NOT carry a terminalReason — a run that has not stopped cannot have already recorded why it stopped."
+    }
+  ],
+  "$defs": {
+    "IntegrityRef": {
+      "type": "object",
+      "required": ["algorithm", "digestHex", "byteLength"],
+      "properties": {
+        "algorithm": { "type": "string", "enum": ["SHA-256", "SHA-384", "SHA-512"] },
+        "digestHex": { "type": "string", "pattern": "^[0-9a-f]+$" },
+        "byteLength": { "type": "integer", "minimum": 0 }
+      },
+      "allOf": [
+        { "if": { "properties": { "algorithm": { "const": "SHA-256" } }, "required": ["algorithm"] }, "then": { "properties": { "digestHex": { "pattern": "^[0-9a-f]{64}$" } } } },
+        { "if": { "properties": { "algorithm": { "const": "SHA-384" } }, "required": ["algorithm"] }, "then": { "properties": { "digestHex": { "pattern": "^[0-9a-f]{96}$" } } } },
+        { "if": { "properties": { "algorithm": { "const": "SHA-512" } }, "required": ["algorithm"] }, "then": { "properties": { "digestHex": { "pattern": "^[0-9a-f]{128}$" } } } }
+      ],
+      "additionalProperties": true
+    },
+    "DurableObjectRef": {
+      "type": "object",
+      "required": ["objectId"],
+      "properties": {
+        "objectId": { "type": "string", "minLength": 1 },
+        "digest": { "oneOf": [{ "$ref": "#/$defs/IntegrityRef" }, { "type": "null" }], "default": null }
+      },
+      "additionalProperties": true
+    },
+    "BaseRevisionRef": {
+      "type": "object",
+      "properties": {
+        "draftId": { "type": ["string", "null"], "default": null },
+        "draftRevisionNumber": { "type": ["integer", "null"], "minimum": 0, "default": null },
+        "releaseRef": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["loopId", "semanticVersion", "packageDigest"],
+              "properties": {
+                "loopId": { "type": "string", "minLength": 1 },
+                "semanticVersion": { "type": "string", "minLength": 1 },
+                "packageDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+              },
+              "additionalProperties": true
+            },
+            { "type": "null" }
+          ],
+          "default": null
+        }
+      },
+      "anyOf": [
+        { "required": ["draftId", "draftRevisionNumber"], "properties": { "draftId": { "type": "string", "minLength": 1 }, "draftRevisionNumber": { "type": "integer" } } },
+        { "required": ["releaseRef"], "properties": { "releaseRef": { "type": "object" } } }
+      ],
+      "additionalProperties": true,
+      "description": "Same shape as loop-semantic-diff.schema.json's BaseRevisionRef — duplicated locally, not cross-file $ref'd, per this corpus's convention."
+    },
+    "ActorClass": {
+      "type": "string",
+      "enum": ["USER", "DISTILLER", "AI_PROPOSAL", "IMPORT_MIGRATION", "UPSTREAM_APPLY"],
+      "description": "LOOP_ENGINEERING_SPEC_V2.1 §15's exact actor-class vocabulary, duplicated locally."
+    },
+    "ExecutionTargetType": {
+      "type": "string",
+      "enum": ["LOCAL_ANDROID", "SSH_HOST", "RASPBERRY_PI", "GITHUB_ACTIONS", "GITEA_ACTIONS"],
+      "description": "schemas/execution/target.schema.json's ExecutionTargetType, duplicated locally."
+    },
+    "NodeCategory": {
+      "type": "string",
+      "enum": ["DETERMINISTIC_TRANSFORMATION", "MODEL_INFERENCE", "TYPED_TOOL", "HUMAN_DECISION", "BOUNDED_SUBLOOP", "VERIFIER", "ARTIFACT_IMPORT_EXPORT", "WAIT_EVENT_GATE"],
+      "description": "§4 Amendment 1's eight node categories, duplicated locally."
+    },
+    "TerminalRunStateValue": {
+      "enum": ["SUCCEEDED_VERIFIED", "SUCCEEDED_UNVERIFIED", "STOPPED_BUDGET", "STOPPED_POLICY", "FAILED_SAFE", "FAILED_SIDE_EFFECTS_POSSIBLE", "TARGET_STATE_UNKNOWN", "CANCELLED"],
+      "description": "The 8 terminal values of RunState below, extracted as their own enum purely so this schema's allOf can test runState membership without repeating the list — NOT a separate wire field. Used only inside this document's own if/then; the actual wire enum a producer emits is RunState."
+    },
+    "RunState": {
+      "type": "string",
+      "enum": [
+        "CREATED", "PREFLIGHT", "WAITING_BINDING", "WAITING_AUTHORITY", "READY", "RUNNING",
+        "WAITING_USER", "SUSPENDED", "CANCELLING",
+        "SUCCEEDED_VERIFIED", "SUCCEEDED_UNVERIFIED", "STOPPED_BUDGET", "STOPPED_POLICY",
+        "FAILED_SAFE", "FAILED_SIDE_EFFECTS_POSSIBLE", "TARGET_STATE_UNKNOWN", "CANCELLED"
+      ],
+      "description": "LOOP_ENGINEERING_SPEC_V2.1 §9's 17 required run states verbatim: 9 non-terminal (CREATED, PREFLIGHT, WAITING_BINDING, WAITING_AUTHORITY, READY, RUNNING, WAITING_USER, SUSPENDED, CANCELLING) followed by 8 terminal (SUCCEEDED_VERIFIED, SUCCEEDED_UNVERIFIED, STOPPED_BUDGET, STOPPED_POLICY, FAILED_SAFE, FAILED_SIDE_EFFECTS_POSSIBLE, TARGET_STATE_UNKNOWN, CANCELLED). WAITING_USER is non-terminal (Amendment §2 — a change from the base pack's LoopResult, where it was terminal); CANCELLED is new relative to the base pack. Do not re-derive or approximate this list; a conflict between this enum and §9's table is this schema's error, and the document wins."
+    },
+    "TerminalReasonCategory": {
+      "type": "string",
+      "enum": [
+        "VALIDATION_FAILURE", "CANCELLATION_REQUESTED", "CANCELLATION_TARGET_UNCONFIRMED",
+        "BUDGET_STEPS_EXHAUSTED", "BUDGET_WALL_CLOCK_EXHAUSTED", "BUDGET_TOKENS_EXHAUSTED",
+        "BUDGET_COST_EXHAUSTED", "BUDGET_TOOL_CALLS_EXHAUSTED", "POLICY_BOUNDARY",
+        "ALL_REQUIRED_VERIFIERS_PASSED", "REQUIRED_VERIFIER_INCOMPLETE",
+        "NODE_FAILURE_NO_SIDE_EFFECTS", "NODE_FAILURE_SIDE_EFFECTS_POSSIBLE",
+        "SIDE_EFFECT_OUTCOME_UNCONFIRMED"
+      ],
+      "description": "A closed, coarse vocabulary this schema authors from §9's own per-transition 'Receipt'/terminal-reason text (one value per distinct terminal-reason phrase in that table's rows) — schema-authoring work explicitly invited by §9 ('Terminal states MUST include a terminal reason... category, never a free-text reason' per LOOP_RESULT_SHARING_CONTRACT.md §4). New normative vocabulary, not itself a re-derivation of an existing registry list; a future LOOP-* rule code MAY be added to loop-validation-rules.v1.json to make individual categories machine-checkable, not done here."
+    },
+    "TerminalReason": {
+      "type": "object",
+      "required": ["category", "detail"],
+      "properties": {
+        "category": { "$ref": "#/$defs/TerminalReasonCategory" },
+        "detail": { "type": "string", "minLength": 1, "description": "Human/diagnostic detail beyond the closed category — e.g. which exact budget dimension for a BUDGET_* category (§18). Free text, for local diagnostics only; never carried into loop-run-summary/loop-result-share beyond the closed category." }
+      },
+      "additionalProperties": true
+    },
+    "TargetDecision": {
+      "type": "object",
+      "required": ["targetId", "executionTargetType", "decidedAtUtc", "decidedBy"],
+      "properties": {
+        "targetId": { "type": "string", "minLength": 1, "description": "The nodeId or bindingSlotId this target choice concerns." },
+        "executionTargetType": { "$ref": "#/$defs/ExecutionTargetType" },
+        "decidedAtUtc": { "type": "string", "format": "date-time" },
+        "decidedBy": { "$ref": "#/$defs/ActorClass" },
+        "reason": { "type": ["string", "null"], "default": null }
+      },
+      "additionalProperties": true
+    },
+    "RunEvent": {
+      "type": "object",
+      "required": ["eventId", "occurredAtUtc", "toState", "description"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "occurredAtUtc": { "type": "string", "format": "date-time" },
+        "fromState": {
+          "oneOf": [{ "$ref": "#/$defs/RunState" }, { "type": "null" }],
+          "default": null,
+          "description": "Null only for the initiating event (§9's '(none — initiation)' row into CREATED)."
+        },
+        "toState": { "$ref": "#/$defs/RunState" },
+        "nodeId": { "type": ["string", "null"], "default": null },
+        "description": { "type": "string", "minLength": 1, "description": "The §9 table's 'Event' column text for the transition actually taken." },
+        "receiptRef": { "oneOf": [{ "$ref": "#/$defs/DurableObjectRef" }, { "type": "null" }], "default": null },
+        "metadata": { "type": "object", "default": {} }
+      },
+      "additionalProperties": true
+    },
+    "NodeAttempt": {
+      "type": "object",
+      "required": ["nodeId", "attemptNumber", "startedAtUtc"],
+      "properties": {
+        "nodeId": { "type": "string", "minLength": 1 },
+        "attemptNumber": { "type": "integer", "minimum": 1 },
+        "startedAtUtc": { "type": "string", "format": "date-time" },
+        "endedAtUtc": { "type": ["string", "null"], "format": "date-time", "default": null },
+        "outcome": {
+          "oneOf": [{ "type": "string", "enum": ["SUCCEEDED", "FAILED", "RETRIED", "SKIPPED", "TIMED_OUT"] }, { "type": "null" }],
+          "default": null,
+          "description": "Null while the attempt is still in flight (no endedAtUtc yet)."
+        },
+        "nodeCategory": { "oneOf": [{ "$ref": "#/$defs/NodeCategory" }, { "type": "null" }], "default": null },
+        "idempotencyKeyUsed": { "type": ["string", "null"], "default": null },
+        "receiptRef": { "oneOf": [{ "$ref": "#/$defs/DurableObjectRef" }, { "type": "null" }], "default": null }
+      },
+      "additionalProperties": true
+    },
+    "UserIntervention": {
+      "type": "object",
+      "required": ["interventionId", "occurredAtUtc", "kind"],
+      "properties": {
+        "interventionId": { "type": "string", "minLength": 1 },
+        "occurredAtUtc": { "type": "string", "format": "date-time" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "HUMAN_DECISION_SUPPLIED", "WAIT_EVENT_SUPPLIED", "BUDGET_EXTENSION_APPROVED",
+            "AUTHORITY_GRANT_APPROVED", "AUTHORITY_GRANT_DECLINED", "CANCELLATION_REQUESTED",
+            "SUSPEND_REQUESTED", "RESUME_REQUESTED"
+          ]
+        },
+        "nodeId": { "type": ["string", "null"], "default": null },
+        "details": { "type": ["string", "null"], "default": null }
+      },
+      "additionalProperties": true
+    },
+    "ArtifactRef": {
+      "type": "object",
+      "required": ["id", "mediaType", "digest", "sizeBytes", "storageLocation", "verificationState"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "mediaType": { "type": "string", "pattern": "^[\\w.+-]+/[\\w.+-]+$" },
+        "digest": { "$ref": "#/$defs/IntegrityRef" },
+        "sizeBytes": { "type": "integer", "minimum": 0 },
+        "storageLocation": {
+          "type": "object",
+          "required": ["kind", "locator"],
+          "properties": {
+            "kind": { "type": "string", "enum": ["LOCAL_FS", "CONTENT_ADDRESSED_STORE", "GIT_HOST", "REMOTE_URL"] },
+            "locator": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": true
+        },
+        "verificationState": { "type": "string", "enum": ["UNVERIFIED", "VERIFIED", "FAILED", "EXPIRED"] }
+      },
+      "additionalProperties": true,
+      "description": "Duplicated locally from schemas/common/artifact-ref.schema.json per this corpus's standalone-schema convention."
+    },
+    "RunOutputs": {
+      "type": "object",
+      "properties": {
+        "primaryResult": {},
+        "artifacts": { "type": "array", "default": [], "items": { "$ref": "#/$defs/ArtifactRef" } },
+        "receipts": { "type": "array", "default": [], "items": { "$ref": "#/$defs/DurableObjectRef" } },
+        "humanReadableSummary": { "type": ["string", "null"], "default": null },
+        "warnings": { "type": "array", "default": [], "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": true,
+      "description": "§16: primary typed result, artifacts, receipts and verifier evidence, human-readable summary, warnings and unresolved uncertainty. Full and unredacted."
+    }
+  }
+}

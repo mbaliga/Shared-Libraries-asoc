@@ -1,0 +1,42 @@
+{
+  "loopId": "loop.demo.broken",
+  "semanticVersion": "1.0.0",
+  "objective": "Missing budgets and licenseRef — MUST fail schema validation on required fields.",
+  "documentationRef": null,
+  "inputSchema": { "location": "INLINE", "inlineSchema": { "type": "object" } },
+  "outputSchema": { "location": "INLINE", "inlineSchema": { "type": "object" } },
+  "startNodeId": "n1",
+  "terminalNodeIds": ["n1"],
+  "nodes": [
+    {
+      "nodeId": "n1",
+      "category": "DETERMINISTIC_TRANSFORMATION",
+      "inputPorts": [],
+      "outputPorts": [],
+      "implementation": { "kind": "CAPABILITY_BINDING", "capabilityId": "fb.workspace.observe" },
+      "requestedCapabilities": ["fb.workspace.observe"],
+      "authorityClass": "OBSERVE",
+      "preferredExecutionTargets": ["LOCAL_ANDROID"],
+      "permittedExecutionTargets": ["LOCAL_ANDROID"],
+      "timeoutPolicy": { "timeoutSeconds": 10, "onTimeout": "FAIL_SAFE" },
+      "retryPolicy": { "maxRetries": 0, "backoff": "NONE" },
+      "idempotencyMode": "PURE",
+      "compensation": { "compensable": false, "nonCompensabilityAcknowledged": true },
+      "verificationRequirements": { "requiredForSuccess": false, "verifierIds": [] },
+      "sideEffectClass": "NONE",
+      "onFailureTerminalState": "FAILED_SAFE",
+      "explanation": "A trivial single node."
+    }
+  ],
+  "edges": [],
+  "gateways": [],
+  "bindingSlots": [],
+  "requiredCapabilities": ["fb.workspace.observe"],
+  "executionTargetConstraints": { "permittedTargetTypes": ["LOCAL_ANDROID"] },
+  "distributionConstraints": { "allowedDistFlavors": ["full", "play"] },
+  "minEngineVersion": "1.0.0",
+  "maxEngineVersion": null,
+  "verificationPolicy": { "requireVerificationForSuccess": false, "verifiers": [] },
+  "terminalStateMapping": { "unverifiedSuccessAllowed": true, "nodeFailureEscalations": [] },
+  "provenance": { "sourceLocation": "phone-authored", "projectRevision": "n/a", "initiatingPrincipal": "user:demo" }
+}

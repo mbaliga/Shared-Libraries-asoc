@@ -1,0 +1,31 @@
+{
+  "licenseStatus": "LICENSE-PENDING",
+  "registryId": "fb-loop-canon-1",
+  "registryVersion": "1.0.0",
+  "canonicalizationVersion": "fb-loop-canon-1",
+  "title": "Canonical JSON profile — fb-loop-canon-1 (frozen)",
+  "status": "FROZEN",
+  "frozenBy": "WP-1L-G0",
+  "decisionRefs": ["FB-RAT-PKG-004"],
+  "description": "Pins the canonicalization profile used by both packageContentDigest (floop-container-format.v1.json) and semanticDigest (semantic-digest.v1.json). Replaces the source pack's 'RFC 8785-style ... or a versioned equivalent' language — the escape hatch is deleted (10_DUAL_VALIDATION_ADDENDUM §D). No implementation MAY claim conformance to a variant profile under this name.",
+  "baseline": "RFC 8785 (JSON Canonicalization Scheme, JCS) as the starting point, with one deliberate, load-bearing departure: numbers.",
+  "numberPolicy": {
+    "rule": "IEEE-754 double-precision floats are FORBIDDEN in the canonical profile. Every numeric value MUST be either (a) an integer representable exactly as a JSON integer literal with no fractional part and magnitude within [-(2^53-1), 2^53-1], or (b) a decimal quantity represented as a JSON STRING matching the regex ^-?[0-9]+\\.[0-9]+$ (a 'constrained decimal string'), never as a bare JSON number with a fractional part.",
+    "rationale": "RFC 8785 requires ECMA-262 §7.1.12.1 number serialization (points implementers at V8 or Ryu). The JVM cannot reach that with Double.toString, and kotlinx-serialization has no canonical mode. Forbidding doubles entirely deletes the number-serialization hazard rather than working around it (10_DUAL_VALIDATION_ADDENDUM §D) — this is the single highest-leverage simplification available and is why fb-loop-canon-1 is NOT plain JCS.",
+    "producerObligation": "A LoopDefinition producer (phone or browser) that would otherwise emit a fractional number (e.g. a budget weight, a probability) MUST emit it as a constrained decimal string per the regex above. A validator encountering a bare JSON number with a '.', 'e', or 'E' in it anywhere under definition.json MUST reject with LOOP-PKG-003 (path/canonicalization error) — this is not a lenient coercion path.",
+    "integers": "Ordinary counts, budgets expressed in whole units, and IDs-that-look-numeric remain plain JSON integers; no change from JCS for the integer case."
+  },
+  "steps": [
+    "1. Parse input as JSON (UTF-8).",
+    "2. Reject if any number fails numberPolicy above (LOOP-PKG-003).",
+    "3. NFC-normalize every JSON string value AND every object key.",
+    "4. Sort object members by their (NFC-normalized) key, compared as a sequence of UTF-16 code units (per RFC 8785 §3.2.3).",
+    "5. Serialize with: no insignificant whitespace; '/' not escaped; all other JCS string-escaping rules (RFC 8785 §3.2.2) applied verbatim; arrays preserve source order (arrays are ordered data, never sorted); LF only, no trailing newline.",
+    "6. Encode the result as UTF-8 bytes. These bytes are the canonical form; a digest step (SHA-256) is applied by the caller (packageContentDigest or semanticDigest), not by this profile itself — canonicalization and digesting are separate, composable steps."
+  ],
+  "outOfScope": [
+    "definition.bpmn and any other DERIVED file never enters this profile — XML canonicalization (C14N) is explicitly NOT part of fb-loop-canon-1, and no derived file participates in any digest (floop-container-format.v1.json).",
+    "Binary assets (assets/) are digested as raw bytes (SHA-256 of the file), never passed through this JSON profile."
+  ],
+  "goldenVectorPolicy": "fixtures/canonicalization/ under this schemas/loops/ tree carries a canonicalization + digest golden-vector corpus (paired input.json / canonical.txt / digest.txt) reproduced byte-identically across 1,000 repeated runs as the WP-1L gate proof (07_TEST_CONFORMANCE_PLAN §4b)."
+}

@@ -1,0 +1,20 @@
+Schema validation: PASSES (this document is schema-valid against loop-run.schema.json).
+
+Real rejection: LOOP-VERIFY-002 (loop-validation-rules.v1.json) — "Terminal state claims
+SUCCEEDED_VERIFIED but verifier '{verifierId}' (requiredForSuccess=true) has no passing result tied
+to this run's inputs/digest/artifacts... Either attach a passing required verifier result or report
+SUCCEEDED_UNVERIFIED." This run's `nodeAttempts` array contains exactly one entry, categorized
+TYPED_TOOL, not VERIFIER — no node of category VERIFIER (§4 category 6) was ever attempted, let
+alone passed. `runState=SUCCEEDED_VERIFIED` and `terminalReason.category=
+ALL_REQUIRED_VERIFIERS_PASSED` are both asserted anyway. Per LOOP_ENGINEERING_SPEC_V2.1 §9's own
+table row ("Every reachable terminal node is reached; every verifier marked requiredForSuccess...
+has a passing result... -> SUCCEEDED_VERIFIED"), this run should have reported
+SUCCEEDED_UNVERIFIED at most.
+
+Why the schema cannot catch this: loop-run.schema.json's `runState`, `terminalReason`, and
+`nodeAttempts` are three independent sibling fields. Deciding whether a SUCCEEDED_VERIFIED claim is
+honest requires cross-referencing the LoopDefinition's own verifier declarations
+(`VerificationPolicy.verifiers`, `requiredForSuccess`) — a document this schema does not have access
+to and was never designed to embed — against which nodeAttempts entries are verifier-category AND
+outcome=SUCCEEDED. That is exactly the LOOP-VERIFY-002 validator's job at runtime, not a
+JSON-Schema-expressible structural constraint over this document alone.
