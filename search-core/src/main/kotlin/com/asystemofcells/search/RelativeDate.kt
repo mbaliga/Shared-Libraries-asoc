@@ -38,6 +38,20 @@ import java.time.format.DateTimeParseException
  * (`someday`, `2024-02-31`) and one that matches a pattern but names an instant the calendar
  * cannot express (`-99999999999999999999d`, `-9223372036854775807d`). `null` becomes
  * [Diagnostic.InvalidDate] beside the search box; an exception becomes a crash on a keystroke.
+ *
+ * ## Calendar-unit tokens (`this-month`, bare years, month names)
+ *
+ * `this-week`/`this-month`/`this-year` and their `last-` counterparts are whole calendar-unit
+ * windows anchored on `today`, computed with [LocalDate.minusMonths]/`plusMonths` rather than a
+ * fixed day count for the same DST/calendar-length reason `-7d` is — a month is not a fixed
+ * number of days, and `last-month` from March 31st must land on the whole of February, not on
+ * "31 days ago".
+ *
+ * A bare month name (`december`) carries no year, so it resolves to **the most recent occurrence
+ * that is not in the future**: if that month has already started this year (including the
+ * current month itself), it means this year's; otherwise last year's. `january` typed on any day
+ * in January means the current month, not a year-old one. An explicit trailing year
+ * (`december-2024`) skips that inference entirely.
  */
 object RelativeDate {
 
@@ -50,6 +64,25 @@ object RelativeDate {
 
     private val RELATIVE_OFFSET = Regex("^-(\\d+)([dwm])$")
     private val ISO_DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
+    private val BARE_YEAR = Regex("^\\d{4}$")
+
+    /** Declaration order is the 1-based month index; see [monthIndexOrNull]. */
+    private val MONTH_NAMES = listOf(
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december",
+    )
+    private val MONTH_PATTERN = Regex(
+        "^(" + MONTH_NAMES.joinToString("|") + ")(?:-(\\d{4}))?$",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** 1-based month index for an English month name, case-insensitive; `null` if [name] is not
+     *  one of the twelve. Exposed so a natural-language pre-pass can recognize a month word
+     *  without keeping its own copy of this list to drift out of step with [MONTH_PATTERN]. */
+    internal fun monthIndexOrNull(name: String): Int? {
+        val idx = MONTH_NAMES.indexOf(name.lowercase())
+        return if (idx >= 0) idx + 1 else null
+    }
 
     /** The whole calendar day/week [raw] denotes, or `null` if it is not a date expression at
      *  all — which is how the parser decides to emit [Diagnostic.InvalidDate]. */
@@ -78,8 +111,36 @@ object RelativeDate {
                     startOfThisWeek.atStartOfDay(zone).toInstant().toEpochMilli(),
                 )
             }
+            raw.equals("this-week", ignoreCase = true) -> {
+                val startOfThisWeek = today.with(DayOfWeek.MONDAY)
+                Range(
+                    startOfThisWeek.atStartOfDay(zone).toInstant().toEpochMilli(),
+                    startOfThisWeek.plusWeeks(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+                )
+            }
+            raw.equals("this-month", ignoreCase = true) -> monthRange(today.year, today.monthValue, zone)
+            raw.equals("last-month", ignoreCase = true) -> {
+                // `minusMonths`, not `monthValue - 1`: January's last month is December of the
+                // *previous* year, and plain subtraction lands on month zero.
+                val lastMonth = today.minusMonths(1)
+                monthRange(lastMonth.year, lastMonth.monthValue, zone)
+            }
+            raw.equals("this-year", ignoreCase = true) -> yearRange(today.year, zone)
+            raw.equals("last-year", ignoreCase = true) -> yearRange(today.year - 1, zone)
+            BARE_YEAR.matches(raw) -> yearRange(raw.toInt(), zone)
             ISO_DATE.matches(raw) -> parseIsoDate(raw)?.let { dayRange(it, zone) }
-            else -> RELATIVE_OFFSET.matchEntire(raw)?.let { m ->
+            else -> MONTH_PATTERN.matchEntire(raw)?.let { m ->
+                val month = MONTH_NAMES.indexOf(m.groupValues[1].lowercase()) + 1
+                val explicitYear = m.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull()
+                val year = explicitYear ?: run {
+                    // No year named: the most recent occurrence not in the future — see the class
+                    // KDoc. A month that has already started this year (or is the current one)
+                    // counts as "not in the future"; one that has not arrived yet belongs to last
+                    // year.
+                    if (month <= today.monthValue) today.year else today.year - 1
+                }
+                monthRange(year, month, zone)
+            } ?: RELATIVE_OFFSET.matchEntire(raw)?.let { m ->
                 // `\d+` is an *unbounded* digit run: `-99999999999999999999d` matches the pattern
                 // perfectly and is not a Long. `toLong()` here threw NumberFormatException straight
                 // out of QueryParser.parse, on a string a user can type by holding down a key.
@@ -123,5 +184,27 @@ object RelativeDate {
         val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
         val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         return Range(start, end)
+    }
+
+    /** [month] is 1-based. No overflow guard: every caller derives [year] either from a 4-digit
+     *  match ([BARE_YEAR], [MONTH_PATTERN]'s year group) or from [LocalDate.getYear]/`minusMonths`
+     *  on an already-valid `today`, none of which can land outside `LocalDate`'s range. */
+    private fun monthRange(year: Int, month: Int, zone: ZoneId): Range {
+        val start = LocalDate.of(year, month, 1)
+        val end = start.plusMonths(1)
+        return Range(
+            start.atStartOfDay(zone).toInstant().toEpochMilli(),
+            end.atStartOfDay(zone).toInstant().toEpochMilli(),
+        )
+    }
+
+    /** Same overflow argument as [monthRange]. */
+    private fun yearRange(year: Int, zone: ZoneId): Range {
+        val start = LocalDate.of(year, 1, 1)
+        val end = LocalDate.of(year + 1, 1, 1)
+        return Range(
+            start.atStartOfDay(zone).toInstant().toEpochMilli(),
+            end.atStartOfDay(zone).toInstant().toEpochMilli(),
+        )
     }
 }

@@ -1,0 +1,14 @@
+Schema validation: PASSES (this document is schema-valid against loop-definition.v2.schema.json).
+
+Real rejection code: LOOP-ID-001 (namespace LOOP-ID, severity ERROR, loop-validation-rules.v1.json)
+  messageTemplate: "Duplicate identity 'n1' used by more than one node."
+  remediation: "Assign each node/edge/slot/test/verifier a stable, unique ID within the definition."
+  sourceObligation: LOOP_ENGINEERING_SPEC_V2.1 §7 'duplicate identities'
+
+Why the schema cannot catch this: `nodes` is a plain JSON array of NodeDefinition objects.
+JSON Schema's `uniqueItems` keyword (not used here, and would not help even if it were) requires
+whole-item deep equality — it cannot express "no two items may share the same value of the
+`nodeId` sub-property while differing elsewhere." Draft 2020-12 has no cross-item key-uniqueness
+keyword. A validator MUST walk `nodes` (and, symmetrically, `edges[].edgeId`, `gateways[].gatewayId`,
+`bindingSlots[].slotId`, verifier IDs) itself and flag LOOP-ID-001 on any repeated ID — this is
+exactly the class of check that belongs to the semantic validator layer, not the JSON Schema layer.

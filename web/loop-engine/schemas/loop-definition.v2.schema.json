@@ -1,0 +1,476 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://android-ide-core.dev.fonebrew/schemas/loops/loop-definition.v2.schema.json",
+  "$comment": "LICENSE-PENDING — see docs/non_ratified/LICENSE_PENDING.md. LoopDefinition per LOOP_ENGINEERING_SPEC_V2.1 §2.2/§3 (FB-RAT-LOOP-001), node contracts per §4 (FB-RAT-LOOP-002, eight categories — see Amendment 1 in that document for how the base pack's five grew to eight), gateway contracts per §5 (FB-RAT-LOOP-003), budgets per §18, verification/terminal-state per §16/§9. This is the FIRST LoopDefinition schema this repository has ever emitted — no v1 exists anywhere under schemas/ (repo-wide search confirmed empty, matching WP-1's correct decision to skip it; the '.v2' in this filename echoes the spec document's own v2.1 numbering, not a supersession of a prior schema file). Node/gateway/edge shapes are folded into this SAME file as $defs, not split into separate node.schema.json/gateway.schema.json files, per the merged-artifact instruction that the semantic/package digest covers a LoopDefinition as one unit (semantic-digest.v1.json). Byte-level container/digest/canonicalization/capability/model-vocabulary concepts are cross-referenced from the four (plus two supporting) frozen registries under schemas/loops/registries/ and are NOT redefined here — a conflict between this schema and a registry is this schema's error, the registry wins, per LOOP_FROZEN_CONCEPTS_WP1L_G0.md. Small shared sub-shapes (AuthorityRung, ExecutionTargetType, provenance minimum) are duplicated locally as $defs per this repo's established convention (see schemas/execution/receipt.schema.json), not cross-file $ref'd.",
+  "title": "LoopDefinition",
+  "description": "The canonical, semantic graph of a loop (LOOP_ENGINEERING_SPEC_V2.1 §2.2): identity, semantic version, typed inputs/outputs, nodes, edges, gateways, budgets, typed binding slots, required capabilities, execution-target and distribution constraints, engine compatibility range, verification policy, terminal-state mapping, provenance, and license. Serializable independently of UI layout — 'presentation'/'layout'/'x'/'y'/'notes' keys at any depth are excluded from semanticDigest by semantic-digest.v1.json's exclusionListV1, not enforced by this schema (exclusion is a digest-computation-time concern, not a structural one). Typically the payload validated against directly (not wrapped in dev.fonebrew.contracts.common.ContractEnvelope in the on-disk package form — floop-container-format.v1.json's definition.json is this schema's root object verbatim).",
+  "type": "object",
+  "required": [
+    "loopId", "semanticVersion", "objective", "documentationRef", "inputSchema", "outputSchema",
+    "startNodeId", "terminalNodeIds", "nodes", "edges", "gateways", "budgets", "bindingSlots",
+    "requiredCapabilities", "executionTargetConstraints", "distributionConstraints",
+    "minEngineVersion", "maxEngineVersion", "verificationPolicy", "terminalStateMapping",
+    "provenance", "licenseRef"
+  ],
+  "properties": {
+    "loopId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifies a loop family and is stable across releases owned by the same publisher (§14). Not itself content-addressed — packageContentDigest (floop-container-format.v1.json) is the byte-level identity; loopId is the human/publisher-facing family identity a release identity tuple {loopId, semanticVersion, packageDigest, publisherKeyFingerprint} builds on (§14)."
+    },
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z-.]+)?(\\+[0-9A-Za-z-.]+)?$",
+      "description": "SemVer (§14). A breaking input/output, authority, side-effect, verifier, or compatibility change requires a major version bump even when the visible graph changes only slightly."
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable objective (§3)."
+    },
+    "documentationRef": {
+      "type": ["string", "null"],
+      "description": "Reference to human-readable documentation — typically a package-relative path under docs/ (floop-container-format.v1.json's optional docs/ directory) or a URI. Null when the objective string alone is the only documentation this definition carries. Package docs/ content is untrusted and subject to prompt-static-scanning/invisible-Unicode rejection at build/import time (§25, LOOP-PKG-006/008) — not re-enforced by this schema, which only carries the reference."
+    },
+    "inputSchema": { "$ref": "#/$defs/SchemaReference", "description": "Typed input JSON Schema (§3, §16 — draft 2020-12 or later ratified version; LOOP-SCHEMA-002)." },
+    "outputSchema": { "$ref": "#/$defs/SchemaReference", "description": "Typed output JSON Schema (§3, §16)." },
+    "startNodeId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The node a run begins at (§3 'start and terminal nodes'). MUST equal some entry in `nodes[].nodeId` — this schema cannot enforce that cross-reference structurally (JSON Schema has no array-membership-by-computed-value keyword); a definition with a dangling startNodeId is schema-valid but LOOP-GRAPH-001 ('missing start or terminal paths') invalid — see fixtures/loops/loop-definition.v2/adversarial/."
+    },
+    "terminalNodeIds": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Nodes that legitimately end a run (§3). Same cross-reference caveat as startNodeId — reachability from startNodeId to at least one of these is a graph-traversal obligation the validator performs (LOOP-GRAPH-001/002), not something this schema checks."
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/NodeDefinition" },
+      "description": "§4. `uniqueItems` is deliberately NOT used here: JSON Schema's uniqueItems requires whole-item deep-equality, so it cannot catch two distinct node objects that merely share the same `nodeId` while differing elsewhere — that is exactly the LOOP-ID-001 ('duplicate identity') case a real validator must catch by walking the array itself. See fixtures/loops/loop-definition.v2/adversarial/duplicate-node-id.adversarial.json."
+    },
+    "edges": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/EdgeDefinition" },
+      "description": "§5. Every non-gateway control-flow connection between nodes."
+    },
+    "gateways": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/GatewayDefinition" },
+      "description": "§5 (FB-RAT-LOOP-003)."
+    },
+    "budgets": { "$ref": "#/$defs/Budgets", "description": "§18: hard runtime boundaries, not estimates." },
+    "bindingSlots": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/BindingSlot" },
+      "description": "§2.6: typed abstract slots a BindingProfile resolves locally (FB-RAT-WEB-005 — packages declare slots, Fonebrew resolves them; binding profiles are not publishable package content, so no resolved value ever appears here)."
+    },
+    "requiredCapabilities": {
+      "type": "array",
+      "default": [],
+      "items": { "type": "string", "pattern": "^fb\\.[a-z0-9_]+(\\.[a-z0-9_]+)+$" },
+      "description": "Definition-wide union of every node's requestedCapabilities (capability-ids.v1.json reverse-DNS namespace), duplicated at the top level for a compatibility evaluator that wants a quick capability set without walking every node (LOOP_COMPATIBILITY_CONTRACT.md axis 4). Capability requests are REQUESTS, never grants (§10)."
+    },
+    "executionTargetConstraints": { "$ref": "#/$defs/ExecutionTargetConstraints" },
+    "distributionConstraints": { "$ref": "#/$defs/DistributionConstraints" },
+    "minEngineVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Minimum tested engine range bound (capability-ids.v1.json `engineVersion` object — `definition`/`v1Value`/`bumpRule`/`declaredAsRange`, not redefined here). v1 engine surface is '1.0.0'."
+    },
+    "maxEngineVersion": {
+      "type": ["string", "null"],
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Maximum tested engine range bound, or null for no declared upper bound. Field MUST be present (possibly null) — an absent field is ambiguous between 'no upper bound' and 'forgot to declare one'; null is the explicit spelling of the former."
+    },
+    "verificationPolicy": { "$ref": "#/$defs/VerificationPolicy" },
+    "terminalStateMapping": { "$ref": "#/$defs/TerminalStateMapping" },
+    "provenance": { "$ref": "#/$defs/Provenance" },
+    "licenseRef": { "$ref": "#/$defs/LicenseRef" },
+    "presentation": {
+      "type": "object",
+      "default": {},
+      "additionalProperties": true,
+      "description": "Definition-root presentation/layout metadata. Excluded from semanticDigest at ANY depth by semantic-digest.v1.json's exclusionListV1 (['presentation','layout','x','y','notes']) — that exclusion is structural matching-by-key-name at digest-computation time, not something this schema enforces or needs to mirror."
+    },
+    "unknownFields": {
+      "type": "object",
+      "default": {},
+      "description": "Bag for fields a decoder received but did not recognize, preserved for round-trip (FB-RAT-COM-003)."
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "SchemaReference": {
+      "type": "object",
+      "required": ["location"],
+      "properties": {
+        "location": { "type": "string", "enum": ["INLINE", "PACKAGE_RELATIVE_PATH"] },
+        "refPath": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Package-relative path under schemas/ (floop-container-format.v1.json) when location=PACKAGE_RELATIVE_PATH."
+        },
+        "inlineSchema": {
+          "type": ["object", "null"],
+          "default": null,
+          "description": "An embedded JSON Schema draft 2020-12 (or later ratified version) document when location=INLINE. Not itself validated as a meta-schema by this document — LOOP-SCHEMA-002 is a validator-time obligation."
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "location": { "const": "PACKAGE_RELATIVE_PATH" } }, "required": ["location"] }, "then": { "required": ["refPath"], "properties": { "refPath": { "type": "string", "minLength": 1 } } } },
+        { "if": { "properties": { "location": { "const": "INLINE" } }, "required": ["location"] }, "then": { "required": ["inlineSchema"] } }
+      ],
+      "additionalProperties": true
+    },
+    "NodeCategory": {
+      "type": "string",
+      "enum": [
+        "DETERMINISTIC_TRANSFORMATION", "MODEL_INFERENCE", "TYPED_TOOL", "HUMAN_DECISION",
+        "BOUNDED_SUBLOOP", "VERIFIER", "ARTIFACT_IMPORT_EXPORT", "WAIT_EVENT_GATE"
+      ],
+      "description": "§4, eight categories. The first five (DETERMINISTIC_TRANSFORMATION, MODEL_INFERENCE, TYPED_TOOL, HUMAN_DECISION, BOUNDED_SUBLOOP) are the base pack's original five (FB-RAT-LOOP-002, renamed/clarified but not changed in kind). VERIFIER, ARTIFACT_IMPORT_EXPORT, and WAIT_EVENT_GATE are the three genuinely new categories §4's Amendment 1 documents — treat all eight as the current set, not the base pack's five, per that amendment."
+    },
+    "AuthorityRung": {
+      "type": "string",
+      "enum": ["OBSERVE", "READ", "PROPOSE", "MODIFY_DRAFT", "EXECUTE_REVERSIBLE", "EXECUTE_EXTERNAL", "EXECUTE_DESTRUCTIVE", "PUBLISH_OR_RELEASE"],
+      "description": "capability-ids.v1.json's authorityLadder, duplicated locally per this repo's convention (mirrors contracts/kotlin/AuthorityContracts.kt's AuthorityRung enum) rather than cross-file $ref'd."
+    },
+    "ExecutionTargetType": {
+      "type": "string",
+      "enum": ["LOCAL_ANDROID", "SSH_HOST", "RASPBERRY_PI", "GITHUB_ACTIONS", "GITEA_ACTIONS"],
+      "description": "schemas/execution/target.schema.json's ExecutionTargetType, duplicated locally (FB-RAT-EXE-010) rather than cross-file $ref'd."
+    },
+    "TerminalRunState": {
+      "type": "string",
+      "enum": ["SUCCEEDED_VERIFIED", "SUCCEEDED_UNVERIFIED", "STOPPED_BUDGET", "STOPPED_POLICY", "FAILED_SAFE", "FAILED_SIDE_EFFECTS_POSSIBLE", "TARGET_STATE_UNKNOWN", "CANCELLED"],
+      "description": "The eight terminal states of LOOP_ENGINEERING_SPEC_V2.1 §9's 17-state run machine, duplicated locally for definition-time references (terminalStateMapping below) — the full 17-state machine with its non-terminal states belongs to a run/receipt schema, not this definition schema."
+    },
+    "FailureTerminalState": {
+      "type": "string",
+      "enum": ["STOPPED_BUDGET", "STOPPED_POLICY", "FAILED_SAFE", "FAILED_SIDE_EFFECTS_POSSIBLE", "TARGET_STATE_UNKNOWN", "CANCELLED"],
+      "description": "§9's eight terminal states minus the two success states — the closed set a node's own failure-to-terminal-state mapping (§4) may resolve to."
+    },
+    "IdempotencyMode": {
+      "type": "string",
+      "enum": ["PURE", "IDEMPOTENT_WITH_KEY", "NOT_IDEMPOTENT"],
+      "description": "§4 'idempotency mode and key strategy'. PURE: no side effects, safe to re-run unconditionally. IDEMPOTENT_WITH_KEY: side-effecting but safe to retry given the same idempotencyKeyStrategy (mirrors FB-RAT-EXE-008's externalDuplicateBehavior contract at the execution layer). NOT_IDEMPOTENT: retry requires compensation or explicit user confirmation."
+    },
+    "SideEffectClass": {
+      "type": "string",
+      "enum": ["NONE", "REVERSIBLE_LOCAL", "PERSISTENT_LOCAL", "EXTERNAL_VISIBLE", "DESTRUCTIVE"],
+      "description": "§4 'side-effect classification' — a declared property of the node distinct from authorityClass (a node can request EXECUTE_EXTERNAL authority for a side effect classified PERSISTENT_LOCAL, e.g. a scoped local write mediated through an external tool)."
+    },
+    "Port": {
+      "type": "object",
+      "required": ["portId"],
+      "properties": {
+        "portId": { "type": "string", "minLength": 1 },
+        "schemaRef": { "oneOf": [ { "$ref": "#/$defs/SchemaReference" }, { "type": "null" } ], "default": null, "description": "Null means untyped/any — MUST NOT be used for a port carrying a value later relied on by a downstream typed schema without an explicit adapter node." },
+        "mediaType": { "type": ["string", "null"], "default": null },
+        "description": { "type": ["string", "null"], "default": null }
+      },
+      "additionalProperties": true
+    },
+    "ImplementationReference": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["CAPABILITY_BINDING", "TYPED_SLOT", "EMBEDDED_SUBLOOP", "REFERENCED_SUBLOOP"] },
+        "capabilityId": { "type": ["string", "null"], "pattern": "^fb\\.[a-z0-9_]+(\\.[a-z0-9_]+)+$|^$", "default": null },
+        "slotId": { "type": ["string", "null"], "default": null },
+        "subloopDefinitionRef": { "type": ["string", "null"], "default": null, "description": "Package-relative path to an embedded subloop LoopDefinition (§17), when kind=EMBEDDED_SUBLOOP." },
+        "referencedLoopId": { "type": ["string", "null"], "default": null },
+        "referencedSemanticVersion": { "type": ["string", "null"], "default": null },
+        "referencedPackageDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$|^$", "default": null, "description": "packageContentDigest (floop-container-format.v1.json) of the referenced release, when kind=REFERENCED_SUBLOOP (§17 — subloop referenced by immutable package identity)." }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "CAPABILITY_BINDING" } }, "required": ["kind"] }, "then": { "required": ["capabilityId"], "properties": { "capabilityId": { "type": "string", "minLength": 1 } } } },
+        { "if": { "properties": { "kind": { "const": "TYPED_SLOT" } }, "required": ["kind"] }, "then": { "required": ["slotId"], "properties": { "slotId": { "type": "string", "minLength": 1 } } } },
+        { "if": { "properties": { "kind": { "const": "EMBEDDED_SUBLOOP" } }, "required": ["kind"] }, "then": { "required": ["subloopDefinitionRef"], "properties": { "subloopDefinitionRef": { "type": "string", "minLength": 1 } } } },
+        { "if": { "properties": { "kind": { "const": "REFERENCED_SUBLOOP" } }, "required": ["kind"] }, "then": { "required": ["referencedLoopId", "referencedSemanticVersion", "referencedPackageDigest"], "properties": { "referencedLoopId": { "type": "string", "minLength": 1 }, "referencedSemanticVersion": { "type": "string", "minLength": 1 }, "referencedPackageDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" } } } }
+      ],
+      "additionalProperties": true
+    },
+    "TimeoutPolicy": {
+      "type": "object",
+      "required": ["timeoutSeconds", "onTimeout"],
+      "properties": {
+        "timeoutSeconds": { "type": ["number", "null"], "minimum": 0 },
+        "onTimeout": { "type": "string", "enum": ["FAIL_SAFE", "ESCALATE_TO_USER", "RETRY"] }
+      },
+      "additionalProperties": true
+    },
+    "RetryPolicy": {
+      "type": "object",
+      "required": ["maxRetries", "backoff"],
+      "properties": {
+        "maxRetries": { "type": "integer", "minimum": 0 },
+        "backoff": { "type": "string", "enum": ["NONE", "FIXED", "EXPONENTIAL"] },
+        "baseDelaySeconds": { "type": ["number", "null"], "minimum": 0, "default": null },
+        "retryableFailureClasses": { "type": "array", "default": [], "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": true
+    },
+    "Compensation": {
+      "type": "object",
+      "required": ["compensable"],
+      "properties": {
+        "compensable": { "type": "boolean" },
+        "compensationDescription": { "type": ["string", "null"], "default": null },
+        "nonCompensabilityAcknowledged": { "type": ["boolean", "null"], "default": null }
+      },
+      "allOf": [
+        { "if": { "properties": { "compensable": { "const": true } }, "required": ["compensable"] }, "then": { "required": ["compensationDescription"], "properties": { "compensationDescription": { "type": "string", "minLength": 1 } } } },
+        { "if": { "properties": { "compensable": { "const": false } }, "required": ["compensable"] }, "then": { "required": ["nonCompensabilityAcknowledged"], "properties": { "nonCompensabilityAcknowledged": { "const": true } } } }
+      ],
+      "additionalProperties": true,
+      "description": "§4 'compensation behavior or explicit non-compensability flag'. Structurally operationalizes the shape of LOOP-VERIFY-001 ('destructive path... has no compensation behavior and no explicit non-compensability acknowledgement') — a compensable=false node MUST carry an explicit, non-omittable, true acknowledgement; it is not possible to construct a schema-valid Compensation object that silently omits both. LOOP-VERIFY-001 itself (whether authorityClass=EXECUTE_DESTRUCTIVE nodes carry this object meaningfully) remains a validator-time cross-check against NodeDefinition.authorityClass."
+    },
+    "VerificationRequirements": {
+      "type": "object",
+      "required": ["requiredForSuccess", "verifierIds"],
+      "properties": {
+        "requiredForSuccess": { "type": "boolean", "description": "§16: when true, this node's declared verifierIds MUST have a passing result tied to the run's inputs/digest/artifacts before a run may claim SUCCEEDED_VERIFIED (LOOP-VERIFY-002)." },
+        "verifierIds": { "type": "array", "default": [], "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": true
+    },
+    "NodeDefinition": {
+      "type": "object",
+      "required": [
+        "nodeId", "category", "inputPorts", "outputPorts", "implementation", "requestedCapabilities",
+        "authorityClass", "preferredExecutionTargets", "permittedExecutionTargets", "timeoutPolicy",
+        "retryPolicy", "idempotencyMode", "compensation", "verificationRequirements",
+        "sideEffectClass", "onFailureTerminalState", "explanation"
+      ],
+      "properties": {
+        "nodeId": { "type": "string", "minLength": 1 },
+        "category": { "$ref": "#/$defs/NodeCategory" },
+        "inputPorts": { "type": "array", "items": { "$ref": "#/$defs/Port" } },
+        "outputPorts": { "type": "array", "items": { "$ref": "#/$defs/Port" } },
+        "implementation": { "$ref": "#/$defs/ImplementationReference" },
+        "requestedCapabilities": { "type": "array", "items": { "type": "string", "pattern": "^fb\\.[a-z0-9_]+(\\.[a-z0-9_]+)+$" } },
+        "authorityClass": { "$ref": "#/$defs/AuthorityRung" },
+        "preferredExecutionTargets": { "type": "array", "default": [], "items": { "$ref": "#/$defs/ExecutionTargetType" } },
+        "permittedExecutionTargets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ExecutionTargetType" } },
+        "timeoutPolicy": { "$ref": "#/$defs/TimeoutPolicy" },
+        "retryPolicy": { "$ref": "#/$defs/RetryPolicy" },
+        "idempotencyMode": { "$ref": "#/$defs/IdempotencyMode" },
+        "idempotencyKeyStrategy": { "type": ["string", "null"], "default": null, "description": "Required non-blank when idempotencyMode=IDEMPOTENT_WITH_KEY (enforced below)." },
+        "compensation": { "$ref": "#/$defs/Compensation" },
+        "verificationRequirements": { "$ref": "#/$defs/VerificationRequirements" },
+        "sideEffectClass": { "$ref": "#/$defs/SideEffectClass" },
+        "onFailureTerminalState": { "$ref": "#/$defs/FailureTerminalState" },
+        "explanation": { "type": "string", "minLength": 1, "description": "§4 'human-readable explanation'." },
+        "maxRecursionDepth": { "type": ["integer", "null"], "minimum": 1, "default": null, "description": "Required when category=BOUNDED_SUBLOOP (LOOP-BUDGET-002 'recursive subloop... has no statically visible depth limit', enforced below)." },
+        "requestedModelCapabilityTags": { "type": "array", "default": [], "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }, "description": "Only meaningful when category=MODEL_INFERENCE — tag IDs from model-capability-vocabulary.v1.json (not enumerated here as a closed list since that registry's tags array is additive; a validator cross-checks against the live registry, not this schema)." },
+        "presentation": { "type": "object", "default": {}, "additionalProperties": true, "description": "Excluded from semanticDigest (semantic-digest.v1.json exclusionListV1) — see root `presentation` property's description." },
+        "notes": { "type": ["string", "null"], "default": null, "description": "Authoring-only note. Excluded from semanticDigest by key name (semantic-digest.v1.json exclusionListV1) regardless of this node's actual semantic content — see that registry's limitationsV1 for why a field that needs to be semantic must avoid this literal key name." },
+        "unknownFields": { "type": "object", "default": {} }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "category": { "const": "BOUNDED_SUBLOOP" } }, "required": ["category"] },
+          "then": {
+            "required": ["maxRecursionDepth"],
+            "properties": {
+              "maxRecursionDepth": { "type": "integer", "minimum": 1 },
+              "implementation": { "properties": { "kind": { "enum": ["EMBEDDED_SUBLOOP", "REFERENCED_SUBLOOP"] } } }
+            }
+          },
+          "$comment": "§17 'recursive subloops require a statically visible depth limit' (LOOP-BUDGET-002)."
+        },
+        {
+          "if": { "properties": { "idempotencyMode": { "const": "IDEMPOTENT_WITH_KEY" } }, "required": ["idempotencyMode"] },
+          "then": { "required": ["idempotencyKeyStrategy"], "properties": { "idempotencyKeyStrategy": { "type": "string", "minLength": 1 } } }
+        },
+        {
+          "if": { "properties": { "category": { "const": "WAIT_EVENT_GATE" } }, "required": ["category"] },
+          "then": { "properties": { "timeoutPolicy": { "required": ["timeoutSeconds"], "properties": { "timeoutSeconds": { "type": "number", "minimum": 0 } } } } },
+          "$comment": "A wait/event gate (§4 category 8) MUST declare a statically visible bound, same principle as §17's cycle-bound requirement — an unbounded wait is an unbounded cycle in disguise."
+        }
+      ],
+      "additionalProperties": true
+    },
+    "GatewayOutcome": {
+      "type": "object",
+      "required": ["label", "targetNodeId"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "description": "Stable edge label (§5)." },
+        "conditionExpression": { "type": ["string", "null"], "default": null, "description": "Null marks this outcome as the default/else branch." },
+        "priority": { "type": ["integer", "null"], "default": null, "description": "Priority semantics where relevant (§5); null means unordered/no declared priority among outcomes." },
+        "targetNodeId": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "GatewayDefinition": {
+      "type": "object",
+      "required": ["gatewayId", "outcomes", "exhaustive"],
+      "properties": {
+        "gatewayId": { "type": "string", "minLength": 1 },
+        "outcomes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/GatewayOutcome" } },
+        "exhaustive": { "type": "boolean", "description": "§5: an explicit exhaustiveness policy is required." },
+        "defaultOrTerminalFailurePath": {
+          "oneOf": [ { "$ref": "#/$defs/GatewayOutcome" }, { "type": "null" } ],
+          "default": null,
+          "description": "Required non-null when exhaustive=false (enforced below) — LOOP-GRAPH-003 'not exhaustive and declares no default or terminal-failure path'."
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "exhaustive": { "const": false } }, "required": ["exhaustive"] }, "then": { "required": ["defaultOrTerminalFailurePath"], "properties": { "defaultOrTerminalFailurePath": { "type": "object" } } } }
+      ],
+      "additionalProperties": true
+    },
+    "EdgeDefinition": {
+      "type": "object",
+      "required": ["edgeId", "fromNodeId", "toNodeId"],
+      "properties": {
+        "edgeId": { "type": "string", "minLength": 1 },
+        "fromNodeId": { "type": "string", "minLength": 1 },
+        "toNodeId": { "type": "string", "minLength": 1 },
+        "label": { "type": ["string", "null"], "default": null },
+        "gatewayId": { "type": ["string", "null"], "default": null, "description": "Non-null when this edge realizes one of a gateway's declared outcomes (§5)." }
+      },
+      "additionalProperties": true
+    },
+    "BudgetCost": {
+      "type": "object",
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$", "description": "ISO 4217 currency code." }
+      },
+      "additionalProperties": true
+    },
+    "Budgets": {
+      "type": "object",
+      "required": ["steps", "wallClockSeconds", "tokens", "cost", "toolCalls"],
+      "properties": {
+        "steps": { "type": "integer", "minimum": 1 },
+        "wallClockSeconds": { "type": "number", "minimum": 0 },
+        "tokens": { "type": "integer", "minimum": 0 },
+        "cost": { "$ref": "#/$defs/BudgetCost" },
+        "toolCalls": { "type": "integer", "minimum": 0 },
+        "memoryBytes": { "type": ["integer", "null"], "minimum": 0, "default": null },
+        "thermalPolicyRef": { "type": ["string", "null"], "default": null },
+        "storageBytes": { "type": ["integer", "null"], "minimum": 0, "default": null },
+        "networkBytesTotal": { "type": ["integer", "null"], "minimum": 0, "default": null },
+        "deviceOperations": { "type": ["integer", "null"], "minimum": 0, "default": null },
+        "unknownBudgetDimensions": { "type": "object", "default": {}, "description": "§18: unknown budget dimensions are preserved on round trip and treated conservatively by runtimes that cannot enforce them." }
+      },
+      "additionalProperties": true,
+      "description": "§18: 'Minimum budget dimensions are steps, wall clock, model tokens, monetary cost, and tool calls.' These five are hard runtime boundaries, not estimates — LOOP-BUDGET-001 requires at least these for any node with external side effects."
+    },
+    "BindingSlot": {
+      "type": "object",
+      "required": ["slotId", "kind", "required"],
+      "properties": {
+        "slotId": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["MODEL", "REPOSITORY", "EXECUTION_TARGET", "DEVICE", "SECRET", "POLICY", "BUDGET"], "description": "§2.6's exact seven binding-target kinds ('models, repositories, execution targets, devices, secrets, policies, and budgets')." },
+        "description": { "type": ["string", "null"], "default": null },
+        "required": { "type": "boolean" },
+        "constraints": { "type": "object", "default": {}, "description": "Kind-specific constraint bag — e.g. for MODEL: required model-capability-vocabulary.v1.json tags; for EXECUTION_TARGET: permitted ExecutionTargetType values." }
+      },
+      "additionalProperties": true
+    },
+    "ExecutionTargetConstraints": {
+      "type": "object",
+      "required": ["permittedTargetTypes"],
+      "properties": {
+        "permittedTargetTypes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ExecutionTargetType" } },
+        "preferredTargetTypes": { "type": "array", "default": [], "items": { "$ref": "#/$defs/ExecutionTargetType" } },
+        "requiresAlwaysOnLocal": { "type": "boolean", "default": false, "description": "True forces LOCAL_ANDROID/ConnectivityKind.ALWAYS_ON_LOCAL (schemas/execution/target.schema.json) — no intermittent or remote target may satisfy this definition." }
+      },
+      "additionalProperties": true,
+      "description": "LOOP_COMPATIBILITY_CONTRACT.md's 'Execution target' axis (axis 6) at declaration time, cross-referenced not redefined."
+    },
+    "DistributionConstraints": {
+      "type": "object",
+      "properties": {
+        "allowedDistFlavors": {
+          "type": "array",
+          "minItems": 1,
+          "default": ["full", "play"],
+          "items": { "type": "string", "enum": ["full", "play"] },
+          "description": "CLAUDE.md's `dist` dimension. 'play' excludes overlay/screen-capture/USB-host — a definition whose requiredCapabilities imply one of those MUST NOT declare 'play' among allowedDistFlavors (a validator-time cross-check against capability-ids.v1.json, not enforced structurally here)."
+        },
+        "minAndroidApiLevel": { "type": ["integer", "null"], "minimum": 1, "default": null },
+        "requiredAbis": { "type": "array", "default": ["arm64-v8a"], "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": true,
+      "description": "LOOP_COMPATIBILITY_CONTRACT.md's 'Platform/distribution' axis (axis 7) at declaration time, cross-referenced not redefined."
+    },
+    "VerifierRef": {
+      "type": "object",
+      "required": ["verifierId", "requiredForSuccess"],
+      "properties": {
+        "verifierId": { "type": "string", "minLength": 1 },
+        "appliesToNodeIds": { "type": "array", "default": [], "items": { "type": "string", "minLength": 1 } },
+        "requiredForSuccess": { "type": "boolean" },
+        "description": { "type": ["string", "null"], "default": null }
+      },
+      "additionalProperties": true
+    },
+    "VerificationPolicy": {
+      "type": "object",
+      "required": ["requireVerificationForSuccess", "verifiers"],
+      "properties": {
+        "requireVerificationForSuccess": { "type": "boolean", "description": "§16 default policy: whether this definition ever claims SUCCEEDED_VERIFIED at all, or is expected to only ever reach SUCCEEDED_UNVERIFIED." },
+        "verifiers": { "type": "array", "default": [], "items": { "$ref": "#/$defs/VerifierRef" } }
+      },
+      "additionalProperties": true
+    },
+    "TerminalStateMapping": {
+      "type": "object",
+      "required": ["unverifiedSuccessAllowed", "nodeFailureEscalations"],
+      "properties": {
+        "unverifiedSuccessAllowed": { "type": "boolean", "description": "Whether SUCCEEDED_UNVERIFIED (§9) is an acceptable non-error outcome for this definition, or whether an unverified terminal MUST instead be treated as a failure by any consuming policy." },
+        "nodeFailureEscalations": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": ["nodeId", "onFailure"],
+            "properties": { "nodeId": { "type": "string", "minLength": 1 }, "onFailure": { "$ref": "#/$defs/FailureTerminalState" } },
+            "additionalProperties": true
+          },
+          "description": "Definition-level index of every node's own onFailureTerminalState (§4), so a runtime does not have to walk the full nodes[] array for a run-level summary. A validator MUST cross-check this against each NodeDefinition.onFailureTerminalState for consistency — this schema does not itself enforce that cross-array agreement."
+        }
+      },
+      "additionalProperties": true
+    },
+    "Provenance": {
+      "type": "object",
+      "required": ["sourceLocation", "projectRevision", "initiatingPrincipal"],
+      "properties": {
+        "sourceLocation": { "type": "string", "minLength": 1, "description": "FB-RAT-COM-008." },
+        "projectRevision": { "type": "string", "minLength": 1 },
+        "initiatingPrincipal": { "type": "string", "minLength": 1 },
+        "evidenceLinks": { "type": "array", "default": [], "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": true,
+      "description": "FB-RAT-COM-008 provenance minimum, duplicated inline per this repo's convention (mirrors schemas/execution/receipt.schema.json's `provenance`) rather than cross-file $ref'd."
+    },
+    "LicenseRef": {
+      "type": "object",
+      "properties": {
+        "spdxId": { "type": ["string", "null"], "default": null, "description": "e.g. 'Apache-2.0'. This repository's own license is itself LICENSE-PENDING (docs/non_ratified/LICENSE_PENDING.md) — a definition MAY declare its own spdxId independently of this repo's pending status." },
+        "licenseFileRef": { "type": ["string", "null"], "default": null, "description": "Package-relative path to a LICENSE file (floop-container-format.v1.json's optional LICENSE entry)." },
+        "customLicenseText": { "type": ["string", "null"], "default": null }
+      },
+      "anyOf": [
+        { "required": ["spdxId"], "properties": { "spdxId": { "type": "string", "minLength": 1 } } },
+        { "required": ["licenseFileRef"], "properties": { "licenseFileRef": { "type": "string", "minLength": 1 } } },
+        { "required": ["customLicenseText"], "properties": { "customLicenseText": { "type": "string", "minLength": 1 } } }
+      ],
+      "additionalProperties": true,
+      "description": "At least one of spdxId/licenseFileRef/customLicenseText MUST be non-null — feeds LOOP-LINEAGE-* checks (§2.9, LOOP_FORK_LINEAGE_CONTRACT.md)."
+    }
+  }
+}

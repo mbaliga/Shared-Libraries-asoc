@@ -98,6 +98,27 @@ data class CrashReport(
         const val STREAK_WINDOW_MS = 60_000L
 
         /**
+         * Upper bound on the stack trace kept in a report (characters). A StackOverflowError
+         * trace is ~1024 frames and a deeply wrapped one can be larger still; unbounded, that
+         * text is written on the crash path, re-read on every launch, put in a TextView and
+         * handed to a mail Intent. Past the cap the MIDDLE is dropped (see [capTrace]): the top
+         * frames say where it died and the tail carries the `Caused by:` chain.
+         */
+        const val MAX_TRACE_CHARS = 64_000
+
+        /** Upper bound on the exception message kept in a report (characters). */
+        const val MAX_MESSAGE_CHARS = 2_000
+
+        /** [trace] bounded to [max] characters, keeping the head and the tail and saying what was dropped. */
+        fun capTrace(trace: String, max: Int = MAX_TRACE_CHARS): String {
+            if (trace.length <= max) return trace
+            val head = max * 3 / 4
+            val tail = max - head
+            val dropped = trace.length - head - tail
+            return trace.substring(0, head) + "\n… [$dropped characters omitted] …\n" + trace.substring(trace.length - tail)
+        }
+
+        /**
          * The consecutive-crash count after a new crash at [nowMillis], given the previous
          * [prevCount] captured at [prevMillis]. Increments only when the new crash lands inside
          * [windowMs] of the last one; otherwise it's a fresh incident (count 1). A backwards
@@ -115,6 +136,85 @@ data class CrashReport(
         } else {
             1
         }
+
+        /**
+         * Hard ceiling on `CrashRecovery.maybeShowRecovery()` re-attempts for the SAME pending
+         * report, independent of [STREAK_WINDOW_MS]. The streak window alone can't catch a
+         * persistently-broken real app: a user who reopens it minutes apart, outside that 60s
+         * window, never accumulates a streak at all, yet "Continue -> relaunch -> crash ->
+         * recovery -> Continue" can still repeat forever. After this many consecutive
+         * `maybeShowRecovery()` calls still find the identical report pending, it is
+         * auto-cleared and the real app is let through instead.
+         */
+        const val MAX_RECOVERY_ATTEMPTS = 3
+
+        /**
+         * The next `maybeShowRecovery()` attempt count for [identity], given the [prevIdentity] /
+         * [prevCount] last recorded. A different identity is a genuinely new crash, not a
+         * continuation of the last one, so it restarts the count at 1 rather than inheriting an
+         * unrelated (already-resolved) report's ceiling. Pure and side-effect-free, mirroring
+         * [nextStreakCount], so the ceiling rule itself is unit-testable without Android.
+         */
+        fun nextAttemptCount(prevIdentity: String?, prevCount: Int, identity: String): Int =
+            if (prevIdentity != null && prevIdentity == identity) prevCount + 1 else 1
+
+        /**
+         * True once [attemptCount] has outlived [maxAttempts] — the SAME report has now exceeded
+         * its budget of recovery attempts and must be auto-cleared rather than shown again.
+         */
+        fun attemptCeilingExceeded(attemptCount: Int, maxAttempts: Int = MAX_RECOVERY_ATTEMPTS): Boolean =
+            attemptCount > maxAttempts
+
+        /**
+         * A stable identity for a persisted report, used only to tell "the same crash, still
+         * unresolved" apart from "a new one just landed" across repeated `maybeShowRecovery()`
+         * calls. [whenMillis] is preferred when present — cheap, stable, and already unique per
+         * capture — and a decode that doesn't carry one (a legacy or foreign-format file) falls
+         * back to hashing the raw persisted text, so this never throws and a differently-worded
+         * report is never mistaken for the same one.
+         */
+        fun identityOf(whenMillis: Long?, rawText: String): String =
+            whenMillis?.toString() ?: rawText.hashCode().toString()
+
+        // --- crash history (CrashRecovery.history / clearHistory / removeHistoryEntry) ---
+
+        /**
+         * How many past crashes `CrashRecovery.history` remembers before the oldest ones are
+         * pruned on every new capture — a crash-reporting feature must never become its own
+         * unbounded-storage leak.
+         */
+        const val HISTORY_CAP = 50
+
+        /**
+         * The on-disk file name for one crash-history entry — named by its capture time so a
+         * newest-first listing is just a numeric sort over file names, and the format needs no
+         * changes to [decode]: each history file holds the exact same [encode] text already
+         * used for the single "pending" slot.
+         */
+        fun historyFileName(whenMillis: Long): String = "$whenMillis.txt"
+
+        /**
+         * The reverse of [historyFileName]. Null for anything that doesn't match that shape — a
+         * foreign file dropped into the same directory, say — so a listing can filter those out
+         * instead of crashing on them.
+         */
+        fun historyWhenMillisOf(fileName: String): Long? =
+            fileName.takeIf { it.endsWith(".txt") }
+                ?.removeSuffix(".txt")
+                ?.takeIf { it.isNotEmpty() }
+                ?.toLongOrNull()
+
+        /**
+         * Which capture times among [whenMillisList] (every file currently in the history
+         * directory) should be pruned once there are more than [cap] of them — the oldest ones
+         * beyond the cap. Pure and side-effect-free, mirroring [nextStreakCount] /
+         * [nextAttemptCount], so the bounding rule itself is unit-testable without touching
+         * disk; `CrashRecovery.appendHistory` is the only caller, and it just deletes whatever
+         * file names these capture times map to.
+         */
+        fun historyEntriesToPrune(whenMillisList: List<Long>, cap: Int = HISTORY_CAP): List<Long> =
+            if (whenMillisList.size <= cap) emptyList()
+            else whenMillisList.sortedDescending().drop(cap)
 
         /** First line worth reading: `ExceptionType: message` (message omitted if blank). */
         fun headlineOf(throwable: Throwable): String {
@@ -167,16 +267,24 @@ data class CrashReport(
             threadName: String,
             throwable: Throwable,
             device: DeviceInfo,
-        ): CrashReport = CrashReport(
-            appLabel = appLabel,
-            whenMillis = whenMillis,
-            threadName = threadName,
-            excType = typeOf(throwable),
-            excMessage = throwable.message?.takeIf { it.isNotBlank() },
-            plainLanguage = plainLanguageFor(throwable),
-            device = device,
-            trace = stackTraceOf(throwable),
-        )
+            sanitizer: ((String) -> String)? = null,
+        ): CrashReport {
+            val clean: (String) -> String = { text ->
+                // A sanitizer that throws must not lose the report, nor leak the raw text:
+                // fall back to dropping the text it could not clean.
+                if (sanitizer == null) text else runCatching { sanitizer(text) }.getOrDefault("[redaction failed]")
+            }
+            return CrashReport(
+                appLabel = appLabel,
+                whenMillis = whenMillis,
+                threadName = threadName,
+                excType = typeOf(throwable),
+                excMessage = throwable.message?.takeIf { it.isNotBlank() }?.let(clean)?.take(MAX_MESSAGE_CHARS),
+                plainLanguage = plainLanguageFor(throwable),
+                device = device,
+                trace = capTrace(clean(stackTraceOf(throwable))),
+            )
+        }
 
         /**
          * A report for a process death the JVM handler never saw — a native crash or an ANR
@@ -192,12 +300,17 @@ data class CrashReport(
             description: String?,
             whenMillis: Long,
             device: DeviceInfo,
-        ): CrashReport = CrashReport(
+            sanitizer: ((String) -> String)? = null,
+        ): CrashReport {
+            val detail = description?.takeIf { it.isNotBlank() }
+                ?.let { d -> if (sanitizer == null) d else runCatching { sanitizer(d) }.getOrDefault("[redaction failed]") }
+                ?.take(MAX_MESSAGE_CHARS)
+            return CrashReport(
             appLabel = appLabel,
             whenMillis = whenMillis,
             threadName = "?",
             excType = reasonLabel,
-            excMessage = description?.takeIf { it.isNotBlank() },
+            excMessage = detail,
             plainLanguage = when {
                 reasonLabel.startsWith("Native") ->
                     "$appLabel was stopped by a crash inside one of its native components — " +
@@ -211,9 +324,10 @@ data class CrashReport(
                 append("No Java stack trace exists for this kind of death.\n")
                 append("Recorded by Android (ApplicationExitInfo):\n")
                 append("  reason: ").append(reasonLabel).append('\n')
-                append("  detail: ").append(description?.takeIf { it.isNotBlank() } ?: "(none recorded)")
+                append("  detail: ").append(detail ?: "(none recorded)")
             },
-        )
+            )
+        }
 
         /**
          * Decode [encode]'s v2 format into a display-ready [Decoded] with every structured

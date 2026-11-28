@@ -77,3 +77,26 @@ include(":modelbench-ui")
 // Same posture as :crash-recovery: plain android.content.SharedPreferences, no other deps, and
 // deliberately no UI — the mode-picker itself lives in Hyle (com.asystemofcells.hyle).
 include(":interaction-mode")
+// The opt-in feedback utility for experimental features. No backend and no telemetry exist in
+// this constellation, so it composes a user-readable draft and hands delivery to a chooser the
+// user launches — it cannot send anything itself. Zero Hyle dependency, no Compose: each app
+// renders its own prompt.
+include(":feedback")
+
+// Portable JSON schemas shared by Baseline, Crocodyl and Ebbflow. Pure JVM/resources;
+// implementations remain in their owning products.
+include(":evidence-schema")
+
+// NOTE: `word-graph/`, `multilang-dict/` and `stickers/` are intentionally absent from this
+// file.
+//
+// Each is a plain asset package — graph.html + vendored AntV G6 + WordNet-derived TSVs;
+// bundled multilingual dictionary + KanjiVG data; die-cut sticker PNGs + manifest.json —
+// not a Gradle project, and consumers take each by pointing an asset source-set at its
+// directory rather than by `includeBuild` + a com.asystemofcells coordinate. That is deliberate: an
+// Android library module would put THIS build's AGP into every consumer's composite build
+// graph and force the lockstep above (currently 8.9.1). Clackpad, their first consumer, is
+// pinned to AGP 8.13.2 — the floor for compileSdk 36, which Play requires for updates from
+// 2026-08-31 — so under the lockstep it could not take any of these at all. Shipping no
+// plugin sidesteps the whole constraint. See word-graph/README.md for the full reasoning,
+// which applies unchanged to the other two.

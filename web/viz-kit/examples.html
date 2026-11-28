@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--page-->
+<title>Viz Kit Dashboards</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500&display=swap">
+<style>
+/* Layout: one dashboard in a device frame. Only the three loud cards are boxed; every other chart sits on the screen
+   itself, held apart by space. The frame is a container, so the same markup reflows for phone, tablet and desktop. */
+:root {
+  --page: #d9d7d0; --screen: #edebe6; --fg: #111110; --muted: #5d5b55; --line: rgba(17, 17, 16, .13);
+  --display: "Outfit", "Avenir Next", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #000000; --screen: #0b0b0e; --fg: #ecebe6; --muted: #9a988f; --line: rgba(236, 235, 230, .16); color-scheme: dark } }
+:root[data-theme="dark"] { --page: #000000; --screen: #0b0b0e; --fg: #ecebe6; --muted: #9a988f; --line: rgba(236, 235, 230, .16); color-scheme: dark }
+
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body { margin: 0; background: var(--page); color: var(--fg); font: 300 16px/1.45 var(--display) }
+.wrap { margin: 0 auto; padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.pagehead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 24px; margin: 0 auto 18px; max-width: 1440px }
+h1 { margin: 0; font-weight: 300; font-size: clamp(1.9rem, 5vw, 2.6rem); line-height: 1; letter-spacing: -.02em }
+.sub { margin: 8px 0 0; color: var(--muted); font-size: .8rem }
+.ctl { display: flex; flex-wrap: wrap; gap: 8px }
+.seg { display: inline-flex; padding: 4px; border-radius: 999px; border: 1px solid var(--line); gap: 2px }
+.seg button { font: inherit; font-size: .78rem; font-weight: 400; color: var(--fg); background: none; border: 0; padding: 7px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--page) }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid currentColor; outline-offset: 2px }
+
+.stage { overflow-x: auto; padding-bottom: 6px }
+.frame { margin: 0 auto; background: var(--screen); border-radius: 30px; overflow: clip; container: frame / inline-size; box-shadow: 0 0 0 1px var(--line) }
+.frame[data-device="phone"] { width: min(390px, 100%) }
+.frame[data-device="tablet"] { width: 820px }
+.frame[data-device="desktop"] { width: 100%; min-width: 1024px; max-width: 1440px }
+
+/* ── the app inside the frame ── */
+.rail, .tabs { display: none }
+.main { padding: 20px 16px 26px; min-width: 0 }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; margin-bottom: 18px }
+.top h2 { margin: 0; font-weight: 300; font-size: 1.9rem; line-height: 1.05; letter-spacing: -.02em }
+.top h2 span { color: var(--muted); font-size: .8rem; letter-spacing: 0; margin-left: .5em; white-space: nowrap }
+.tabs { gap: 26px }
+.tabs button, .rail button, .bar button { font: inherit; color: var(--fg); background: none; border: 0; cursor: pointer }
+.tabs button { font-size: .9rem; padding: 4px 0; opacity: .55 }
+.tabs button[aria-current="page"] { opacity: 1; font-weight: 400 }
+.bar { position: sticky; bottom: 0; z-index: 4; display: flex; justify-content: space-around; background: var(--screen); padding: 8px 8px calc(10px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -10px 18px -6px var(--screen) }
+.bar button { display: grid; justify-items: center; gap: 3px; font-size: .68rem; padding: 6px 16px; border-radius: 16px; opacity: .55 }
+.bar button[aria-current="page"] { opacity: 1; font-weight: 400; background: color-mix(in srgb, var(--fg) 8%, transparent) }
+.rail { flex-direction: column; align-items: center; gap: 8px; padding: 24px 0; position: sticky; top: 0; align-self: start }
+.rail .mark { margin-bottom: 22px }
+.rail button { width: 46px; height: 46px; border-radius: 16px; display: grid; place-items: center; opacity: .5 }
+.rail button[aria-current="page"] { opacity: 1; background: var(--fg); color: var(--screen) }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px 14px }
+.dc { --g: var(--screen); --i: var(--fg); min-width: 0; display: flex; flex-direction: column; gap: 12px; color: var(--i) }
+.dc.tone { background: var(--g); border-radius: 26px; padding: 16px 20px 20px; overflow: hidden }
+.dc.flush { padding-bottom: 0 }
+.dc.tone .body { justify-content: space-between }
+.dc.flush .body { justify-content: flex-end }
+.dc h3 { margin: 0; font-size: 1rem; font-weight: 400 }
+.dc h3 small { font-size: .72rem; font-weight: 300; opacity: .7; margin-left: .5em }
+.body { display: flex; flex-direction: column; gap: 14px; flex: 1; min-width: 0 }
+.plot { min-width: 0 }
+.row { display: flex; flex-wrap: wrap; gap: 16px 26px; align-items: flex-end }
+.row > * { flex: 1 1 170px; min-width: 0 }
+.fanwrap { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: end }
+.fanwrap .legend { padding-bottom: 20px }
+.fanwrap .plot { height: 180px; margin-right: -20px }
+.scroll { overflow-x: auto }
+.scroll > .plot { min-width: 560px }
+table { border-collapse: collapse; width: 100%; font-size: .82rem; font-variant-numeric: tabular-nums }
+th, td { text-align: left; font-weight: 300; padding: 10px 14px 10px 0; white-space: nowrap }
+thead th { font-size: .72rem; opacity: .65; padding-bottom: 4px }
+tbody tr + tr td, tbody tr + tr th { border-top: 1px solid var(--line) }
+tbody th { font-weight: 400 }
+td.num, th.num { text-align: right }
+td .dot { vertical-align: -2px; margin-right: 7px }
+.dc:not(.tone) .fanwrap .plot { margin-right: 0 }
+td .mini { display: inline-block; width: 84px; vertical-align: middle; margin-right: 8px }
+.opt { display: none }
+
+@container frame (min-width: 700px) {
+  .main { padding: 28px 30px 34px }
+  .top { margin-bottom: 24px }
+  .top h2 { font-size: 2.5rem }
+  .tabs { display: flex }
+  .bar { display: none }
+  .grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 30px 16px }
+  .dc { grid-column: span var(--t, 6) }
+  .opt { display: table-cell }
+}
+@container frame (min-width: 1000px) {
+  .app { display: grid; grid-template-columns: 78px minmax(0, 1fr) }
+  .rail { display: flex }
+  .tabs { display: none }
+  .main { padding: 30px 34px 38px 8px }
+  .top h2 { font-size: 3rem }
+  .grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 34px 18px }
+  .dc { grid-column: span var(--d, 12) }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+<!--/page-->
+</head>
+<body>
+<!--page-->
+<div class="wrap">
+  <div class="pagehead">
+    <div>
+      <h1>Dashboards</h1>
+      <p class="sub">ASOC.viz <span id="ver"></span> / example data</p>
+    </div>
+    <div class="ctl">
+      <div class="seg" role="group" aria-label="Device" id="devices">
+        <button type="button" id="dev-phone" data-device="phone">Phone</button>
+        <button type="button" id="dev-tablet" data-device="tablet">Tablet</button>
+        <button type="button" id="dev-desktop" data-device="desktop">Desktop</button>
+      </div>
+      <div class="seg" role="group" aria-label="Grounds" id="sets">
+        <button type="button" id="set-reference" data-set="reference">Reference</button>
+        <button type="button" id="set-hyle" data-set="hyle">Hyle</button>
+        <button type="button" id="set-mono" data-set="mono">Mono</button>
+      </div>
+    </div>
+  </div>
+  <div class="stage"><div class="frame" id="frame"></div></div>
+</div>
+
+<script src="../orrery-kit/cells.js"></script>
+<script src="../orrery-kit/brands.js"></script>
+<script src="../orrery-kit/graph.js"></script>
+<script src="../orrery-kit/rose.js"></script>
+<script src="../orrery-kit/gantt.js"></script>
+<script src="viz.js"></script>
+<script src="viz-charts.js"></script>
+<script>
+(function () {
+  var V = ASOC.viz, live = [], frame = document.getElementById('frame');
+  var NAMES = { release: 'Release desk', training: 'Training', studio: 'Studio' }, ORDER = ['release', 'training', 'studio'];
+  var page = NAMES[location.hash.slice(1)] ? location.hash.slice(1) : 'release', set = 'reference';
+  var device = window.innerWidth < 700 ? 'phone' : window.innerWidth < 1100 ? 'tablet' : 'desktop';
+  var SETS = {
+    reference: { A: V.tones.sun, B: V.tones.ember, C: V.tones.night },
+    hyle: { A: V.tones.radium, B: V.tones.violet, C: { ground: '#000000', ink: '#ecebe6', accent: '#ccec75' } },
+    mono: { A: { ground: '#111110', ink: '#f2efe9' }, B: null, C: null }
+  };
+  var ICONS = {
+    release: '<path d="M3 13V8M8 13V3M13 13V6"/>',
+    training: '<path d="M1 9h3l2-5 3 9 2-4h4"/>',
+    studio: '<path d="M4 4.5L12 5.5L8 12Z"/><circle cx="4" cy="4.5" r="1.7" fill="currentColor"/><circle cx="12" cy="5.5" r="1.7" fill="currentColor"/><circle cx="8" cy="12" r="1.7" fill="currentColor"/>'
+  };
+  /* a state is a shape as well as a word: full, half, empty */
+  var DOT = { 'Live': dot('<circle cx="6" cy="6" r="5" fill="currentColor"/>'), 'Rolling out': dot('<circle cx="6" cy="6" r="4.3"/><path d="M6 1.7a4.3 4.3 0 0 1 0 8.6z" fill="currentColor"/>'), 'Halted': dot('<circle cx="6" cy="6" r="4.3"/>') };
+  function dot(inner) { return '<svg class="dot" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">' + inner + '</svg>'; }
+  function icon(k) { return '<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[k] + '</svg>'; }
+  function h(tag, cls, parent, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; if (parent) parent.appendChild(e); return e; }
+  function mix(a, b) { var o = {}, k; for (k in a) o[k] = a[k]; for (k in b) o[k] = b[k]; return o; }
+  function keep(api) { live.push(api); return api; }
+  var seed = 23; function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+  function gauss() { return (rnd() + rnd() + rnd() + rnd() - 2) / 0.58; }
+  function iso(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+
+  /* a card: boxed and loud when it has a slot, otherwise bare on the screen */
+  function card(grid, o) {
+    var el = h('section', 'dc' + (o.slot ? ' tone' : '') + (o.flush ? ' flush' : ''), grid), t = SETS[set][o.slot], cs = getComputedStyle(document.documentElement);
+    if (o.slot && !t) el.className = 'dc';
+    if (!t) t = { ground: cs.getPropertyValue('--screen').trim(), ink: cs.getPropertyValue('--fg').trim() };
+    el.style.setProperty('--d', o.d); el.style.setProperty('--t', o.t); el.style.setProperty('--g', t.ground); el.style.setProperty('--i', t.ink);
+    var title = h('h3', '', el, o.title); if (o.small) h('small', '', title, o.small);
+    var body = h('div', 'body', el);
+    return { el: el, body: body, tone: { ink: t.ink, ground: t.ground, accent: t.accent || (o.slot === 'B' && SETS[set].A ? SETS[set].A.ground : null) },
+      plot: function (height, cls, parent) { var p = h('div', 'plot' + (cls ? ' ' + cls : ''), parent || body); if (height) p.style.height = height + 'px'; return p; },
+      legend: function (items, opts) { var l = h('div', 'legend', body); V.legend(l, items, mix(this.tone, mix({ row: true }, opts))); return l; } };
+  }
+
+  /* ── Release desk ─────────────────────────────────────────────────────────────────────────────────────────── */
+  function release(grid) {
+    var days = [], c, i;
+    for (i = 0; i < 30; i++) days.push(new Date(2026, 9, 21 + i).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }));
+    c = card(grid, { title: 'Builds', small: 'this week', slot: 'A', flush: true, d: 5, t: 3 });
+    keep(V.steps(c.plot(190), [{ label: 'Failed', value: 2 }, { label: 'Flaky', value: 5 }, { label: 'Running', value: 11 }, { label: 'Passed', value: 86 }], c.tone));
+
+    var src = [{ label: 'Search', value: 48, fill: 'fade' }, { label: 'Referral', value: 27, fill: 'dots' }, { label: 'Direct', value: 16, fill: 'hatch' }, { label: 'Campaign', value: 9, fill: 'solid' }];
+    c = card(grid, { title: 'Installs', small: '% by source', slot: 'B', flush: true, d: 4, t: 3 });
+    var fw = h('div', 'fanwrap', c.body); V.legend(h('div', 'legend', fw), src, c.tone);
+    keep(V.fan(h('div', 'plot', fw), src, mix(c.tone, { sweep: 90, callout: '18.4K' })));
+
+    c = card(grid, { title: 'Stability', slot: 'C', d: 3, t: 6 });
+    var row = h('div', 'row', c.body);
+    V.stat(h('div', '', row), { label: 'Crash-free sessions', value: '99.4%', delta: 0.3, deltaUnit: ' pts', vs: 'vs last release' }, c.tone);
+    keep(V.spark(h('div', 'plot', row), [98.6, 98.9, 98.7, 99.0, 98.9, 99.1, 99.0, 99.2, 99.1, 99.3, 99.2, 99.3, 99.5, 99.4], mix(c.tone, { height: 44, label: 'Crash-free sessions, last 14 days' })));
+    keep(V.meter(h('div', 'plot', row), { value: 62, max: 100, label: '% rolled out' }, c.tone));
+
+    var plat = ['Android', 'Web', 'Watch'].map(function (label, k) { var v = 14 - k * 4; return { label: label, values: days.map(function (_, j) { v = Math.max(2, v + (rnd() - 0.42) * 3); return Math.round(v + Math.sin(j / 4 + k) * 2 + 3); }) }; });
+    c = card(grid, { title: 'Sessions', small: 'thousands per day', d: 8, t: 6 }); c.legend(plat);
+    keep(V.area(c.plot(220), plat, mix(c.tone, { x: days, xTitle: 'Day' })));
+
+    c = card(grid, { title: 'Acquisition', small: 'last 30 days', d: 4, t: 3 });
+    keep(V.funnel(c.plot(), [{ label: 'Store views', value: 61200 }, { label: 'Installs', value: 18400 }, { label: 'First open', value: 15100 }, { label: 'Week two', value: 6900 }, { label: 'Paid', value: 1240 }], c.tone));
+
+    c = card(grid, { title: 'Against target', d: 4, t: 3 });
+    keep(V.bullet(c.plot(), [{ label: 'Cold start, ms', value: 410, target: 350, ranges: [300, 500, 800] }, { label: 'Crash-free, %', value: 99.4, target: 99.5, ranges: [98, 99, 100] }, { label: 'Download, MB', value: 18, target: 20, ranges: [15, 25, 40] }], c.tone));
+
+    var cal = []; for (i = 0; i < 126; i++) { var d = new Date(2026, 6, 16 + i), wk = d.getDay() === 0 || d.getDay() === 6; cal.push({ date: iso(d), value: rnd() < (wk ? 0.55 : 0.12) ? 0 : Math.round(rnd() * rnd() * (wk ? 8 : 22)) }); }
+    c = card(grid, { title: 'Commits', small: 'eighteen weeks', d: 4, t: 3 });
+    keep(V.calendar(c.plot(), cal, mix(c.tone, { unit: 'Commits' })));
+
+    var q = { categories: ['Q1', 'Q2', 'Q3', 'Q4'], series: [{ label: 'Features', values: [6, 9, 8, 11] }, { label: 'Fixes', values: [9, 7, 12, 8] }, { label: 'Hotfixes', values: [2, 1, 3, 1] }] };
+    c = card(grid, { title: 'Releases', small: 'by quarter', d: 4, t: 3 }); c.legend(q.series);
+    keep(V.columns(c.plot(170), q, mix(c.tone, { mode: 'stack' })));
+
+    c = card(grid, { title: 'Versions', d: 12, t: 6 });
+    var tb = h('table', '', h('div', 'scroll', c.body)), tr = h('tr', '', h('thead', '', tb)), body = h('tbody', '', tb);
+    [['Version'], ['Released', 'opt'], ['Status'], ['Crash-free', 'num'], ['Adoption'], ['Download', 'num opt']].forEach(function (x) { h('th', x[1] || '', tr, x[0]).scope = 'col'; });
+    [['4.2.0', '17 Nov', 'Rolling out', '99.4%', 62, '18.2 MB'], ['4.1.3', '3 Nov', 'Live', '99.2%', 100, '18.0 MB'], ['4.1.2', '21 Oct', 'Live', '99.1%', 100, '17.9 MB'], ['4.1.0', '6 Oct', 'Halted', '97.8%', 14, '17.6 MB'], ['4.0.4', '18 Sep', 'Live', '99.0%', 100, '17.1 MB']].forEach(function (r) {
+      tr = h('tr', '', body); h('th', '', tr, r[0]).scope = 'row'; h('td', 'opt', tr, r[1]); var st = h('td', '', tr); st.innerHTML = DOT[r[2]]; st.appendChild(document.createTextNode(r[2])); h('td', 'num', tr, r[3]);
+      var td = h('td', '', tr); keep(V.meter(h('span', 'mini', td), { value: r[4], max: 100, label: 'Adoption of ' + r[0] }, mix(c.tone, { plain: true }))); td.appendChild(document.createTextNode(r[4] + '%'));
+      h('td', 'num opt', tr, r[5]);
+    });
+  }
+
+  /* ── Training: an archer's block ──────────────────────────────────────────────────────────────────────────── */
+  function training(grid) {
+    var c, i;
+    c = card(grid, { title: 'This week', small: 'minutes', slot: 'A', flush: true, d: 5, t: 6 });
+    keep(V.steps(c.plot(190), [['Mon', 45], ['Tue', 60], ['Wed', 20], ['Thu', 75], ['Fri', 40], ['Sat', 110], ['Sun', 30]].map(function (x) { return { label: x[0], value: x[1], fill: x[1] === 110 ? 'fade' : 'solid' }; }), mix(c.tone, { gap: 6 })));
+
+    c = card(grid, { title: 'Readiness', slot: 'C', d: 3, t: 3 });
+    keep(V.gauge(c.plot(170), { value: 78, max: 100, label: 'rested, steady' }, c.tone));
+
+    var kinds = [{ label: 'Shooting', value: 212, fill: 'fade' }, { label: 'Strength', value: 96, fill: 'dots' }, { label: 'Mobility', value: 44, fill: 'hatch' }, { label: 'Cardio', value: 28, fill: 'solid' }];
+    c = card(grid, { title: 'Time', small: 'minutes by kind', slot: 'B', flush: true, d: 4, t: 3 });
+    var fw = h('div', 'fanwrap', c.body); V.legend(h('div', 'legend', fw), kinds, c.tone);
+    keep(V.fan(h('div', 'plot', fw), kinds, mix(c.tone, { sweep: 90, callout: '380 min' })));
+
+    var hours = [{ label: 'Shooting', values: [0, 0, 0, 0, 0, 5, 30, 55, 40, 10, 0, 0, 0, 0, 0, 10, 35, 60, 45, 15, 0, 0, 0, 0] }, { label: 'Strength', values: [0, 0, 0, 0, 0, 0, 10, 15, 5, 0, 0, 0, 0, 0, 0, 0, 10, 20, 30, 25, 5, 0, 0, 0] }];
+    c = card(grid, { title: 'When', small: 'minutes by hour', d: 4, t: 3 }); c.legend(hours, { shades: true });
+    keep(V.rose(c.plot(), hours, mix(c.tone, { height: 250 })));
+
+    var form = { axes: ['Stance', 'Draw', 'Anchor', 'Aim', 'Release', 'Follow-through'], max: 10, series: [{ label: 'This month', values: [8, 7, 9, 6, 7, 8] }, { label: 'Last month', values: [7, 6, 7, 6, 5, 6] }] };
+    c = card(grid, { title: 'Form', small: 'out of 10', d: 4, t: 3 }); c.legend(form.series, { lines: true });
+    keep(V.radar(c.plot(250), form, c.tone));
+
+    var cal = []; for (i = 0; i < 126; i++) { var d = new Date(2026, 6, 16 + i); cal.push({ date: iso(d), value: rnd() < 0.24 ? 0 : Math.round(20 + rnd() * rnd() * 110) }); }
+    var groups = [['18 m', 4.2, 1.1], ['30 m', 8.5, 2.2], ['50 m', 17, 4.5], ['70 m', 26, 7]].map(function (g) { var v = []; for (var k = 0; k < 60; k++) v.push(+Math.max(1, g[1] + gauss() * g[2] + (rnd() < 0.05 ? g[2] * 4 : 0)).toFixed(1)); return { label: g[0], values: v }; });
+    c = card(grid, { title: 'Sessions', small: 'eighteen weeks', d: 4, t: 6 });
+    keep(V.calendar(c.plot(), cal, mix(c.tone, { unit: 'Minutes' })));
+    keep(V.box(c.plot(), groups, c.tone));
+    h('h3', '', c.body, 'Group size').appendChild(h('small', '', null, 'cm by distance'));
+    c.body.insertBefore(c.body.lastChild, c.body.children[1]);
+
+    var wk = []; for (i = 1; i <= 12; i++) wk.push('W' + i);
+    var vol = [{ label: 'This block', values: [420, 460, 510, 380, 540, 590, 640, 470, 660, 720, 760, 540] }, { label: 'Last block', values: [380, 410, 440, 350, 470, 500, 530, 400, 540, 580, 600, 430] }];
+    c = card(grid, { title: 'Arrows', small: 'per week', d: 12, t: 6 }); c.legend(vol, { lines: true });
+    keep(V.line(c.plot(210), vol, mix(c.tone, { x: wk, xTitle: 'Week', grid: true })));
+  }
+
+  /* ── Studio ───────────────────────────────────────────────────────────────────────────────────────────────── */
+  function studio(grid) {
+    var c, i, row;
+    var proj = [{ label: 'Atlas', value: 16.5 }, { label: 'Birch', value: 9 }, { label: 'Cinder', value: 6.5 }, { label: 'Dune', value: 4 }, { label: 'Other', value: 2.5 }];
+    c = card(grid, { title: 'Hours', small: 'this week', slot: 'A', d: 5, t: 6 });
+    V.stat(h('div', '', c.body), { label: 'Logged', value: '38.5', delta: 4.5, deltaUnit: ' h', vs: 'vs last week' }, c.tone);
+    keep(V.stack(c.plot(), proj, mix(c.tone, { unit: 'Hours' })));
+
+    c = card(grid, { title: 'Capacity', slot: 'C', d: 3, t: 3 });
+    keep(V.spark(c.plot(), [6, 7.5, 8, 5, 0, 0, 7, 8, 9, 6.5, 4, 0, 1, 7], mix(c.tone, { height: 56, label: 'Hours per day, last 14 days' })));
+    keep(V.meter(c.plot(), { value: 31, max: 40, label: 'slots booked' }, c.tone));
+
+    c = card(grid, { title: 'Open tasks', small: 'this sprint', slot: 'B', d: 4, t: 3 });
+    keep(V.waterfall(c.plot(170), [{ label: 'Start', value: 64, total: true }, { label: 'Added', value: 21 }, { label: 'Done', value: -33 }, { label: 'Dropped', value: -6 }, { label: 'Now', total: true }], c.tone));
+
+    var days = [], used = [3, 4, 4, 2, 0, 0, 3, 4, 5, 3, 2, 0, 0, 1];
+    for (i = 0; i < 14; i++) { var d = new Date(2026, 10, 19 + i), we = d.getDay() === 0 || d.getDay() === 6; days.push({ k: iso(d), cap: we ? 0 : 4, used: we ? 0 : used[i] || 3 }); }
+    c = card(grid, { title: 'Runway', small: 'next two weeks', d: 12, t: 6 });
+    keep(V.gantt(c.plot(0, '', h('div', 'scroll', c.body)), { days: days, rows: [
+      { id: 'beta', label: 'Beta build', date: '24 Nov', dueIdx: 5, kind: 'hard', fits: true, slots: 7, items: [{ id: 'b1', kind: 'task', title: 'Crash triage', runs: [{ a: 0, b: 1, slots: 4 }] }, { id: 'b2', kind: 'review', title: 'Release review', runs: [{ a: 4, b: 4, slots: 3 }] }] },
+      { id: 'store', label: 'Store listing', date: '27 Nov', dueIdx: 8, kind: 'send', fits: true, slots: 6, items: [{ id: 's1', kind: 'brief', title: 'Screenshots brief', runs: [{ a: 1, b: 1, slots: 2 }] }, { id: 's2', kind: 'task', title: 'Listing copy', runs: [{ a: 5, b: 6, slots: 4 }] }] },
+      { id: 'audit', label: 'Security audit', date: '30 Nov', dueIdx: 11, kind: 'plan', fits: false, late: 2, slots: 9, items: [{ id: 'a1', kind: 'task', title: 'Dependency sweep', runs: [{ a: 7, b: 8, slots: 4 }] }, { id: 'a2', kind: 'gate', title: 'Fix findings', runs: [{ a: 11, b: 13, slots: 5 }] }] }
+    ] }, c.tone));
+
+    var groups = { shell: ['app', 'nav', 'settings', 'theme'], data: ['store', 'schema', 'cache', 'export'], search: ['index', 'query', 'rank', 'facets'], sync: ['queue', 'merge', 'keys'] }, hub = { shell: 'app', data: 'store', search: 'index', sync: 'queue' }, brand = { app: 'Kotlin', store: 'SQLite', index: 'Android', queue: 'Gradle' }, nodes = [], links = [];
+    Object.keys(groups).forEach(function (g) { groups[g].forEach(function (id) { nodes.push({ id: id, group: g, size: id === hub[g] ? 2.4 : 1, rings: id === hub[g] ? 1 : 0, brand: brand[id] }); if (id !== hub[g]) links.push({ a: hub[g], b: id }); }); });
+    [['app', 'store'], ['app', 'index'], ['store', 'queue'], ['index', 'store'], ['merge', 'schema'], ['query', 'cache'], ['nav', 'query'], ['export', 'keys']].forEach(function (l) { links.push({ a: l[0], b: l[1] }); });
+    c = card(grid, { title: 'Modules', small: 'and what they import', d: 7, t: 6 });
+    var leg = h('div', 'legend', c.body), g = keep(V.graph(c.plot(360), { nodes: nodes, links: links }, mix(c.tone, { brands: true, directed: true, minimap: false })));
+    V.legend(leg, g.legend(), mix(c.tone, { row: true }));
+
+    c = card(grid, { title: 'Where hours go', d: 5, t: 6 });
+    keep(V.sankey(c.plot(330), { nodes: ['Atlas', 'Birch', 'Cinder', 'Build', 'Design', 'Review', 'Admin'].map(function (id) { return { id: id }; }), links: [['Atlas', 'Build', 9], ['Atlas', 'Design', 4.5], ['Atlas', 'Review', 3], ['Birch', 'Build', 4], ['Birch', 'Design', 3.5], ['Birch', 'Admin', 1.5], ['Cinder', 'Build', 3], ['Cinder', 'Review', 2], ['Cinder', 'Admin', 1.5]].map(function (l) { return { a: l[0], b: l[1], value: l[2] }; }) }, mix(c.tone, { unit: 'Hours' })));
+
+    var cols = [], vals = []; for (i = 0; i < 24; i++) cols.push((i < 10 ? '0' : '') + i);
+    for (row = 0; row < 7; row++) { var r = []; for (i = 0; i < 24; i++) { var day = Math.exp(-Math.pow(i - 11, 2) / 18) + 0.8 * Math.exp(-Math.pow(i - 21, 2) / 6); r.push(i < 6 ? 0 : Math.round(day * (row > 4 ? 14 : 50) * (0.5 + rnd() * 0.6))); } vals.push(r); }
+    c = card(grid, { title: 'Focus', small: 'minutes by hour and weekday', d: 7, t: 6 });
+    keep(V.halftone(c.plot(), { rows: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], cols: cols, values: vals }, c.tone));
+
+    c = card(grid, { title: 'Source', small: 'thousand lines', d: 5, t: 6 });
+    keep(V.bars(c.plot(), [{ label: 'Kotlin', value: 184, brand: 'Kotlin' }, { label: 'TypeScript', value: 96, brand: 'TypeScript' }, { label: 'Python', value: 41, brand: 'Python' }, { label: 'Rust', value: 33, brand: 'Rust' }], mix(c.tone, { brands: true, unit: 'kLOC' })));
+  }
+  var PAGES = { release: release, training: training, studio: studio };
+
+  /* ── the shell: a rail on desktop, tabs on tablet, a bar on phone — all three in the markup, CSS shows one ── */
+  function nav(cls, parent, withText, withIcon) {
+    var n = h('nav', cls, parent); n.setAttribute('aria-label', 'Dashboards');
+    ORDER.forEach(function (k) {
+      var b = h('button', '', n); b.type = 'button';
+      if (withIcon) b.innerHTML = icon(k);
+      if (withText) h('span', '', b, NAMES[k]); else b.setAttribute('aria-label', NAMES[k]);
+      if (k === page) b.setAttribute('aria-current', 'page');
+      b.addEventListener('click', function () { page = k; try { history.replaceState(null, '', '#' + k); } catch (e) {} build(); });
+    });
+    return n;
+  }
+  function build() {
+    live.forEach(function (a) { if (a && a.destroy) a.destroy(); }); live = []; frame.textContent = ''; seed = 23;
+    var app = h('div', 'app', frame), rail = nav('rail', app, false, true), main = h('div', 'main', app), top = h('div', 'top', main), cs = getComputedStyle(document.documentElement);
+    var mark = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    mark.setAttribute('class', 'mark'); mark.setAttribute('width', 30); mark.setAttribute('height', 30); mark.setAttribute('viewBox', '-15 -15 30 30'); mark.setAttribute('aria-hidden', 'true');
+    p.setAttribute('d', ASOC.cells.d('asoc', 13, 0.16)); p.setAttribute('fill', cs.getPropertyValue('--fg').trim()); mark.appendChild(p); rail.insertBefore(mark, rail.firstChild);
+    h('span', '', h('h2', '', top, NAMES[page]), '/ last 30 days');
+    nav('tabs', top, true, false);
+    PAGES[page](h('div', 'grid', main));
+    nav('bar', app, true, true);
+  }
+  function press() {
+    Array.prototype.forEach.call(document.querySelectorAll('#devices button'), function (b) { b.setAttribute('aria-pressed', String(b.dataset.device === device)); });
+    Array.prototype.forEach.call(document.querySelectorAll('#sets button'), function (b) { b.setAttribute('aria-pressed', String(b.dataset.set === set)); });
+    frame.dataset.device = device;
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#devices button'), function (b) { b.addEventListener('click', function () { device = b.dataset.device; press(); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#sets button'), function (b) { b.addEventListener('click', function () { set = b.dataset.set; press(); build(); }); });
+  window.addEventListener('hashchange', function () { var k = location.hash.slice(1); if (NAMES[k] && k !== page) { page = k; build(); } });
+  if (window.matchMedia) { var mq = matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', build); }
+  new MutationObserver(build).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  document.getElementById('ver').textContent = V.version;
+  press(); build();
+})();
+</script>
+<!--/page-->
+</body>
+</html>

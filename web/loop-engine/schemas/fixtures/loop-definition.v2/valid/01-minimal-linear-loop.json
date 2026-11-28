@@ -1,0 +1,96 @@
+{
+  "loopId": "loop.demo.hello-file",
+  "semanticVersion": "1.0.0",
+  "objective": "Read a file, ask a local model to summarize it, and write the summary to a draft buffer.",
+  "documentationRef": "docs/hello-file.md",
+  "inputSchema": { "location": "INLINE", "inlineSchema": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] } },
+  "outputSchema": { "location": "INLINE", "inlineSchema": { "type": "object", "properties": { "summary": { "type": "string" } }, "required": ["summary"] } },
+  "startNodeId": "n1",
+  "terminalNodeIds": ["n3"],
+  "nodes": [
+    {
+      "nodeId": "n1",
+      "category": "DETERMINISTIC_TRANSFORMATION",
+      "inputPorts": [{ "portId": "in", "schemaRef": null, "mediaType": "text/plain" }],
+      "outputPorts": [{ "portId": "out", "schemaRef": null, "mediaType": "text/plain" }],
+      "implementation": { "kind": "CAPABILITY_BINDING", "capabilityId": "fb.repo.read" },
+      "requestedCapabilities": ["fb.repo.read"],
+      "authorityClass": "READ",
+      "preferredExecutionTargets": ["LOCAL_ANDROID"],
+      "permittedExecutionTargets": ["LOCAL_ANDROID"],
+      "timeoutPolicy": { "timeoutSeconds": 30, "onTimeout": "FAIL_SAFE" },
+      "retryPolicy": { "maxRetries": 2, "backoff": "FIXED", "baseDelaySeconds": 1 },
+      "idempotencyMode": "PURE",
+      "compensation": { "compensable": false, "nonCompensabilityAcknowledged": true },
+      "verificationRequirements": { "requiredForSuccess": false, "verifierIds": [] },
+      "sideEffectClass": "NONE",
+      "onFailureTerminalState": "FAILED_SAFE",
+      "explanation": "Reads file content from the bound repository capability."
+    },
+    {
+      "nodeId": "n2",
+      "category": "MODEL_INFERENCE",
+      "inputPorts": [{ "portId": "in", "mediaType": "text/plain" }],
+      "outputPorts": [{ "portId": "out", "mediaType": "text/plain" }],
+      "implementation": { "kind": "TYPED_SLOT", "slotId": "summarizer-model" },
+      "requestedCapabilities": ["fb.model.local_inference"],
+      "authorityClass": "EXECUTE_REVERSIBLE",
+      "preferredExecutionTargets": ["LOCAL_ANDROID"],
+      "permittedExecutionTargets": ["LOCAL_ANDROID"],
+      "timeoutPolicy": { "timeoutSeconds": 120, "onTimeout": "FAIL_SAFE" },
+      "retryPolicy": { "maxRetries": 1, "backoff": "NONE" },
+      "idempotencyMode": "NOT_IDEMPOTENT",
+      "compensation": { "compensable": false, "nonCompensabilityAcknowledged": true },
+      "verificationRequirements": { "requiredForSuccess": false, "verifierIds": [] },
+      "sideEffectClass": "NONE",
+      "onFailureTerminalState": "FAILED_SAFE",
+      "requestedModelCapabilityTags": ["text-generation", "on-device-residency"],
+      "explanation": "Summarizes the file content using a locally bound model."
+    },
+    {
+      "nodeId": "n3",
+      "category": "TYPED_TOOL",
+      "inputPorts": [{ "portId": "in", "mediaType": "text/plain" }],
+      "outputPorts": [{ "portId": "out", "mediaType": "application/json" }],
+      "implementation": { "kind": "CAPABILITY_BINDING", "capabilityId": "fb.repo.write_draft" },
+      "requestedCapabilities": ["fb.repo.write_draft"],
+      "authorityClass": "MODIFY_DRAFT",
+      "preferredExecutionTargets": ["LOCAL_ANDROID"],
+      "permittedExecutionTargets": ["LOCAL_ANDROID"],
+      "timeoutPolicy": { "timeoutSeconds": 15, "onTimeout": "FAIL_SAFE" },
+      "retryPolicy": { "maxRetries": 2, "backoff": "FIXED", "baseDelaySeconds": 1 },
+      "idempotencyMode": "IDEMPOTENT_WITH_KEY",
+      "idempotencyKeyStrategy": "loopRunId+nodeId",
+      "compensation": { "compensable": true, "compensationDescription": "Revert the draft buffer write via DocumentBuffer undo." },
+      "verificationRequirements": { "requiredForSuccess": false, "verifierIds": [] },
+      "sideEffectClass": "REVERSIBLE_LOCAL",
+      "onFailureTerminalState": "FAILED_SAFE",
+      "explanation": "Writes the generated summary into an uncommitted draft buffer."
+    }
+  ],
+  "edges": [
+    { "edgeId": "e1", "fromNodeId": "n1", "toNodeId": "n2", "label": "summarize", "gatewayId": null },
+    { "edgeId": "e2", "fromNodeId": "n2", "toNodeId": "n3", "label": "write", "gatewayId": null }
+  ],
+  "gateways": [],
+  "budgets": { "steps": 10, "wallClockSeconds": 300, "tokens": 4000, "cost": { "amount": 0.05, "currency": "USD" }, "toolCalls": 3 },
+  "bindingSlots": [
+    { "slotId": "summarizer-model", "kind": "MODEL", "required": true, "description": "Local model used to summarize file content.", "constraints": { "requiredModelCapabilityTags": ["text-generation", "on-device-residency"] } }
+  ],
+  "requiredCapabilities": ["fb.repo.read", "fb.model.local_inference", "fb.repo.write_draft"],
+  "executionTargetConstraints": { "permittedTargetTypes": ["LOCAL_ANDROID"], "preferredTargetTypes": ["LOCAL_ANDROID"], "requiresAlwaysOnLocal": true },
+  "distributionConstraints": { "allowedDistFlavors": ["full", "play"], "minAndroidApiLevel": 31, "requiredAbis": ["arm64-v8a"] },
+  "minEngineVersion": "1.0.0",
+  "maxEngineVersion": null,
+  "verificationPolicy": { "requireVerificationForSuccess": false, "verifiers": [] },
+  "terminalStateMapping": {
+    "unverifiedSuccessAllowed": true,
+    "nodeFailureEscalations": [
+      { "nodeId": "n1", "onFailure": "FAILED_SAFE" },
+      { "nodeId": "n2", "onFailure": "FAILED_SAFE" },
+      { "nodeId": "n3", "onFailure": "FAILED_SAFE" }
+    ]
+  },
+  "provenance": { "sourceLocation": "phone-authored", "projectRevision": "n/a", "initiatingPrincipal": "user:demo" },
+  "licenseRef": { "spdxId": "Apache-2.0" }
+}

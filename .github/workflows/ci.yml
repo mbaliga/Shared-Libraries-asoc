@@ -49,12 +49,20 @@ jobs:
       - name: Search testkit tests (:search-testkit:test)
         run: ./gradlew --no-daemon :search-testkit:test
 
+      - name: Evidence schema tests (:evidence-schema:test)
+        run: ./gradlew --no-daemon :evidence-schema:test
+
       - name: Crash-recovery tests (:crash-recovery:test)
         run: ./gradlew --no-daemon :crash-recovery:test
       # The Regular/asoc mode module's policy + store tests (2026-09-15 gap fix: the module
       # landed with tests that were never wired into this step list).
       - name: Interaction-mode tests (:interaction-mode:test)
         run: ./gradlew --no-daemon :interaction-mode:test
+
+      # The opt-in feedback utility. Its tests are the no-hidden-data promise in executable
+      # form (the draft renders exactly what it was given), so they gate every push.
+      - name: Feedback tests (:feedback:test)
+        run: ./gradlew --no-daemon :feedback:test
 
       # The navigation shell. Its unit tests are the pure motion/mapping maths — the settle
       # curve, the rail's focus falloff, the scrubber's index mapping — which is exactly the
@@ -105,3 +113,5 @@ jobs:
       # later in someone's release build.
       - name: Diagnostics noop/android API parity
         run: python3 scripts/check-noop-parity.py
+      - name: Assemble feedback release (:feedback:assembleRelease)
+        run: ./gradlew --no-daemon :feedback:assembleRelease

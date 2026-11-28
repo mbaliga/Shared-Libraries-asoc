@@ -1,6 +1,6 @@
 # Shared Libraries — a system of cells
 
-> **Coordinate change (2026-11):** every module in this repo moved from the `dev.aarso` group to `com.asystemofcells` (Maven group *and* Kotlin package root), e.g. `dev.aarso:crash-recovery` is now `com.asystemofcells:crash-recovery`. *Aarso* is a separate, distinct module of the constellation and is not a namespace for shared libraries. Consumers update the substitution rule in their `settings.gradle.kts` and their imports; there is no compatibility shim.
+> **Coordinate change (2026-11):** every module in this repo moved from the `dev.aarso` group to `com.asystemofcells` (Maven group *and* Kotlin package root), e.g. `com.asystemofcells:crash-recovery` is now `com.asystemofcells:crash-recovery`. *Aarso* is a separate, distinct module of the constellation and is not a namespace for shared libraries. Consumers update the substitution rule in their `settings.gradle.kts` and their imports; there is no compatibility shim.
 
 Cross-app libraries for the constellation. Each module is an independent Maven coordinate under
 `com.asystemofcells`, consumed the same way Hyle is: a **git submodule pinned by the consumer** plus
@@ -11,6 +11,9 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:search-core` | `com.asystemofcells:search-core` | pure JVM | On-device search: query language, facet evaluation, ranking. No Android, no storage engine, no coroutines. |
 | `:search-testkit` | `com.asystemofcells:search-testkit` | pure JVM | Conformance fixtures and golden-corpus helpers for anything implementing the search contracts. |
 | `:crash-recovery` | `com.asystemofcells:crash-recovery` | Android library | Capture an uncaught crash to a file; show a recovery screen on the next launch instead of bricking. Zero Hyle dependency. |
+| `:cell-shell` | `com.asystemofcells:cell-shell` | Android library (Compose) | The constellation's shared navigation and motion shell — spatial layout (nav-bar-aware edge zones, optional two-stage bottom room), edge timeline scrubber, shake-to-refresh. |
+| `:feedback` | `com.asystemofcells:feedback` | Android library | Opt-in feedback for experimental features: a fully user-readable draft, delivered only by a share/mail chooser the user launches. No telemetry, no network, ever. |
+| `:evidence-schema` | `com.asystemofcells:evidence-schema` | pure JVM/resources | Versioned portable JSON schemas for evidence/event exchange across Baseline, Crocodyl, and Ebbflow. |
 | `:diagnostics-core` | `com.asystemofcells:diagnostics-core` | pure JVM | On-device evidence: percentiles, verdicts, invariants, redaction, and Markdown report rendering — the source-agnostic engine every app-type profile shares. |
 | `:diagnostics-android` | `com.asystemofcells:diagnostics-android` | Android library | MetricSource plugins, session lifecycle, export, crash link, ADB trigger. No network permission, ever — verifiable in the merged manifest. |
 | `:diagnostics-overlay` | `com.asystemofcells:diagnostics-overlay` | Android library | The profile-aware floating bubble/panel. Plain Views, zero Compose/Material — same reasoning as `:crash-recovery`. |
@@ -18,6 +21,40 @@ Cross-app libraries for the constellation. Each module is an independent Maven c
 | `:interaction-mode` | `com.asystemofcells:interaction-mode` | Android library | The shared "Regular" vs "asoc" interaction-mode choice — `InteractionMode`, `InteractionModeStore` + `PrefsInteractionModeStore`, and the pure `ModeDefaults` policy. No UI — the picker lives in Hyle. |
 | `:modelbench` | `com.asystemofcells:modelbench` | pure JVM | Local-model benchmarking domain: TTFT, prompt/decode tok/s, RSS delta, thermal hooks, `modelbench-report.v1` schema. No native code (engine adapters live with the engines). |
 | `:modelbench-ui` | `com.asystemofcells:modelbench-ui` | Android library | Two host-agnostic Compose screens (run list, run detail) over `:modelbench` reports. No material3, no navigation, no mode-reading — the embedding host owns all chrome. No consumer is wired yet. |
+
+**Web modules** live under [`web/orrery-kit/`](web/orrery-kit/README.md): dependency-free browser files
+(`cells`, `sfx`, `rose`, `brands`, `Graph`, `gantt`) carved out of Orrery so that no app draws the same thing twice.
+They are consumed by copying or submodule, with no bundler assumed.
+
+[`web/viz-kit/`](web/viz-kit/README.md) holds `viz.js` and `viz-charts.js` (`ASOC.viz`): thirty-five charts whose
+categories are textures rather than hues, in one ink on any ground — comparison, time, distribution, relationship,
+hierarchy and flow — plus the orrery-kit graph (with arrangements, switches and a control row), rose and gantt drawn
+in that language, so one kit covers every chart the constellation has.
+
+[`web/loop-engine/`](web/loop-engine/README.md) is a dependency-free ES-module port of Fonebrew's loop engine
+(`domain/loop`): LoopDefinition v2 validation, a graph runner over host-supplied executors, the §9 17-state run
+machine, budgets, an append-only ledger and deterministic replay. [`web/loop-studio/`](web/loop-studio/README.md) is a
+minimal browser editor that runs on it. [`MIGRATION-loop-engine.md`](MIGRATION-loop-engine.md) describes how the Kotlin
+original would later move into a pure-JVM `:loop-engine` module here.
+
+`local-session-core` is the reserved home for Bocal's local multiplayer/session transport. It is
+not scaffolded here: the concurrent Bocal session remains authoritative, and its implementation
+should land once rather than be duplicated by a placeholder.
+
+| Web module | Where | What it is |
+|---|---|---|
+| orrery-kit | [`web/orrery-kit/`](web/orrery-kit/README.md) | `cells`, `sfx`, `rose`, `brands`, `Graph`, `gantt`, `ambience` — plain `<script>` files on `window.ASOC`. |
+| viz-kit | [`web/viz-kit/`](web/viz-kit/README.md) | `ASOC.viz`: thirty-five charts in one ink. |
+| loop-engine | [`web/loop-engine/`](web/loop-engine/README.md) | ES modules, no dependencies: loop definition validation, runner, run state machine, ledger, replay. `npm test` (125 tests). |
+| loop-studio | [`web/loop-studio/`](web/loop-studio/README.md) | ES module + demo: graph editor, inspector, validation and a mock-run panel over loop-engine. |
+
+One shared unit here is **not** a Gradle module and has no coordinate:
+
+| Package | Platform | What it is |
+|---|---|---|
+| [`word-graph/`](word-graph/) | assets only (JS + data) | Offline word-relationship graph — an ego-network of synonyms/antonyms/hypernyms rendered with vendored AntV G6 over WordNet-derived TSVs. Consumed as an **asset source-set directory**, not `includeBuild`, so it carries no AGP constraint. See [its README](word-graph/README.md). |
+| [`multilang-dict/`](multilang-dict/) | assets only (data) | Bundled, offline dictionary data for multilingual lookup and stroke-order display (German, French, Italian, Spanish, Japanese, Korean, Chinese Simplified, Arabic, plus KanjiVG geometry). Same asset-source-set consumption as `word-graph/`. See [its README](multilang-dict/README.md). |
+| [`stickers/`](stickers/) | assets only (images + manifest) | Die-cut sticker artwork — Bao (104 stickers, five categories), Fauna (10), Flora (reserved). `android-assets/` is a generated, pngquant-optimised copy laid out for consumption; the pack folders are the source of truth. Same asset-source-set consumption as `word-graph/`. See [its README](stickers/README.md). |
 
 ## Why this repo exists
 
@@ -86,8 +123,8 @@ includeBuild("shared-libraries")
 
 ```kotlin
 // app/build.gradle.kts
-implementation("com.asystemofcells:search-core:0.1.0")
-implementation("com.asystemofcells:crash-recovery:1.5.0")
+implementation("com.asystemofcells:search-core:0.2.0")
+implementation("com.asystemofcells:crash-recovery:1.8.0")
 
 // diagnostics: debug-only collector + overlay, release-only no-op, plus the safety guard that
 // fails a release build if it ever resolves a real collector instead of the no-op.
@@ -95,7 +132,6 @@ debugImplementation("com.asystemofcells:diagnostics-android:0.2.0")
 debugImplementation("com.asystemofcells:diagnostics-overlay:0.2.0")
 releaseImplementation("com.asystemofcells:diagnostics-noop:0.2.0")
 apply(from = "$rootDir/gradle/release-safety.gradle.kts")
-
 implementation("com.asystemofcells:interaction-mode:0.1.0")
 ```
 

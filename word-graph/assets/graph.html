@@ -1,0 +1,719 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Word Graph</title>
+<style>
+  :root{
+    --bg:#07060d; --panel:#101018; --seg:#15131d; --fg:#f2f2f2; --sub:#8b8ba0;
+    --accent:#8E7BFF; --border:#23202f; --red:#e5484d;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);height:100%;
+    font-family:-apple-system,Roboto,"Segoe UI",Helvetica,Arial,sans-serif;overflow:hidden;
+    -webkit-tap-highlight-color:transparent;}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;}
+
+  header{flex:0 0 auto;display:flex;align-items:center;gap:8px;
+    padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--border);}
+  #searchWrap{flex:1;display:flex;align-items:center;background:var(--seg);
+    border-radius:18px;padding:8px 14px;min-width:0;}
+  #searchBox{flex:1;min-width:0;background:transparent;border:none;outline:none;
+    color:var(--fg);font-size:15px;}
+  #searchBox::placeholder{color:var(--sub);}
+  .hopBtn{flex:0 0 auto;background:var(--seg);color:var(--sub);border:1px solid var(--border);
+    border-radius:14px;padding:7px 12px;font-size:13px;font-weight:600;}
+  .hopBtn.active{background:var(--accent);color:#0b0a13;border-color:var(--accent);}
+  #countLabel{flex:0 0 auto;color:var(--sub);font-size:11.5px;white-space:nowrap;padding-left:2px;}
+
+  #banner{flex:0 0 auto;display:none;background:#2a2015;color:#f0b35a;font-size:12.5px;
+    padding:6px 14px;border-bottom:1px solid var(--border);}
+  #banner.show{display:block;}
+
+  #canvasWrap{flex:1 1 auto;position:relative;min-height:0;}
+  #graphContainer{position:absolute;inset:0;}
+
+  #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--sub);font-size:14px;background:var(--bg);z-index:5;}
+  #loading.hide{display:none;}
+  #empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    flex-direction:column;gap:6px;color:var(--sub);font-size:14px;text-align:center;padding:0 24px;z-index:4;}
+  #empty.show{display:flex;}
+  #empty b{color:var(--fg);font-size:16px;}
+
+  #legend{position:absolute;left:10px;bottom:10px;background:rgba(16,16,24,0.92);
+    border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:11px;
+    color:var(--sub);z-index:3;max-width:180px;}
+  #legend .row{display:flex;align-items:center;gap:6px;margin:3px 0;}
+  #legend .sw{width:10px;height:10px;border-radius:2px;flex:0 0 auto;}
+  #legend .ln{width:16px;height:0;border-top:2px solid;flex:0 0 auto;}
+  #legend h4{margin:0 0 4px;color:var(--fg);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;}
+  #legendToggle{position:absolute;left:10px;bottom:10px;background:rgba(16,16,24,0.92);
+    border:1px solid var(--border);border-radius:16px;padding:6px 12px;font-size:11px;
+    color:var(--sub);z-index:3;display:none;}
+
+  #panel{position:absolute;right:0;top:0;bottom:0;width:min(300px,78%);
+    background:var(--panel);border-left:1px solid var(--border);
+    transform:translateX(100%);transition:transform .18s ease-out;z-index:6;
+    display:flex;flex-direction:column;padding:16px;overflow-y:auto;}
+  #panel.open{transform:translateX(0);}
+  #panel .close{align-self:flex-end;color:var(--sub);font-size:20px;line-height:1;padding:0 0 8px 0;}
+  #panel .pWord{font-size:20px;font-weight:700;color:var(--fg);word-break:break-word;}
+  #panel .pPos{font-size:11px;color:var(--accent);letter-spacing:.06em;text-transform:uppercase;
+    font-weight:700;margin:6px 0 10px;}
+  #panel .pGloss{font-size:14.5px;line-height:1.4;color:var(--fg);margin-bottom:14px;}
+  #panel .pGloss.muted{color:var(--sub);font-style:italic;}
+  .pBtn{display:block;width:100%;text-align:center;background:var(--seg);color:var(--fg);
+    border:1px solid var(--border);border-radius:12px;padding:11px;font-size:14px;font-weight:600;
+    margin-bottom:8px;}
+  .pBtn.primary{background:var(--accent);color:#0b0a13;border-color:var(--accent);}
+  .pBtn.disabled{opacity:.4;}
+  #panelBackdrop{position:absolute;inset:0;background:rgba(0,0,0,0.35);z-index:5;display:none;}
+  #panelBackdrop.show{display:block;}
+
+  button, input{font-family:inherit;-webkit-user-select:none;user-select:none;}
+  button{cursor:pointer;}
+
+/* Sense chips. A polysemous word is not one neighbourhood but several unrelated
+   ones — "run" has 55 senses — so seeding from all of them at once produces a
+   field of disconnected islands rather than a graph of anything. One sense at a
+   time keeps every picture connected and readable. */
+#senses{display:flex;gap:8px;overflow-x:auto;padding:8px 12px;background:#0d0d12;
+  border-bottom:1px solid rgba(255,255,255,.07);scrollbar-width:none;}
+#senses::-webkit-scrollbar{display:none;}
+#senses:empty{display:none;}
+#senses .sense{flex:0 0 auto;padding:7px 13px;border-radius:999px;cursor:pointer;
+  background:rgba(255,255,255,.06);color:#c9c6d4;font-size:13px;white-space:nowrap;
+  border:1px solid transparent;}
+#senses .sense.on{background:rgba(142,123,255,.20);border-color:#8E7BFF;color:#e6e2ff;}
+#senses .sense .pos{opacity:.55;margin-left:5px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div id="searchWrap">
+      <input id="searchBox" type="text" placeholder="Look up a word…" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+    </div>
+    <button class="hopBtn" id="hop1" data-hops="1">1 hop</button>
+    <button class="hopBtn" id="hop2" data-hops="2">2 hops</button>
+    <span id="countLabel"></span>
+  </header>
+  <div id="senses"></div>
+  <div id="banner"></div>
+  <div id="canvasWrap">
+    <div id="graphContainer"></div>
+    <div id="loading">Loading word graph…</div>
+    <div id="empty"><b id="emptyWord"></b><span>No graph data for this word.</span></div>
+    <div id="legend">
+      <h4>Part of speech</h4>
+      <div class="row"><span class="sw" style="background:#63B3ED"></span>noun</div>
+      <div class="row"><span class="sw" style="background:#F6AD55;border-radius:50%;transform:rotate(45deg)"></span>verb</div>
+      <div class="row"><span class="sw" style="background:#68D391"></span>adjective</div>
+      <div class="row"><span class="sw" style="background:#F687B3;border-radius:50%"></span>adverb</div>
+      <h4 style="margin-top:8px">Relation</h4>
+      <div class="row"><span class="ln" style="border-color:#7C8AA8"></span>hypernym (is-a)</div>
+      <div class="row"><span class="ln" style="border-color:#5FCE8F;border-top-style:dashed"></span>similar</div>
+      <div class="row"><span class="ln" style="border-color:#E0A458"></span>meronym (part-of)</div>
+    </div>
+  </div>
+  <div id="panelBackdrop"></div>
+  <div id="panel">
+    <div class="close" id="panelClose">✕</div>
+    <div class="pWord" id="panelWord"></div>
+    <div class="pPos" id="panelPos"></div>
+    <div class="pGloss" id="panelGloss">Looking up…</div>
+    <button class="pBtn primary" id="panelRecentre">Re-centre the graph here</button>
+    <button class="pBtn" id="panelExpand">Expand this node's neighbours</button>
+  </div>
+</div>
+
+<script src="https://vendor.wordgraph.local/g6.min.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  // ── tunables ──────────────────────────────────────────────────────────────
+  var NODE_CAP = 120;
+
+  var POS_INFO = {
+    n: { label:'noun',      shape:'circle',   color:'#63B3ED' },
+    v: { label:'verb',      shape:'diamond',  color:'#F6AD55' },
+    a: { label:'adjective', shape:'triangle', color:'#68D391' },
+    r: { label:'adverb',    shape:'ellipse',  color:'#F687B3' }
+  };
+  var KIND_INFO = {
+    h: { label:'hypernym (is-a)',   color:'#7C8AA8', dash:false, arrow:true  },
+    s: { label:'similar to',        color:'#5FCE8F', dash:true,  arrow:false },
+    m: { label:'meronym (part-of)', color:'#E0A458', dash:false, arrow:true  }
+  };
+  function posInfo(pos){ return POS_INFO[pos] || POS_INFO.n; }
+  function kindInfo(k){ return KIND_INFO[k] || KIND_INFO.h; }
+
+  // ── raw data, loaded once ────────────────────────────────────────────────
+  var NODES = [];              // index -> {lemma,pos}
+  var EDGES = [];               // index -> {a,b,k}
+  var ADJ = new Map();          // node id -> [{other, edgeIdx}]
+  var WORDS = new Map();        // lowercase word -> [node ids]
+  var dataReady = false;
+
+  function adjPush(id, entry){
+    var arr = ADJ.get(id);
+    if (!arr) { arr = []; ADJ.set(id, arr); }
+    arr.push(entry);
+  }
+
+  function b36list(csv){
+    if (!csv) return [];
+    var out = [];
+    var parts = csv.split(',');
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i]) out.push(parseInt(parts[i], 36));
+    }
+    return out;
+  }
+
+  function loadData(){
+    return Promise.all([
+      fetch('https://graph.wordgraph.local/nodes.tsv').then(function(r){ return r.text(); }),
+      fetch('https://graph.wordgraph.local/edges.tsv').then(function(r){ return r.text(); }),
+      fetch('https://graph.wordgraph.local/words.tsv').then(function(r){ return r.text(); })
+    ]).then(function(res){
+      var nodesTxt = res[0], edgesTxt = res[1], wordsTxt = res[2];
+
+      var nLines = nodesTxt.split('\n');
+      for (var i = 0; i < nLines.length; i++) {
+        var line = nLines[i];
+        if (!line) continue;
+        var t = line.indexOf('\t');
+        NODES.push(t >= 0
+          ? { lemma: line.slice(0, t), pos: line.slice(t + 1).trim() }
+          : { lemma: line, pos: 'n' });
+      }
+
+      var eLines = edgesTxt.split('\n');
+      for (var j = 0; j < eLines.length; j++) {
+        var eline = eLines[j];
+        if (!eline) continue;
+        var parts = eline.split(',');
+        if (parts.length < 3) continue;
+        var a = parseInt(parts[0], 36);
+        var k = parts[1];
+        var b = parseInt(parts[2], 36);
+        var idx = EDGES.length;
+        EDGES.push({ a: a, b: b, k: k });
+        adjPush(a, { other: b, edgeIdx: idx });
+        adjPush(b, { other: a, edgeIdx: idx });
+      }
+
+      var wLines = wordsTxt.split('\n');
+      for (var w = 0; w < wLines.length; w++) {
+        var wline = wLines[w];
+        if (!wline) continue;
+        var wt = wline.indexOf('\t');
+        if (wt < 0) continue;
+        WORDS.set(wline.slice(0, wt), b36list(wline.slice(wt + 1)));
+      }
+
+      dataReady = true;
+    });
+  }
+
+  function findSeeds(raw){
+    var w = String(raw || '').trim().toLowerCase();
+    if (!w) return null;
+    return WORDS.get(w) || null;
+  }
+
+  // ── ego-network expansion (BFS with a hard node cap) ────────────────────
+  // Expands breadth-first from the seed node ids out to [hops] steps, adding
+  // a node only while the visited count is still under [cap]; once the cap is
+  // hit no further NEW nodes are admitted (truncated=true), though the BFS
+  // keeps draining the current frontier so partially-explored depths don't
+  // look arbitrarily lopsided. Edges are collected in a second pass over the
+  // final node set so every edge between two INCLUDED nodes is kept (not just
+  // the tree edges the BFS happened to walk), which is what makes the same
+  // node reachable via two different relations show both.
+  function egoNetwork(seedIds, hops, cap){
+    var depthOf = new Map();
+    for (var s = 0; s < seedIds.length; s++) depthOf.set(seedIds[s], 0);
+    var frontier = seedIds.slice();
+    var truncated = false;
+
+    for (var depth = 1; depth <= hops && frontier.length; depth++) {
+      var next = [];
+      for (var f = 0; f < frontier.length; f++) {
+        var id = frontier[f];
+        var nbs = ADJ.get(id);
+        if (!nbs) continue;
+        for (var n = 0; n < nbs.length; n++) {
+          var other = nbs[n].other;
+          if (depthOf.has(other)) continue;
+          if (depthOf.size >= cap) { truncated = true; continue; }
+          depthOf.set(other, depth);
+          next.push(other);
+        }
+      }
+      frontier = next;
+    }
+
+    var nodeIds = Array.from(depthOf.keys());
+    var nodeSet = new Set(nodeIds);
+    var edges = [];
+    var seenEdge = new Set();
+    for (var ni = 0; ni < nodeIds.length; ni++) {
+      var nid = nodeIds[ni];
+      var adj = ADJ.get(nid);
+      if (!adj) continue;
+      for (var ai = 0; ai < adj.length; ai++) {
+        var e = adj[ai];
+        if (seenEdge.has(e.edgeIdx)) continue;
+        if (!nodeSet.has(e.other)) continue;
+        seenEdge.add(e.edgeIdx);
+        edges.push(EDGES[e.edgeIdx]);
+      }
+    }
+    return { nodeIds: nodeIds, depthOf: depthOf, edges: edges, truncated: truncated };
+  }
+
+  // ── gloss lookup (defs shards, same corpus/shape as Dict.kt) ────────────
+  var DEF_CACHE = new Map();
+  var DEF_MAX_SHARDS = 4;
+
+  function defShard(letter){
+    var cached = DEF_CACHE.get(letter);
+    if (cached) { DEF_CACHE.delete(letter); DEF_CACHE.set(letter, cached); return Promise.resolve(cached); }
+    return fetch('https://dict.wordgraph.local/defs/' + letter + '.txt')
+      .then(function(r){ return r.text(); })
+      .then(function(txt){
+        var m = new Map();
+        var lines = txt.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          var t = line.indexOf('\t');
+          if (t > 0) m.set(line.slice(0, t), line.slice(t + 1));
+        }
+        DEF_CACHE.set(letter, m);
+        while (DEF_CACHE.size > DEF_MAX_SHARDS) DEF_CACHE.delete(DEF_CACHE.keys().next().value);
+        return m;
+      })
+      .catch(function(){ return new Map(); });
+  }
+
+  // First sense's gloss for [lemma], following one alias hop. The defs corpus
+  // is single-word headwords only, so a multi-word lemma ("a lot", "abandoned
+  // ship") simply has no entry — callers show a "no definition on file" line.
+  function lookupGloss(lemma){
+    var w = lemma.toLowerCase();
+    var letter = w.charAt(0);
+    if (letter < 'a' || letter > 'z') return Promise.resolve(null);
+    return defShard(letter).then(function(shard){
+      var payload = shard.get(w);
+      if (!payload) return null;
+      if (payload.charAt(0) === '=') {
+        var lem = payload.slice(1);
+        var lemLetter = lem.charAt(0);
+        if (lemLetter < 'a' || lemLetter > 'z') return null;
+        return defShard(lemLetter).then(function(shard2){
+          var p2 = shard2.get(lem);
+          if (!p2 || p2.charAt(0) === '=') return null;
+          return firstGloss(p2);
+        });
+      }
+      return firstGloss(payload);
+    });
+  }
+
+  function firstGloss(payload){
+    var sense = payload.split('\u001E')[0] || '';
+    var fields = sense.split('\u001F');
+    return fields[1] || null;
+  }
+
+  // ── UI plumbing ──────────────────────────────────────────────────────────
+  var els = {
+    searchBox: document.getElementById('searchBox'),
+    hop1: document.getElementById('hop1'),
+    hop2: document.getElementById('hop2'),
+    countLabel: document.getElementById('countLabel'),
+    banner: document.getElementById('banner'),
+    loading: document.getElementById('loading'),
+    empty: document.getElementById('empty'),
+    emptyWord: document.getElementById('emptyWord'),
+    panel: document.getElementById('panel'),
+    panelBackdrop: document.getElementById('panelBackdrop'),
+    panelClose: document.getElementById('panelClose'),
+    panelWord: document.getElementById('panelWord'),
+    panelPos: document.getElementById('panelPos'),
+    panelGloss: document.getElementById('panelGloss'),
+    panelRecentre: document.getElementById('panelRecentre'),
+    panelExpand: document.getElementById('panelExpand')
+  };
+
+  var graph = null;
+  var currentHops = 1;
+  var currentWord = '';
+  var currentNodeIds = [];
+  var currentDepthOf = new Map();
+  var currentSelectedId = null;
+
+  function shapeFor(d){ return posInfo(d.data.pos).shape; }
+  function colorFor(d){ return posInfo(d.data.pos).color; }
+
+  function buildG6Data(net, seedSet){
+    var nodes = net.nodeIds.map(function(id){
+      var n = NODES[id] || { lemma: '?', pos: 'n' };
+      return {
+        id: String(id),
+        data: { lemma: n.lemma, pos: n.pos, depth: net.depthOf.get(id), isSeed: seedSet.has(id) }
+      };
+    });
+    var edges = net.edges.map(function(e, i){
+      return {
+        id: 'e' + e.a + '_' + e.k + '_' + e.b + '_' + i,
+        source: String(e.a),
+        target: String(e.b),
+        data: { kind: e.k }
+      };
+    });
+    return { nodes: nodes, edges: edges };
+  }
+
+  // d3-force in this G6 build settles over real wall-clock time rather than
+  // synchronously inside render()'s own promise, and never emits a reliable
+  // "the simulation is done" event at the Graph level — so a single fitView()
+  // right after render() frames the layout's STARTING cluster and nodes then
+  // drift off-canvas as the simulation keeps easing outward. Instead, re-fit
+  // on a short timer for the first couple of seconds, which converges the
+  // camera onto wherever the simulation actually lands without needing an
+  // event the underlying layout doesn't provide.
+  var fitTimer = null;
+  function scheduleFit(g){
+    if (fitTimer) clearInterval(fitTimer);
+    var ticks = 0;
+    fitTimer = setInterval(function(){
+      g.fitView().then(function(){
+        // Clamp the zoom. fitView scales whatever it is given to fill the
+        // viewport, so a small neighbourhood — a single sense of a word can be
+        // three nodes — gets blown up until two labels span the screen and the
+        // picture reads as broken rather than small. Small graphs should just
+        // look small.
+        try { if (g.getZoom() > 1.15) g.zoomTo(1.15); } catch (e) {}
+      }).catch(function(){});
+      ticks++;
+      if (ticks >= 26) { clearInterval(fitTimer); fitTimer = null; }
+    }, 250);
+  }
+
+  function ensureGraph(){
+    if (graph) return graph;
+    graph = new G6.Graph({
+      container: 'graphContainer',
+      autoFit: 'view',
+      node: {
+        type: shapeFor,
+        style: {
+          size: function(d){ return d.data.isSeed ? 34 : 22; },
+          fill: colorFor,
+          fillOpacity: 0.92,
+          stroke: function(d){ return d.data.isSeed ? '#8E7BFF' : 'rgba(255,255,255,0.4)'; },
+          lineWidth: function(d){ return d.data.isSeed ? 3 : 1; },
+          labelText: function(d){ return d.data.lemma; },
+          labelFill: '#f2f2f2',
+          labelFontSize: 11,
+          labelPlacement: 'bottom',
+          labelBackground: true,
+          labelBackgroundFill: 'rgba(7,6,13,0.78)',
+          labelBackgroundRadius: 3,
+          cursor: 'pointer'
+        },
+        state: {
+          selected: { lineWidth: 4, stroke: '#8E7BFF', halo: true, haloStrokeWidth: 8, haloStroke: 'rgba(142,123,255,0.30)' },
+          active: { lineWidth: 3 },
+          inactive: { opacity: 0.2 }
+        }
+      },
+      edge: {
+        type: 'quadratic',
+        style: {
+          stroke: function(d){ return kindInfo(d.data.kind).color; },
+          lineWidth: 1.6,
+          lineDash: function(d){ return kindInfo(d.data.kind).dash ? [4, 3] : null; },
+          endArrow: function(d){ return kindInfo(d.data.kind).arrow; },
+          endArrowSize: 6,
+          opacity: 0.8
+        },
+        state: {
+          active: { lineWidth: 3, opacity: 1 },
+          inactive: { opacity: 0.08 }
+        }
+      },
+      layout: {
+        type: 'd3-force',
+        linkDistance: 60,
+        nodeStrength: -55,
+        preventOverlap: true,
+        nodeSize: 26,
+        collide: { radius: 24 },
+        // The default alphaDecay (~0.0228) takes many seconds of real time to
+        // cool a ~100-node, multi-component ego-network (several senses of the
+        // same word rarely share a single connected component) down to a
+        // visually still layout. A faster decay settles noticeably quicker
+        // without materially hurting the final arrangement's quality.
+        alphaDecay: 0.06
+      },
+      behaviors: [
+        'drag-canvas',
+        'zoom-canvas',
+        { type: 'drag-element', dropEffect: 'move' },
+        { type: 'hover-activate', degree: 1, direction: 'both' },
+        { type: 'click-select', multiple: false }
+      ],
+      transforms: ['process-parallel-edges']
+    });
+
+    graph.on('node:click', function(evt){
+      var id = evt.target && evt.target.id;
+      if (id != null) openPanel(id);
+    });
+    graph.on('canvas:click', function(){ closePanel(); });
+
+    window.__graph = graph; // debug/test hook only — not read anywhere else
+    return graph;
+  }
+
+  function setCountLabel(n, e){
+    els.countLabel.textContent = n + ' nodes · ' + e + ' edges';
+  }
+
+  function setBanner(msg){
+    if (msg) { els.banner.textContent = msg; els.banner.classList.add('show'); }
+    else { els.banner.classList.remove('show'); }
+  }
+
+  function setHopButtons(hops){
+    els.hop1.classList.toggle('active', hops === 1);
+    els.hop2.classList.toggle('active', hops === 2);
+  }
+
+  // Renders the ego-network for [word] from scratch — this is what both the
+  // initial load and "re-centre" funnel through, so the two never drift out
+  // of sync with each other.
+  // Above this many nodes a picture stops being a neighbourhood and starts
+  // being a hairball, so we scope to a single sense instead. Tuned against the
+  // real data: "happy" (4 senses) lands at 12 and reads beautifully as one
+  // picture; "run" (55 senses) blows past the node cap into ~30 disconnected
+  // islands, which shows no relationship at all.
+  var READABLE_MAX = 45;
+
+  function renderSenseChips(word, seeds, activeIdx){
+    var box = document.getElementById('senses');
+    box.innerHTML = '';
+    if (!seeds || seeds.length < 2) return;
+    seeds.forEach(function(id, i){
+      var n = NODES[id] || {};
+      var el = document.createElement('div');
+      el.className = 'sense' + (i === activeIdx ? ' on' : '');
+      el.innerHTML = (n.lemma || word) + '<span class="pos">' + (n.pos || '') + '</span>';
+      el.addEventListener('click', function(){ renderWord(word, currentHops, i); });
+      box.appendChild(el);
+    });
+  }
+
+  function renderWord(word, hops, senseIdx){
+    var seeds = findSeeds(word);
+    els.empty.classList.remove('show');
+    closePanel();
+    if (!seeds || !seeds.length) {
+      els.emptyWord.textContent = '“' + word + '”';
+      els.empty.classList.add('show');
+      setCountLabel(0, 0);
+      setBanner(null);
+      if (graph) { graph.setData({ nodes: [], edges: [] }); graph.render(); }
+      return;
+    }
+    // An explicit sense pick always wins. Otherwise try every sense at once and
+    // keep that only while it stays legible; past READABLE_MAX fall back to the
+    // first (WordNet orders senses by frequency, and words.tsv preserves it).
+    var use, active = -1;
+    if (typeof senseIdx === 'number' && seeds[senseIdx] != null) {
+      use = [seeds[senseIdx]]; active = senseIdx;
+    } else {
+      var whole = egoNetwork(seeds, hops, NODE_CAP);
+      if (seeds.length > 1 && whole.nodeIds.length > READABLE_MAX) { use = [seeds[0]]; active = 0; }
+      else use = seeds;
+    }
+    renderSenseChips(word, seeds, active);
+    renderFromSeeds(word, use, hops);
+  }
+
+  function renderFromSeeds(label, seeds, hops){
+    currentWord = label;
+    currentHops = hops;
+    setHopButtons(hops);
+    var net = egoNetwork(seeds, hops, NODE_CAP);
+    currentNodeIds = net.nodeIds;
+    currentDepthOf = net.depthOf;
+    var seedSet = new Set(seeds);
+    var data = buildG6Data(net, seedSet);
+    setCountLabel(data.nodes.length, data.edges.length);
+    setBanner(net.truncated
+      ? 'Showing ' + data.nodes.length + ' of a larger network — capped at ' + NODE_CAP + ' nodes.'
+      : null);
+    var g = ensureGraph();
+    g.setData(data);
+    g.render().catch(function(){});
+    scheduleFit(g);
+  }
+
+  // ── node tap panel: gloss + re-centre + expand ──────────────────────────
+  function openPanel(id){
+    currentSelectedId = id;
+    var numId = parseInt(id, 10);
+    var n = NODES[numId];
+    if (!n) return;
+    els.panelWord.textContent = n.lemma;
+    els.panelPos.textContent = posInfo(n.pos).label;
+    els.panelGloss.textContent = 'Looking up…';
+    els.panelGloss.classList.remove('muted');
+    els.panel.classList.add('open');
+    els.panelBackdrop.classList.add('show');
+
+    var atCap = currentNodeIds.length >= NODE_CAP;
+    els.panelExpand.classList.toggle('disabled', atCap);
+
+    lookupGloss(n.lemma).then(function(gloss){
+      if (currentSelectedId !== id) return; // superseded by another tap
+      if (gloss) { els.panelGloss.textContent = gloss; els.panelGloss.classList.remove('muted'); }
+      else { els.panelGloss.textContent = 'No definition on file for this entry.'; els.panelGloss.classList.add('muted'); }
+    });
+  }
+
+  function closePanel(){
+    currentSelectedId = null;
+    els.panel.classList.remove('open');
+    els.panelBackdrop.classList.remove('show');
+  }
+
+  els.panelClose.addEventListener('click', closePanel);
+  els.panelBackdrop.addEventListener('click', closePanel);
+
+  els.panelRecentre.addEventListener('click', function(){
+    if (currentSelectedId == null) return;
+    var numId = parseInt(currentSelectedId, 10);
+    var n = NODES[numId];
+    if (!n) return;
+    els.searchBox.value = n.lemma;
+    closePanel();
+    renderFromSeeds(n.lemma, [numId], currentHops);
+  });
+
+  // "expand-on-node-tap": merges the tapped node's direct neighbours into the
+  // graph currently on screen (rather than recomputing the whole ego-network),
+  // using G6's own incremental data API (addNodeData/addEdgeData + render) —
+  // the same mechanism G6's own expand/collapse examples use — so dragging,
+  // zoom and the force layout all keep running against the one live Graph
+  // instance instead of a full teardown/rebuild.
+  els.panelExpand.addEventListener('click', function(){
+    if (currentSelectedId == null || els.panelExpand.classList.contains('disabled')) return;
+    var id = parseInt(currentSelectedId, 10);
+    var have = new Set(currentNodeIds);
+    var nbs = ADJ.get(id) || [];
+    var newNodes = [];
+    var newEdges = [];
+    var seenEdge = new Set();
+    for (var i = 0; i < nbs.length && have.size + newNodes.length < NODE_CAP; i++) {
+      var nb = nbs[i];
+      if (!have.has(nb.other) && newNodes.indexOf(nb.other) === -1) {
+        newNodes.push(nb.other);
+      }
+    }
+    var willHave = new Set(have);
+    newNodes.forEach(function(x){ willHave.add(x); });
+    // Re-scan for every edge between two nodes that will now be on screen
+    // (mirrors egoNetwork's own induced-edge pass) so newly-admitted nodes
+    // pick up edges to each other, not just to the tapped node.
+    [id].concat(newNodes).forEach(function(nid){
+      var adj = ADJ.get(nid) || [];
+      adj.forEach(function(e){
+        if (seenEdge.has(e.edgeIdx)) return;
+        if (!willHave.has(e.other)) return;
+        var edge = EDGES[e.edgeIdx];
+        var already = currentGraphHasEdge(edge, e.edgeIdx);
+        if (already) return;
+        seenEdge.add(e.edgeIdx);
+        newEdges.push(edge);
+      });
+    });
+
+    if (!newNodes.length && !newEdges.length) return;
+
+    var g = ensureGraph();
+    var addNodes = newNodes.map(function(nid){
+      var n = NODES[nid] || { lemma: '?', pos: 'n' };
+      return { id: String(nid), data: { lemma: n.lemma, pos: n.pos, depth: (currentDepthOf.get(id) || 0) + 1, isSeed: false } };
+    });
+    var addEdges = newEdges.map(function(e, i){
+      return { id: 'x' + e.a + '_' + e.k + '_' + e.b + '_' + i + '_' + Date.now(), source: String(e.a), target: String(e.b), data: { kind: e.k } };
+    });
+
+    newNodes.forEach(function(nid){ currentDepthOf.set(nid, (currentDepthOf.get(id) || 0) + 1); });
+    currentNodeIds = currentNodeIds.concat(newNodes);
+
+    if (addNodes.length) g.addNodeData(addNodes);
+    if (addEdges.length) g.addEdgeData(addEdges);
+    g.render();
+    scheduleFit(g);
+    setCountLabel(currentNodeIds.length, (g.getEdgeData() || []).length);
+    closePanel();
+  });
+
+  // Tracks which edge ids are already rendered, so expand doesn't try to add
+  // a duplicate edge G6 would reject.
+  function currentGraphHasEdge(edge, edgeIdx){
+    if (!graph) return false;
+    var all = graph.getEdgeData() || [];
+    for (var i = 0; i < all.length; i++) {
+      var d = all[i];
+      if (d.data && d.data.kind === edge.k &&
+          ((d.source === String(edge.a) && d.target === String(edge.b)) ||
+           (d.source === String(edge.b) && d.target === String(edge.a)))) return true;
+    }
+    return false;
+  }
+
+  // ── toolbar ──────────────────────────────────────────────────────────────
+  els.hop1.addEventListener('click', function(){ if (dataReady && currentWord) renderWord(currentWord, 1); });
+  els.hop2.addEventListener('click', function(){ if (dataReady && currentWord) renderWord(currentWord, 2); });
+
+  var searchTimer = null;
+  function submitSearch(){
+    var v = els.searchBox.value.trim();
+    if (!v || !dataReady) return;
+    renderWord(v, currentHops);
+  }
+  els.searchBox.addEventListener('keydown', function(ev){
+    if (ev.key === 'Enter') { ev.preventDefault(); submitSearch(); }
+  });
+
+  // ── boot ─────────────────────────────────────────────────────────────────
+  function initialWord(){
+    var m = /[?&]word=([^&]+)/.exec(location.search);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  setHopButtons(currentHops);
+  loadData().then(function(){
+    els.loading.classList.add('hide');
+    ensureGraph();
+    var w = initialWord();
+    if (w) { els.searchBox.value = w; renderWord(w, currentHops); }
+  }).catch(function(err){
+    els.loading.textContent = 'Could not load the word graph.';
+    console.error(err);
+  });
+})();
+</script>
+</body>
+</html>

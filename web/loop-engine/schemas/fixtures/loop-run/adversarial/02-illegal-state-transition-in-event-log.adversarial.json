@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-adv-0002",
+  "definitionDigest": "sha256:bd0744455f140b0c49f72b83b21489ea512354a54ae7d43bef4e0489fd31181e",
+  "sourceRef": { "draftId": "draft-01HXYZFRESH0000000000000", "draftRevisionNumber": 2 },
+  "bindingProfileRef": { "objectId": "binding-profile-adv-0002" },
+  "eventLog": [
+    { "eventId": "ev-1", "occurredAtUtc": "2026-08-07T09:40:00Z", "toState": "CREATED", "description": "Run started." },
+    { "eventId": "ev-2", "occurredAtUtc": "2026-08-07T09:40:01Z", "fromState": "CREATED", "toState": "PREFLIGHT", "description": "Engine runs preflight validation." },
+    { "eventId": "ev-3", "occurredAtUtc": "2026-08-07T09:40:02Z", "fromState": "PREFLIGHT", "toState": "WAITING_BINDING", "description": "Validation passes; one or more binding slots are unresolved." },
+    { "eventId": "ev-4", "occurredAtUtc": "2026-08-07T09:40:03Z", "fromState": "WAITING_BINDING", "toState": "RUNNING", "description": "Engine begins dispatch while binding is still unresolved and authority was never granted — skips WAITING_AUTHORITY and READY entirely." }
+  ],
+  "nodeAttempts": [],
+  "runState": "RUNNING",
+  "createdAtUtc": "2026-08-07T09:40:00Z",
+  "updatedAtUtc": "2026-08-07T09:40:02Z"
+}

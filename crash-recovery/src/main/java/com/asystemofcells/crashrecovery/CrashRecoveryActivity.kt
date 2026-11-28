@@ -49,7 +49,11 @@ import android.widget.Toast
  *
  * Nothing is ever sent anywhere by this screen; sharing is always user-initiated.
  */
-class CrashRecoveryActivity : Activity() {
+open class CrashRecoveryActivity : Activity() {
+
+    // The host's locale (an in-app language picker below Android 13), applied before anything reads a
+    // string. Never throws: with no wrapper, or one that fails, the system locale is used.
+    override fun attachBaseContext(base: Context) = super.attachBaseContext(CrashRecovery.wrapContext(base))
 
     private lateinit var pal: CrashRecoveryStyle.Palette
     private lateinit var appLabel: String
@@ -80,6 +84,13 @@ class CrashRecoveryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Advance the durable marker BEFORE any of this screen's own risky UI-building work
+        // below, matching captureExitDeath's "advance watermark before risky work" discipline:
+        // if building this screen's UI crashes in a way the runCatching below can't even catch
+        // (e.g. a native crash during view inflation), the NEXT launch's maybeShowRecovery()
+        // must be able to tell that THIS screen is what's broken, not the real app.
+        CrashRecovery.markRecoveryEntryStarted(this)
+
         appLabel = intent.getStringExtra(EXTRA_APP_LABEL) ?: "App"
         contactEmail = intent.getStringExtra(EXTRA_CONTACT_EMAIL)
         preview = intent.getBooleanExtra(EXTRA_PREVIEW, false)
@@ -91,6 +102,7 @@ class CrashRecoveryActivity : Activity() {
         // Nothing to recover from (e.g. launched directly for testing, or cleared between the
         // check in maybeShowRecovery and here) — don't strand the user on a blank screen.
         if (decoded == null) {
+            CrashRecovery.clearRecoveryEntryMarker(this)
             finish()
             return
         }
@@ -100,11 +112,83 @@ class CrashRecoveryActivity : Activity() {
         consecutive = if (preview) REPEAT_THRESHOLD else CrashRecovery.consecutiveCount(this)
         hasQuarantine = if (preview) true else CrashRecovery.hasRecoverableData(this)
 
-        val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-            Configuration.UI_MODE_NIGHT_YES
-        pal = readStyle().resolve(night)
+        val night = runCatching {
+            (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        }.getOrDefault(true)
+        // A malformed style extra must not cost the screen: this line used to sit outside every guard.
+        pal = runCatching { readStyle().resolve(night) }.getOrDefault(CrashRecoveryStyle.Default.resolve(night))
 
-        setContentView(buildRoot())
+        // Everything from here on is this screen's OWN UI construction — the thing this
+        // module's own kdoc (see CrashRecoveryLook.kt's PillColors) admits has already shipped
+        // at least one real rendering defect. Left unguarded, a throw here is caught by the
+        // SAME global uncaught-exception handler CrashRecovery.install() set up, which would
+        // overwrite the pending report with THIS crash and turn a broken recovery screen into a
+        // permanent loop with no in-app escape — its own Reset button lives inside the very
+        // buildDetailsPane() call that just failed. Fail toward the real app instead.
+        if (runCatching { setContentView(buildRoot()) }.isFailure) {
+            // The rich screen could not be built (a resource that will not resolve, a view that throws).
+            // Show a plain one made of nothing but literals instead of bouncing the user back into the app
+            // that just crashed; only if even that fails do we give up on recovery altogether.
+            if (runCatching { setContentView(buildMinimalRoot()) }.isFailure) {
+                recoverFromOwnFailure()
+                return
+            }
+        }
+
+        CrashRecovery.clearRecoveryEntryMarker(this)
+    }
+
+    /**
+     * This screen's own `onCreate` failed to build its UI. Give up on recovery exactly the way
+     * Continue would — clear the pending report and the streak — then relaunch the real app the
+     * same way [continueToApp] does, so a broken recovery screen fails toward the app it exists
+     * to recover, not toward itself. See [CrashRecovery.giveUpOnRecovery] for why every step
+     * here survives any of the others throwing.
+     */
+    private fun recoverFromOwnFailure() {
+        if (preview) {
+            // Inert in preview, like every other action with real consequences on this screen
+            // (see continueToApp, performQuarantineReset): a broken PREVIEW build must never touch real
+            // crash state or relaunch the host app.
+            CrashRecovery.clearRecoveryEntryMarker(this)
+            finish()
+            return
+        }
+        CrashRecovery.giveUpOnRecovery(
+            clearReport = { CrashRecovery.clear(this) },
+            clearStreak = { CrashRecovery.clearStreak(this) },
+            clearEntryMarker = { CrashRecovery.clearRecoveryEntryMarker(this) },
+            relaunch = { packageManager.getLaunchIntentForPackage(packageName)?.let { startActivity(it) } },
+            then = { finish() },
+        )
+    }
+
+    /**
+     * The last-resort screen: one TextView and two Buttons, no resources, no theme, no Look, no
+     * animation, no custom drawables. Plain English literals on purpose: it exists for the case where
+     * resource lookup itself is what failed. Continue and Discard are the same remediation as the real
+     * screen's; Share hands the report to the system share sheet.
+     */
+    private fun buildMinimalRoot(): View {
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFF131210.toInt())
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, pad)
+        }
+        fun label(t: String, size: Float) = TextView(this).apply {
+            text = t; textSize = size; setTextColor(0xFFECE8DF.toInt())
+        }
+        fun button(t: String, onClick: () -> Unit) = Button(this).apply {
+            text = t; setOnClickListener { onClick() }
+            minHeight = (48 * resources.displayMetrics.density).toInt()
+        }
+        col.addView(label("$appLabel had a problem last time", 20f))
+        col.addView(label(report.plainLanguage, 14f))
+        col.addView(button("Continue") { continueToApp() })
+        col.addView(button("Share report") { shareVia(null) })
+        col.addView(button("Discard report") { discard() })
+        return ScrollView(this).apply { setBackgroundColor(0xFF131210.toInt()); addView(col) }
     }
 
     private fun buildRoot(): View {
@@ -190,18 +274,17 @@ class CrashRecoveryActivity : Activity() {
                 gravity = Gravity.CENTER_HORIZONTAL
             }
             isClickable = true
-            contentDescription = "Replay the crash animation"
+            contentDescription = getString(R.string.cr_replay_anim)
             setOnClickListener { glitch(this) }
         }
         col.addView(icon)
         startGlitchLoop(icon)
 
-        col.addView(centered(text("Well, that happened.", Look.Type.DISPLAY, pal.ink, bold = true)))
+        col.addView(centered(text(getString(R.string.cr_title), Look.Type.DISPLAY, pal.ink, bold = true)))
         col.addView(
             centered(
                 text(
-                    "$appLabel hit a snag last time and had to close. Sorry about that — " +
-                        "here's exactly what happened.",
+                    getString(R.string.cr_snag, appLabel),
                     Look.Type.SECONDARY,
                     pal.inkSoft,
                 ).apply {
@@ -217,18 +300,18 @@ class CrashRecoveryActivity : Activity() {
         col.addView(whatCard().withTopMargin(Look.Space.S))
 
         col.addView(
-            pillButton("Continue to $appLabel", pal.accent, pal.onAccent, filled = true) { continueToApp() }
+            pillButton(getString(R.string.cr_continue, appLabel), pal.accent, pal.onAccent, filled = true) { continueToApp() }
                 .withTopMargin(Look.Space.XL),
         )
         col.addView(
-            pillButton("View the full report", pal.ink, pal.paper, filled = false) { showDetails() }
+            pillButton(getString(R.string.cr_view_report), pal.ink, pal.paper, filled = false) { showDetails() }
                 .withTopMargin(Look.Space.S),
         )
 
         col.addView(shareRow(includeCopy = false).withTopMargin(Look.Space.S))
 
         col.addView(
-            text("Discard this report", Look.Type.CAPTION, pal.inkSoft).apply {
+            text(getString(R.string.cr_discard), Look.Type.CAPTION, pal.inkSoft).apply {
                 gravity = Gravity.CENTER
                 paintFlags = paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
                 isClickable = true
@@ -279,11 +362,8 @@ class CrashRecoveryActivity : Activity() {
 
     private fun privacyCard(): View {
         val body = SpannableStringBuilder()
-        appendBold(body, "This report exists only on your device.")
-        body.append(
-            " Nothing was sent anywhere — there is no server and no telemetry. It is shared " +
-                "only if you choose to share it, and you can read every word of it first.",
-        )
+        appendBold(body, getString(R.string.cr_privacy_bold))
+        body.append(" ").append(getString(R.string.cr_privacy_rest).trim())
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp)
@@ -308,7 +388,7 @@ class CrashRecoveryActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp)
             background = filled(pal.card, Look.Radius.CARD)
-            addView(eyebrow("What happened"))
+            addView(eyebrow(getString(R.string.cr_what_happened)))
             addView(spacer(Look.Space.XS))
             addView(
                 text(report.plainLanguage, Look.Type.BODY, pal.ink)
@@ -342,7 +422,7 @@ class CrashRecoveryActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(Look.Space.M.dp, Look.Space.M.dp, Look.Space.M.dp, Look.Space.S.dp)
-                addView(text("‹  Back", Look.Type.BODY, pal.ink, bold = true).apply {
+                addView(text(getString(R.string.cr_back), Look.Type.BODY, pal.ink, bold = true).apply {
                     isClickable = true
                     setPadding(Look.Space.M.dp, Look.Space.S.dp, Look.Space.M.dp, Look.Space.S.dp)
                     background = pressable(null, pal.ink)
@@ -355,37 +435,36 @@ class CrashRecoveryActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(Look.Space.GUTTER.dp, 0, Look.Space.GUTTER.dp, Look.Space.L.dp)
         }
-        col.addView(text("The full report", Look.Type.TITLE, pal.ink, bold = true))
+        col.addView(text(getString(R.string.cr_full_report), Look.Type.TITLE, pal.ink, bold = true))
         col.addView(spacer(Look.Space.S))
         col.addView(
             text(
-                "Everything below is the entire report — if you share it, this is all that " +
-                    "leaves your phone, word for word.",
+                getString(R.string.cr_full_report_blurb),
                 Look.Type.SECONDARY,
                 pal.inkSoft,
             ).apply { setLineSpacing(0f, Look.Type.LEADING_BODY) },
         )
 
-        col.addView(section("Error", listOf(
-            "Type" to report.excType,
-            "Message" to (report.excMessage ?: "(none)"),
-            "Thread" to report.threadName.ifBlank { "?" },
-            "When" to report.whenText(),
+        col.addView(section(getString(R.string.cr_sec_error), listOf(
+            getString(R.string.cr_k_type) to report.excType,
+            getString(R.string.cr_k_message) to (report.excMessage ?: getString(R.string.cr_none)),
+            getString(R.string.cr_k_thread) to report.threadName.ifBlank { "?" },
+            getString(R.string.cr_k_when) to report.whenText(),
         )))
-        col.addView(section("App", listOf(
-            "App" to appLabel,
-            "Version" to (report.versionLabel() ?: "?"),
-            "Package" to (report.packageName ?: "?"),
-            "Install source" to (report.installSource ?: "Unknown"),
+        col.addView(section(getString(R.string.cr_sec_app), listOf(
+            getString(R.string.cr_k_app) to appLabel,
+            getString(R.string.cr_k_version) to (report.versionLabel() ?: "?"),
+            getString(R.string.cr_k_package) to (report.packageName ?: "?"),
+            getString(R.string.cr_k_install) to (report.installSource ?: getString(R.string.cr_unknown)),
         )))
-        col.addView(section("Device", buildList {
-            add("Model" to deviceModelText())
-            add("Android" to (report.osSdkInt?.let { "API $it" } ?: "?"))
-            memoryText()?.let { add("Free memory" to it) }
+        col.addView(section(getString(R.string.cr_sec_device), buildList {
+            add(getString(R.string.cr_k_model) to deviceModelText())
+            add(getString(R.string.cr_k_android) to (report.osSdkInt?.let { getString(R.string.cr_api, it) } ?: "?"))
+            memoryText()?.let { add(getString(R.string.cr_k_freemem) to it) }
         }))
 
         // stack trace — mono, its own scroll, horizontal scroll for long frames
-        col.addView(sectionHeader("Stack trace"))
+        col.addView(sectionHeader(getString(R.string.cr_sec_trace)))
         col.addView(
             ScrollView(this).apply {
                 background = filled(pal.monoBg, Look.Radius.FIELD)
@@ -399,15 +478,12 @@ class CrashRecoveryActivity : Activity() {
             },
         )
 
-        col.addView(sectionHeader("Not in this report"))
+        col.addView(sectionHeader(getString(R.string.cr_sec_not_in)))
         col.addView(
             TextView(this).apply {
                 val sb = SpannableStringBuilder()
-                appendBold(sb, "No identifiers of any kind.")
-                sb.append(
-                    " No account, no email, no advertising ID, no location, no contacts, no file " +
-                        "names, no network activity. The report is plain text and you're looking at all of it.",
-                )
+                appendBold(sb, getString(R.string.cr_noid_bold))
+                sb.append(" ").append(getString(R.string.cr_noid_rest).trim())
                 setText(sb, TextView.BufferType.SPANNABLE)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, Look.Type.SECONDARY)
                 setTextColor(pal.inkSoft)
@@ -459,13 +535,10 @@ class CrashRecoveryActivity : Activity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = Look.Space.XL.dp }
-            addView(sectionHeader("Still happening?"))
+            addView(sectionHeader(getString(R.string.cr_still)))
             addView(
                 text(
-                    "$appLabel has crashed more than once in a row, so continuing may just hit the " +
-                        "same problem. You can reset it to a clean start — your data isn't deleted, " +
-                        "it's set aside, and you can put it back at any point before $appLabel is " +
-                        "working again.",
+                    getString(R.string.cr_still_body_aside, appLabel),
                     Look.Type.SECONDARY,
                     pal.inkSoft,
                 ).apply { setLineSpacing(0f, Look.Type.LEADING_BODY) },
@@ -488,7 +561,8 @@ class CrashRecoveryActivity : Activity() {
 
             // 2) Reset by setting data aside (non-destructive).
             addView(
-                pillButton("Reset & set my data aside", pal.accent, pal.onAccent, filled = true) {
+                // Non-destructive: the data is moved aside, not wiped, and can be restored below.
+                pillButton(getString(R.string.cr_reset_aside_btn), pal.accent, pal.onAccent, filled = true) {
                     confirmQuarantineReset()
                 }.withTopMargin(Look.Space.M),
             )
@@ -512,24 +586,21 @@ class CrashRecoveryActivity : Activity() {
 
     private fun confirmQuarantineReset() {
         android.app.AlertDialog.Builder(this)
-            .setTitle("Reset $appLabel?")
-            .setMessage(
-                "$appLabel will start fresh. Your existing data is moved aside — not deleted — so " +
-                    "you can restore it right after if the reset doesn't help. It's cleared only " +
-                    "once $appLabel is working again.",
-            )
-            .setPositiveButton("Reset") { _, _ -> performQuarantineReset() }
-            .setNegativeButton("Cancel", null)
+            .setTitle(getString(R.string.cr_reset_aside_title, appLabel))
+            .setMessage(getString(R.string.cr_reset_aside_msg, appLabel))
+            .setPositiveButton(getString(R.string.cr_reset)) { _, _ -> performQuarantineReset() }
+            .setNegativeButton(getString(R.string.cr_cancel), null)
             .show()
     }
 
     private fun performQuarantineReset() {
         // Inert in preview — previewing the screen must never touch real app data.
         if (preview) {
-            showToast("Preview — no data was changed")
+            showToast(getString(R.string.cr_preview_noreset))
             return
         }
         val moved = CrashRecovery.quarantineAndReset(this)
+        CrashRecovery.clearRecoveryEntryMarker(this)
         showToast(if (moved) "Data set aside — restarting clean" else "Restarting clean")
         paneMain.postDelayed({ relaunchApp() }, 500)
     }
@@ -616,7 +687,7 @@ class CrashRecoveryActivity : Activity() {
         val free = report.freeMemMb ?: return null
         val total = report.totalMemMb ?: return null
         val totalText = if (total >= 1024) "${(total / 1024.0).let { if (it % 1.0 == 0.0) it.toInt().toString() else String.format("%.1f", it) }} GB" else "$total MB"
-        return "$free MB of $totalText at crash"
+        return getString(R.string.cr_mem_fmt, free, totalText)
     }
 
     // ---------------- share row ----------------
@@ -624,10 +695,10 @@ class CrashRecoveryActivity : Activity() {
     private fun shareRow(includeCopy: Boolean): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            if (includeCopy) addView(shareTile("Copy") { copyReport() }.also { addGap(it) })
-            addView(shareTile("Save file") { saveReport() }.also { addGap(it) })
-            addView(shareTile("Email") { emailReport() }.also { addGap(it) })
-            addView(shareTile("WhatsApp") { whatsappReport() })
+            if (includeCopy) addView(shareTile(getString(R.string.cr_copy)) { copyReport() }.also { addGap(it) })
+            addView(shareTile(getString(R.string.cr_save_file)) { saveReport() }.also { addGap(it) })
+            addView(shareTile(getString(R.string.cr_email)) { emailReport() }.also { addGap(it) })
+            addView(shareTile(getString(R.string.cr_whatsapp)) { whatsappReport() })
         }
 
     private fun LinearLayout.addGap(child: View) {
@@ -659,6 +730,7 @@ class CrashRecoveryActivity : Activity() {
             return
         }
         CrashRecovery.clear(this)
+        CrashRecovery.clearRecoveryEntryMarker(this)
         relaunchApp()
     }
 
@@ -690,9 +762,13 @@ class CrashRecoveryActivity : Activity() {
     }
 
     private fun discard() {
+        // "Report deleted from device" must be true: the history screen keeps its own copy of every
+        // capture, so drop that one too (a no-op for a preview, or a report with no timestamp).
+        if (!preview) report.whenMillis?.let { CrashRecovery.removeHistoryEntry(this, it) }
         CrashRecovery.clear(this)
-        showToast("Report deleted from device")
-        paneMain.postDelayed({ continueToApp() }, 650)
+        CrashRecovery.clearRecoveryEntryMarker(this)
+        showToast(getString(R.string.cr_deleted))
+        window.decorView.postDelayed({ continueToApp() }, 650)
     }
 
     private fun copyReport() {
@@ -700,7 +776,7 @@ class CrashRecoveryActivity : Activity() {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("Crash report", reportText()))
             // API 33+ shows its own copy confirmation; ours would be redundant there.
-            if (Build.VERSION.SDK_INT < 33) showToast("Copied to clipboard")
+            if (Build.VERSION.SDK_INT < 33) showToast(getString(R.string.cr_copied))
         }
     }
 
@@ -730,8 +806,8 @@ class CrashRecoveryActivity : Activity() {
             if (uri != null && textToWrite != null) {
                 runCatching {
                     contentResolver.openOutputStream(uri)?.use { it.write(textToWrite.toByteArray()) }
-                    showToast("Report saved")
-                }.onFailure { showToast("Couldn't save the file") }
+                    showToast(getString(R.string.cr_saved))
+                }.onFailure { showToast(getString(R.string.cr_save_failed)) }
             }
         } else if (requestCode == REQ_EXPORT && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
@@ -778,8 +854,8 @@ class CrashRecoveryActivity : Activity() {
                 putExtra(Intent.EXTRA_TEXT, body)
             }
         }
-        runCatching { startActivity(Intent.createChooser(intent, "Email crash report")) }
-            .onFailure { showToast("No email app found") }
+        runCatching { startActivity(Intent.createChooser(intent, getString(R.string.cr_chooser_email))) }
+            .onFailure { showToast(getString(R.string.cr_no_email)) }
     }
 
     private fun whatsappReport() {
@@ -804,7 +880,8 @@ class CrashRecoveryActivity : Activity() {
                 putExtra(Intent.EXTRA_TEXT, reportText())
                 if (pkg != null) setPackage(pkg)
             }
-            startActivity(Intent.createChooser(send, "Share crash report"))
+            // The plain fallback screen shares through here too, and it exists for when resources are what failed.
+            startActivity(Intent.createChooser(send, runCatching { getString(R.string.cr_chooser_share) }.getOrDefault("Share crash report")))
         }
     }
 
@@ -844,7 +921,7 @@ class CrashRecoveryActivity : Activity() {
 
     override fun onBackPressed() {
         // If the report is open, Back returns to the main pane rather than leaving the screen.
-        if (paneDetails.translationX < root.width * 0.5f) showMain() else super.onBackPressed()
+        if (::paneDetails.isInitialized && ::root.isInitialized && paneDetails.translationX < root.width * 0.5f) showMain() else super.onBackPressed()
     }
 
     // ---------------- crash-mark glitch ----------------

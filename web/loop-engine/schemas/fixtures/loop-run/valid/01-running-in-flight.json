@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "run-0001",
+  "definitionDigest": "sha256:bd0744455f140b0c49f72b83b21489ea512354a54ae7d43bef4e0489fd31181e",
+  "sourceRef": {
+    "releaseRef": { "loopId": "loop.demo.hello-file", "semanticVersion": "1.0.0", "packageDigest": "sha256:bd0744455f140b0c49f72b83b21489ea512354a54ae7d43bef4e0489fd31181e" }
+  },
+  "bindingProfileRef": { "objectId": "binding-profile-0001" },
+  "parameters": { "targetPath": "notes/todo.md" },
+  "targetDecisions": [
+    { "targetId": "n1", "executionTargetType": "LOCAL_ANDROID", "decidedAtUtc": "2026-08-07T09:00:05Z", "decidedBy": "USER" }
+  ],
+  "eventLog": [
+    { "eventId": "ev-1", "occurredAtUtc": "2026-08-07T09:00:00Z", "toState": "CREATED", "description": "User starts a LoopRun against the installed release." },
+    { "eventId": "ev-2", "occurredAtUtc": "2026-08-07T09:00:01Z", "fromState": "CREATED", "toState": "PREFLIGHT", "description": "Engine runs preflight validation." },
+    { "eventId": "ev-3", "occurredAtUtc": "2026-08-07T09:00:02Z", "fromState": "PREFLIGHT", "toState": "WAITING_AUTHORITY", "description": "All binding slots resolved; capability grants not yet confirmed." },
+    { "eventId": "ev-4", "occurredAtUtc": "2026-08-07T09:00:04Z", "fromState": "WAITING_AUTHORITY", "toState": "READY", "description": "User approves the requested capability grant.", "receiptRef": { "objectId": "authority-grant-receipt-0001" } },
+    { "eventId": "ev-5", "occurredAtUtc": "2026-08-07T09:00:05Z", "fromState": "READY", "toState": "RUNNING", "description": "Engine dispatches the first step." }
+  ],
+  "nodeAttempts": [
+    { "nodeId": "n1", "attemptNumber": 1, "startedAtUtc": "2026-08-07T09:00:05Z", "nodeCategory": "DETERMINISTIC_TRANSFORMATION" }
+  ],
+  "userInterventions": [],
+  "outputs": null,
+  "terminalReason": null,
+  "runState": "RUNNING",
+  "authorityGrants": ["grant-0001"],
+  "sideEffectState": "NONE",
+  "createdAtUtc": "2026-08-07T09:00:00Z",
+  "updatedAtUtc": "2026-08-07T09:00:05Z"
+}

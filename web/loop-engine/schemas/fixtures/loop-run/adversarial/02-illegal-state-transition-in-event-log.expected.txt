@@ -1,0 +1,20 @@
+Schema validation: PASSES (this document is schema-valid against loop-run.schema.json).
+
+Real rejection: §9's transition table has no `WAITING_BINDING -> RUNNING` row at all. The only
+edges out of WAITING_BINDING are to WAITING_AUTHORITY (binding resolution completes) or CANCELLING
+(user cancels). Reaching RUNNING requires passing through WAITING_AUTHORITY (capability grant
+approved, -> READY) and then READY -> RUNNING (engine dispatches within budget). `ev-4` above skips
+both WAITING_AUTHORITY and READY, meaning this run started executing node work with (a) capability
+grants never confirmed (§10: "Package capability declarations are requests, never grants... A
+binding MAY narrow requested authority and MUST NOT widen it silently") and (b) no budget-dispatch
+gate ever passed (§18). This is exactly the class of defect LoopRuntimeContracts.kt's
+`RunState.isValidTransition` (and the `RunEvent` constructor that calls it) is designed to make
+un-constructible in Kotlin — this JSON document was authored directly, bypassing that guard.
+
+Why the schema cannot catch this: loop-run.schema.json's `RunEvent.fromState`/`toState` pair is
+validated only against the closed 17-value RunState enum, independently per array entry — nothing
+in JSON Schema expresses "this array, read in order, must trace a walk over the following directed
+graph." Encoding §9's full transition table as a JSON Schema constraint over an arbitrary-length
+array would require a state-machine-aware meta-schema this draft does not support; the corresponding
+Kotlin type (LoopRuntimeContracts.kt's RunState.isValidTransition, invoked from RunEvent's own
+init block) is where this is actually enforced at construction time.
