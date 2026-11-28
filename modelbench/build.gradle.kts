@@ -18,7 +18,7 @@ plugins {
     `maven-publish`
 }
 
-val modelbenchGroup = "dev.aarso"
+val modelbenchGroup = "com.asystemofcells"
 val modelbenchArtifact = "modelbench"
 val modelbenchVersion = "0.1.0"
 

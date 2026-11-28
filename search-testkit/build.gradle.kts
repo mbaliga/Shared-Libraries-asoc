@@ -9,7 +9,7 @@ plugins {
     `maven-publish`
 }
 
-val testkitGroup = "dev.aarso"
+val testkitGroup = "com.asystemofcells"
 val testkitArtifact = "search-testkit"
 val testkitVersion = "0.1.0"
 

@@ -1,7 +1,7 @@
 # `:diagnostics` — on-device evidence module
 
 **Repo:** Hyle (alongside `:crash-recovery`, and like it *not part of Hyle* — zero Compose/Material in anything an app is required to take)
-**Artifact:** `dev.aarso:diagnostics-*` · `publishToMavenLocal` only
+**Artifact:** `com.asystemofcells:diagnostics-*` · `publishToMavenLocal` only
 **Schema:** `diag/2`
 **Status:** core verified off-device (224 checks); Android layer written, never compiled against an SDK, never run on a device
 
@@ -169,10 +169,10 @@ Diagnostics.request("/v1/chat", ms)             // service
 Automatic rolling capture is the default. The floating overlay is profile-aware — headline number, budget line and phase rows all come from the active profile, because a panel that says "fps" over an instrument app is worse than no panel — and it **refuses** to show for `ime` and `wallpaper`, where a floating window would cover or steal input from the surface under measurement. It points at the ADB trigger instead, which is the one that matters most for your workflow:
 
 ```bash
-adb shell am broadcast -a dev.aarso.diagnostics.START --es label "pond-high"
-adb shell am broadcast -a dev.aarso.diagnostics.STOP
+adb shell am broadcast -a com.asystemofcells.diagnostics.START --es label "pond-high"
+adb shell am broadcast -a com.asystemofcells.diagnostics.STOP
 adb logcat -d -s Diag | grep REPORT_PATH        # pull straight into the repo
-adb shell am broadcast -a dev.aarso.diagnostics.RECOVER
+adb shell am broadcast -a com.asystemofcells.diagnostics.RECOVER
 ```
 
 ---

@@ -1,10 +1,10 @@
 # Migrating to `mbaliga/Shared-Libraries-asoc`
 
-## `dev.aarso:crash-recovery` has moved here from `mbaliga/Hyle-Design-System`
+## `com.asystemofcells:crash-recovery` has moved here from `mbaliga/Hyle-Design-System`
 
 **Old home:** `mbaliga/Hyle-Design-System`, module `:crash-recovery` (Personal-Tracker `DECISIONS.md` D-O)
 **New home:** `mbaliga/Shared-Libraries-asoc`, module `:crash-recovery`
-**Coordinate is unchanged:** `dev.aarso:crash-recovery`
+**Coordinate is unchanged:** `com.asystemofcells:crash-recovery`
 **Version:** `1.1.0` → `1.2.0`
 
 ### Why it moved
@@ -26,7 +26,7 @@ Two lines, in two files.
 
 ```diff
 -includeBuild("hyle-design-system")
-+includeBuild("hyle-design-system")     // keep this ONLY if you also use dev.aarso:hyle
++includeBuild("hyle-design-system")     // keep this ONLY if you also use com.asystemofcells:hyle
 +includeBuild("shared-libraries")
 ```
 
@@ -42,12 +42,12 @@ git submodule add https://github.com/mbaliga/Shared-Libraries-asoc.git shared-li
 **2. Your module's `build.gradle.kts`** — bump the version:
 
 ```diff
--implementation("dev.aarso:crash-recovery:1.1.0")
-+implementation("dev.aarso:crash-recovery:1.2.0")
+-implementation("com.asystemofcells:crash-recovery:1.1.0")
++implementation("com.asystemofcells:crash-recovery:1.2.0")
 ```
 
 The `group:name` coordinate is unchanged, so Gradle's composite substitution keeps working with
-no other edits. **No import changes** — the package is still `dev.aarso.crashrecovery` and the
+no other edits. **No import changes** — the package is still `com.asystemofcells.crashrecovery` and the
 API is source-compatible.
 
 **3. CI** — if your checkout step lists submodule paths explicitly, add the new one. If it uses
@@ -56,8 +56,8 @@ API is source-compatible.
 ### What happens if you don't
 
 `hyle-design-system` keeps a **tombstone** at `:crash-recovery` declaring the same
-`dev.aarso:crash-recovery` coordinate, so composite substitution still resolves and you do *not*
-get an unhelpful `Could not find dev.aarso:crash-recovery`. Instead every call site fails to
+`com.asystemofcells:crash-recovery` coordinate, so composite substitution still resolves and you do *not*
+get an unhelpful `Could not find com.asystemofcells:crash-recovery`. Instead every call site fails to
 compile with a message naming this repo.
 
 The tombstone deliberately does **not** fail at Gradle configuration time. Gradle configures

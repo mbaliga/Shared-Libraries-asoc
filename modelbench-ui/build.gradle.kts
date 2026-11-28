@@ -15,7 +15,7 @@ plugins {
     `maven-publish`
 }
 
-val modelbenchUiGroup = "dev.aarso"
+val modelbenchUiGroup = "com.asystemofcells"
 val modelbenchUiArtifact = "modelbench-ui"
 val modelbenchUiVersion = "0.1.0"
 
@@ -23,7 +23,7 @@ group = modelbenchUiGroup
 version = modelbenchUiVersion
 
 android {
-    namespace = "dev.aarso.modelbench.ui"
+    namespace = "com.asystemofcells.modelbench.ui"
     compileSdk = 36
 
     defaultConfig {

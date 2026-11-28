@@ -193,7 +193,7 @@
     <h3>! Overlay refused for this profile</h3>
     <p id="refusedWhy"></p>
     <p style="margin:0">Use the ADB trigger instead — this is precisely why it exists:</p>
-    <code>adb shell am broadcast -a dev.aarso.diagnostics.START --es label "run-1"<br>adb shell am broadcast -a dev.aarso.diagnostics.STOP<br>adb logcat -d -s Diag | grep REPORT_PATH</code>
+    <code>adb shell am broadcast -a com.asystemofcells.diagnostics.START --es label "run-1"<br>adb shell am broadcast -a com.asystemofcells.diagnostics.STOP<br>adb logcat -d -s Diag | grep REPORT_PATH</code>
   </div>
 
   <div class="scrim hidden" id="scrim"></div>

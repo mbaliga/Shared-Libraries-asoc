@@ -14,7 +14,7 @@ plugins {
     `maven-publish`
 }
 
-val searchCoreGroup = "dev.aarso"
+val searchCoreGroup = "com.asystemofcells"
 val searchCoreArtifact = "search-core"
 val searchCoreVersion = "0.1.0"
 

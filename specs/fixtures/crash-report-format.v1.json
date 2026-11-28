@@ -374,7 +374,7 @@
       "free_mem_mb",
       "total_mem_mb"
     ],
-    "trace_template": "java.lang.IllegalStateException: this is a PREVIEW — no real crash occurred\n\tat dev.aarso.crashrecovery.CrashRecovery.previewIntent(CrashRecovery.kt)\n\tat {app_label} (preview trigger — not an actual stack trace)\n",
+    "trace_template": "java.lang.IllegalStateException: this is a PREVIEW — no real crash occurred\n\tat com.asystemofcells.crashrecovery.CrashRecovery.previewIntent(CrashRecovery.kt)\n\tat {app_label} (preview trigger — not an actual stack trace)\n",
     "full_report_template": "=== Crash report — {app_label} — PREVIEW ===\nThis is a PREVIEW of the recovery screen. No crash occurred, and no\nreal device information is included.\n\nWhat happened: PREVIEW — nothing actually went wrong.\n\nError:   java.lang.IllegalStateException\nMessage: this is a PREVIEW — no real crash occurred\nThread:  main\nWhen:    (preview — no timestamp)\n\nApp:     {app_label} (preview)\nPackage: (preview)\nSource:  (preview)\n\nDevice:  (preview)\n\n{trace}",
     "properties": [
       {

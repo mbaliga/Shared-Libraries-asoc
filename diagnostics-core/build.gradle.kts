@@ -11,7 +11,7 @@ plugins {
     `maven-publish`
 }
 
-val diagnosticsGroup = "dev.aarso"
+val diagnosticsGroup = "com.asystemofcells"
 val diagnosticsCoreArtifact = "diagnostics-core"
 val diagnosticsVersion = "0.2.0"
 

@@ -82,7 +82,7 @@ because the switch is an environment variable, which Gradle does not treat as a 
 - **`feedback` is not on this branch.** The `:feedback` and `:evidence-schema` modules exist on
   `main`, which has diverged from `fonebrew-development-clzu43`. The feedback spec and fixture
   are complete and the guard test is checked in at its final path
-  (`feedback/src/test/kotlin/dev/aarso/feedback/SpecFixturesTest.kt`), but with no
+  (`feedback/src/test/kotlin/com/asystemofcells/feedback/SpecFixturesTest.kt`), but with no
   `feedback/build.gradle.kts` here Gradle never compiles it, so it is **inert until the lines
   merge**. It was verified green against a scratch copy of `origin/main` (not committed anywhere).
   It cannot collide with `main`: it adds files `main` does not have.

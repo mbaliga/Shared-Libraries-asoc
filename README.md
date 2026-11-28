@@ -1,21 +1,23 @@
 # Shared Libraries — a system of cells
 
+> **Coordinate change (2026-11):** every module in this repo moved from the `dev.aarso` group to `com.asystemofcells` (Maven group *and* Kotlin package root), e.g. `dev.aarso:crash-recovery` is now `com.asystemofcells:crash-recovery`. *Aarso* is a separate, distinct module of the constellation and is not a namespace for shared libraries. Consumers update the substitution rule in their `settings.gradle.kts` and their imports; there is no compatibility shim.
+
 Cross-app libraries for the constellation. Each module is an independent Maven coordinate under
-`dev.aarso`, consumed the same way Hyle is: a **git submodule pinned by the consumer** plus
+`com.asystemofcells`, consumed the same way Hyle is: a **git submodule pinned by the consumer** plus
 `includeBuild(...)` (Personal-Tracker `DECISIONS.md` D-A).
 
 | Module | Coordinate | Platform | What it is |
 |---|---|---|---|
-| `:search-core` | `dev.aarso:search-core` | pure JVM | On-device search: query language, facet evaluation, ranking. No Android, no storage engine, no coroutines. |
-| `:search-testkit` | `dev.aarso:search-testkit` | pure JVM | Conformance fixtures and golden-corpus helpers for anything implementing the search contracts. |
-| `:crash-recovery` | `dev.aarso:crash-recovery` | Android library | Capture an uncaught crash to a file; show a recovery screen on the next launch instead of bricking. Zero Hyle dependency. |
-| `:diagnostics-core` | `dev.aarso:diagnostics-core` | pure JVM | On-device evidence: percentiles, verdicts, invariants, redaction, and Markdown report rendering — the source-agnostic engine every app-type profile shares. |
-| `:diagnostics-android` | `dev.aarso:diagnostics-android` | Android library | MetricSource plugins, session lifecycle, export, crash link, ADB trigger. No network permission, ever — verifiable in the merged manifest. |
-| `:diagnostics-overlay` | `dev.aarso:diagnostics-overlay` | Android library | The profile-aware floating bubble/panel. Plain Views, zero Compose/Material — same reasoning as `:crash-recovery`. |
-| `:diagnostics-noop` | `dev.aarso:diagnostics-noop` | Android library | Release-variant substitute with an identical API surface to `:diagnostics-android`, every call a no-op. Parity enforced by `scripts/check-noop-parity.py`. |
-| `:interaction-mode` | `dev.aarso:interaction-mode` | Android library | The shared "Regular" vs "asoc" interaction-mode choice — `InteractionMode`, `InteractionModeStore` + `PrefsInteractionModeStore`, and the pure `ModeDefaults` policy. No UI — the picker lives in Hyle. |
-| `:modelbench` | `dev.aarso:modelbench` | pure JVM | Local-model benchmarking domain: TTFT, prompt/decode tok/s, RSS delta, thermal hooks, `modelbench-report.v1` schema. No native code (engine adapters live with the engines). |
-| `:modelbench-ui` | `dev.aarso:modelbench-ui` | Android library | Two host-agnostic Compose screens (run list, run detail) over `:modelbench` reports. No material3, no navigation, no mode-reading — the embedding host owns all chrome. No consumer is wired yet. |
+| `:search-core` | `com.asystemofcells:search-core` | pure JVM | On-device search: query language, facet evaluation, ranking. No Android, no storage engine, no coroutines. |
+| `:search-testkit` | `com.asystemofcells:search-testkit` | pure JVM | Conformance fixtures and golden-corpus helpers for anything implementing the search contracts. |
+| `:crash-recovery` | `com.asystemofcells:crash-recovery` | Android library | Capture an uncaught crash to a file; show a recovery screen on the next launch instead of bricking. Zero Hyle dependency. |
+| `:diagnostics-core` | `com.asystemofcells:diagnostics-core` | pure JVM | On-device evidence: percentiles, verdicts, invariants, redaction, and Markdown report rendering — the source-agnostic engine every app-type profile shares. |
+| `:diagnostics-android` | `com.asystemofcells:diagnostics-android` | Android library | MetricSource plugins, session lifecycle, export, crash link, ADB trigger. No network permission, ever — verifiable in the merged manifest. |
+| `:diagnostics-overlay` | `com.asystemofcells:diagnostics-overlay` | Android library | The profile-aware floating bubble/panel. Plain Views, zero Compose/Material — same reasoning as `:crash-recovery`. |
+| `:diagnostics-noop` | `com.asystemofcells:diagnostics-noop` | Android library | Release-variant substitute with an identical API surface to `:diagnostics-android`, every call a no-op. Parity enforced by `scripts/check-noop-parity.py`. |
+| `:interaction-mode` | `com.asystemofcells:interaction-mode` | Android library | The shared "Regular" vs "asoc" interaction-mode choice — `InteractionMode`, `InteractionModeStore` + `PrefsInteractionModeStore`, and the pure `ModeDefaults` policy. No UI — the picker lives in Hyle. |
+| `:modelbench` | `com.asystemofcells:modelbench` | pure JVM | Local-model benchmarking domain: TTFT, prompt/decode tok/s, RSS delta, thermal hooks, `modelbench-report.v1` schema. No native code (engine adapters live with the engines). |
+| `:modelbench-ui` | `com.asystemofcells:modelbench-ui` | Android library | Two host-agnostic Compose screens (run list, run detail) over `:modelbench` reports. No material3, no navigation, no mode-reading — the embedding host owns all chrome. No consumer is wired yet. |
 
 ## Why this repo exists
 
@@ -57,7 +59,7 @@ and a legacy signal can never override an explicit choice the user has since mad
 `InteractionModeStore` (interface) + `PrefsInteractionModeStore` (the `SharedPreferences`-backed
 implementation, no other dependency) is the whole surface. **This module is deliberately
 UI-free** — no Compose, no Views, no picker screen. The affordance that actually lets a user
-choose "Regular" vs "asoc" lives in Hyle (`dev.aarso.hyle`) and calls through this interface.
+choose "Regular" vs "asoc" lives in Hyle (`com.asystemofcells.hyle`) and calls through this interface.
 
 ### Adoption boundary (decision record, 2026-09-15)
 
@@ -84,20 +86,20 @@ includeBuild("shared-libraries")
 
 ```kotlin
 // app/build.gradle.kts
-implementation("dev.aarso:search-core:0.1.0")
-implementation("dev.aarso:crash-recovery:1.5.0")
+implementation("com.asystemofcells:search-core:0.1.0")
+implementation("com.asystemofcells:crash-recovery:1.5.0")
 
 // diagnostics: debug-only collector + overlay, release-only no-op, plus the safety guard that
 // fails a release build if it ever resolves a real collector instead of the no-op.
-debugImplementation("dev.aarso:diagnostics-android:0.2.0")
-debugImplementation("dev.aarso:diagnostics-overlay:0.2.0")
-releaseImplementation("dev.aarso:diagnostics-noop:0.2.0")
+debugImplementation("com.asystemofcells:diagnostics-android:0.2.0")
+debugImplementation("com.asystemofcells:diagnostics-overlay:0.2.0")
+releaseImplementation("com.asystemofcells:diagnostics-noop:0.2.0")
 apply(from = "$rootDir/gradle/release-safety.gradle.kts")
 
-implementation("dev.aarso:interaction-mode:0.1.0")
+implementation("com.asystemofcells:interaction-mode:0.1.0")
 ```
 
-Gradle substitutes any `dev.aarso:<name>` dependency with the matching project in the included
+Gradle substitutes any `com.asystemofcells:<name>` dependency with the matching project in the included
 build, so no Maven registry is involved.
 
 ```bash

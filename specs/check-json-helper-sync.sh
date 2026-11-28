@@ -19,9 +19,9 @@ while [ $# -gt 0 ]; do
 done
 
 rel_paths="
-cell-shell/src/test/kotlin/dev/aarso/cellshell/SpecJson.kt
-crash-recovery/src/test/java/dev/aarso/crashrecovery/SpecJson.kt
-feedback/src/test/kotlin/dev/aarso/feedback/SpecJson.kt
+cell-shell/src/test/kotlin/com/asystemofcells/cellshell/SpecJson.kt
+crash-recovery/src/test/java/com/asystemofcells/crashrecovery/SpecJson.kt
+feedback/src/test/kotlin/com/asystemofcells/feedback/SpecJson.kt
 "
 
 normalised() { sed '1s/^package .*$/package NORMALISED/' "$1"; }

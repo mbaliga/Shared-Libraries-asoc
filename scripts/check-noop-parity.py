@@ -22,8 +22,8 @@ from pathlib import Path
 # This script lives in scripts/, one level below the repo root the module folders (:diagnostics-
 # android, :diagnostics-noop) actually sit in — .parent.parent, not .parent.
 ROOT = Path(__file__).resolve().parent.parent
-REAL = ROOT / "diagnostics-android/src/main/kotlin/dev/aarso/diagnostics/Diagnostics.kt"
-NOOP = ROOT / "diagnostics-noop/src/main/kotlin/dev/aarso/diagnostics/Diagnostics.kt"
+REAL = ROOT / "diagnostics-android/src/main/kotlin/com/asystemofcells/diagnostics/Diagnostics.kt"
+NOOP = ROOT / "diagnostics-noop/src/main/kotlin/com/asystemofcells/diagnostics/Diagnostics.kt"
 
 # Internal helpers that intentionally have no no-op counterpart.
 INTERNAL = {"currentSession", "currentConfig", "overlay", "wireDefaultSources"}

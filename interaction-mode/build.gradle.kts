@@ -7,7 +7,7 @@
 // Same posture as :crash-recovery (the structural precedent this module follows): a small,
 // dependency-free API, plain `android.content.SharedPreferences` (part of the SDK, not
 // androidx) rather than a datastore/coroutines dependency, and deliberately no UI — the picker
-// itself lives in Hyle (`dev.aarso.hyle`), not here. See src/test's FakeSharedPreferences for
+// itself lives in Hyle (`com.asystemofcells.hyle`), not here. See src/test's FakeSharedPreferences for
 // why PrefsInteractionModeStore is unit-testable on a plain JVM with no Robolectric: it's a
 // hand-rolled double for a platform *interface*, so no Android runtime is ever invoked.
 plugins {
@@ -16,7 +16,7 @@ plugins {
     `maven-publish`
 }
 
-val interactionModeGroup = "dev.aarso"
+val interactionModeGroup = "com.asystemofcells"
 val interactionModeArtifact = "interaction-mode"
 val interactionModeVersion = "0.1.0"
 
@@ -26,7 +26,7 @@ group = interactionModeGroup
 version = interactionModeVersion
 
 android {
-    namespace = "dev.aarso.interactionmode"
+    namespace = "com.asystemofcells.interactionmode"
     compileSdk = 36
 
     defaultConfig {

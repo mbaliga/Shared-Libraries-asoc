@@ -25,7 +25,7 @@ dependencyResolutionManagement {
 // Shared libraries for the "a system of cells" constellation.
 //
 // Consumed exactly like Hyle (Personal-Tracker DECISIONS.md D-A): a git submodule pinned by
-// the consumer + `includeBuild("shared-libraries")`. Gradle substitutes any `dev.aarso:<name>`
+// the consumer + `includeBuild("shared-libraries")`. Gradle substitutes any `com.asystemofcells:<name>`
 // dependency with the matching project here, so consumers never need a Maven registry.
 //
 // AGP LOCKSTEP (D-Q): this build contains Android library modules, so its AGP version
@@ -75,5 +75,5 @@ include(":modelbench-ui")
 // dependency-free API — InteractionMode enum, InteractionModeStore + PrefsInteractionModeStore,
 // and the pure ModeDefaults policy — that every constellation app reads/writes the same way.
 // Same posture as :crash-recovery: plain android.content.SharedPreferences, no other deps, and
-// deliberately no UI — the mode-picker itself lives in Hyle (dev.aarso.hyle).
+// deliberately no UI — the mode-picker itself lives in Hyle (com.asystemofcells.hyle).
 include(":interaction-mode")

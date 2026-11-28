@@ -15,7 +15,7 @@ plugins {
     `maven-publish`
 }
 
-val crashRecoveryGroup = "dev.aarso"
+val crashRecoveryGroup = "com.asystemofcells"
 val crashRecoveryArtifact = "crash-recovery"
 
 // 1.4.0 — the look-and-feel pass the owner asked for after device testing, plus the two
@@ -40,7 +40,7 @@ group = crashRecoveryGroup
 version = crashRecoveryVersion
 
 android {
-    namespace = "dev.aarso.crashrecovery"
+    namespace = "com.asystemofcells.crashrecovery"
     compileSdk = 36
 
     defaultConfig {

@@ -13,7 +13,7 @@ plugins {
     `maven-publish`
 }
 
-val diagnosticsGroup = "dev.aarso"
+val diagnosticsGroup = "com.asystemofcells"
 val diagnosticsAndroidArtifact = "diagnostics-android"
 val diagnosticsVersion = "0.2.0"
 
@@ -21,7 +21,7 @@ group = diagnosticsGroup
 version = diagnosticsVersion
 
 android {
-    namespace = "dev.aarso.diagnostics"
+    namespace = "com.asystemofcells.diagnostics"
     compileSdk = 36
 
     defaultConfig {

@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://shared-libraries-asoc.dev.aarso/schemas/modelbench-report.v1.schema.json",
+  "$id": "https://shared-libraries-asoc.com.asystemofcells/schemas/modelbench-report.v1.schema.json",
   "$comment": "v1 scaffolding for the local-model-benchmarking module — the constellation's apps (Fonebrew, Studio, the future asystemofmodels router) consume this to pick models per device. Grammar mirrors Android-IDE-core's schemas/integrations/* house style: schemaVersion pinned to major 1, a producer{app,version} block, and an unknownFields passthrough bag for forward-compat round-tripping. Not wrapped in a ContractEnvelope — :modelbench is a standalone JVM module with zero dependency on core's envelope library, same posture as that repo's assay-index.v1 (a fully independent producer's own file). Numeric metrics are 'number' (not 'integer') because tok/s and ms values are computed, not counted.",
   "title": "ModelBenchReport",
-  "description": "One benchmark session's result: a device+engine+model triple run through a context-length sweep, each point producing timing/throughput/memory metrics. Written by ModelBenchReport.toJson() (dev.aarso.modelbench.json, JVM module :modelbench) after BenchmarkSuite.run() completes a full sweep.",
+  "description": "One benchmark session's result: a device+engine+model triple run through a context-length sweep, each point producing timing/throughput/memory metrics. Written by ModelBenchReport.toJson() (com.asystemofcells.modelbench.json, JVM module :modelbench) after BenchmarkSuite.run() completes a full sweep.",
   "type": "object",
   "required": ["schemaVersion", "reportId", "generatedAt", "producer", "device", "engine", "model", "runs"],
   "properties": {

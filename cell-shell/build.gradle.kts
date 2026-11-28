@@ -17,7 +17,7 @@ plugins {
     `maven-publish`
 }
 
-val cellShellGroup = "dev.aarso"
+val cellShellGroup = "com.asystemofcells"
 val cellShellArtifact = "cell-shell"
 val cellShellVersion = "0.1.0"
 
@@ -25,7 +25,7 @@ group = cellShellGroup
 version = cellShellVersion
 
 android {
-    namespace = "dev.aarso.cellshell"
+    namespace = "com.asystemofcells.cellshell"
     compileSdk = 36
 
     defaultConfig {

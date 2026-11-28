@@ -31,11 +31,11 @@ afterEvaluate {
                 |  Offending     : ${hits.distinct().joinToString(", ")}
                 |
                 |  These artifacts are debugImplementation only. Release variants must resolve
-                |  dev.aarso:diagnostics-noop, which mirrors the API and does nothing.
+                |  com.asystemofcells:diagnostics-noop, which mirrors the API and does nothing.
                 |
-                |      debugImplementation("dev.aarso:diagnostics-android:0.2.0")
-                |      debugImplementation("dev.aarso:diagnostics-overlay:0.2.0")
-                |      releaseImplementation("dev.aarso:diagnostics-noop:0.2.0")
+                |      debugImplementation("com.asystemofcells:diagnostics-android:0.2.0")
+                |      debugImplementation("com.asystemofcells:diagnostics-overlay:0.2.0")
+                |      releaseImplementation("com.asystemofcells:diagnostics-noop:0.2.0")
                 |
                 """.trimMargin())
         }

@@ -8,7 +8,7 @@ plugins {
     `maven-publish`
 }
 
-val diagnosticsGroup = "dev.aarso"
+val diagnosticsGroup = "com.asystemofcells"
 val diagnosticsNoopArtifact = "diagnostics-noop"
 val diagnosticsVersion = "0.2.0"
 
@@ -16,7 +16,7 @@ group = diagnosticsGroup
 version = diagnosticsVersion
 
 android {
-    namespace = "dev.aarso.diagnostics.noop"
+    namespace = "com.asystemofcells.diagnostics.noop"
     compileSdk = 36
 
     defaultConfig {
