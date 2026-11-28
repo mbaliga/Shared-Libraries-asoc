@@ -60,6 +60,24 @@ object CrashRecovery {
     @Volatile
     private var salvager: CrashSalvager? = null
 
+    /** What the recovery screen's Reset does. [WIPE] is the default and the 1.7.0 behaviour. */
+    enum class ResetMode {
+        /** Wipe everything the app has stored (the platform's clear-app-data), after a confirm. */
+        WIPE,
+        /** Move the app's data aside instead, so it can be restored (see [quarantineAndReset]). */
+        SET_ASIDE,
+    }
+
+    @Volatile
+    private var resetMode: ResetMode = ResetMode.WIPE
+
+    /** Opt in to [ResetMode.SET_ASIDE]. Default [ResetMode.WIPE]; call once from `Application.onCreate`. */
+    fun setResetMode(mode: ResetMode) {
+        resetMode = mode
+    }
+
+    fun resetMode(): ResetMode = resetMode
+
     /** Register (or clear) the app's data salvager. Call once, e.g. from `Application.onCreate`. */
     fun setSalvager(salvager: CrashSalvager?) {
         this.salvager = salvager
@@ -499,11 +517,6 @@ object CrashRecovery {
 
     fun clear(context: Context) {
         runCatching { file(context).delete() }
-        // Mark every death up to now as already seen. A JVM crash also leaves an OS exit record
-        // (REASON_CRASH); without this, the next launch's captureExitDeath would rediscover the
-        // very crash the user just dismissed and re-show recovery in a loop. Advancing the
-        // watermark on dismissal (Continue / Discard / reset) is what makes "Continue" stick.
-        runCatching { exitSeenFile(context).writeText(System.currentTimeMillis().toString()) }
         // A cleared report has nothing left to count attempts against — forget it too, so a
         // genuinely new crash later starts its own ceiling at 1 rather than inheriting this
         // one's count (identityOf would already prevent that, but there's no reason to keep

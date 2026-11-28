@@ -36,6 +36,10 @@
     <string name="cr_noid_bold">No identifiers of any kind.</string>
     <string name="cr_noid_rest"> No account, no email, no advertising ID, no location, no contacts, no file names, no network activity. The report is plain text and you\'re looking at all of it.</string>
     <string name="cr_still">Still happening?</string>
+    <string name="cr_still_body">%1$s has now crashed more than once in a row, so continuing may just hit the same problem. As a last resort you can reset its data — this wipes everything %1$s has stored on this device and can\'t be undone.</string>
+    <string name="cr_reset_btn">Reset %1$s\'s data</string>
+    <string name="cr_reset_title">Reset %1$s\'s data?</string>
+    <string name="cr_reset_msg">This wipes everything %1$s has stored on this device and restarts it. This cannot be undone.</string>
     <string name="cr_still_body_aside">%1$s has crashed more than once in a row, so continuing may just hit the same problem. You can reset it to a clean start — your data isn\'t deleted, it\'s set aside, and you can put it back at any point before %1$s is working again.</string>
     <string name="cr_reset_aside_btn">Reset &amp; set my data aside</string>
     <string name="cr_reset_aside_title">Reset %1$s?</string>
@@ -43,6 +47,7 @@
     <string name="cr_reset">Reset</string>
     <string name="cr_cancel">Cancel</string>
     <string name="cr_preview_noreset">Preview — no data was reset</string>
+    <string name="cr_clear_storage">Clear %1$s\'s storage in Android Settings, then reopen it.</string>
     <string name="cr_copy">Copy</string>
     <string name="cr_save_file">Save file</string>
     <string name="cr_email">Email</string>

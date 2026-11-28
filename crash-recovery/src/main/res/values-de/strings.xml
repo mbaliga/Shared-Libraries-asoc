@@ -35,9 +35,14 @@
     <string name="cr_noid_bold">Keinerlei Kennungen.</string>
     <string name="cr_noid_rest"> Kein Konto, keine E-Mail, keine Werbe-ID, kein Standort, keine Kontakte, keine Dateinamen, keine Netzwerkaktivität. Der Bericht ist reiner Text und du siehst ihn vollständig.</string>
     <string name="cr_still">Passiert es weiterhin?</string>
+    <string name="cr_still_body">%1$s ist jetzt mehrmals hintereinander abgestürzt, ein Weitermachen könnte also auf dasselbe Problem stoßen. Als letzten Ausweg kannst du die Daten zurücksetzen — das löscht alles, was %1$s auf diesem Gerät gespeichert hat, und lässt sich nicht rückgängig machen.</string>
+    <string name="cr_reset_btn">Daten von %1$s zurücksetzen</string>
+    <string name="cr_reset_title">Daten von %1$s zurücksetzen?</string>
+    <string name="cr_reset_msg">Das löscht alles, was %1$s auf diesem Gerät gespeichert hat, und startet es neu. Das lässt sich nicht rückgängig machen.</string>
     <string name="cr_reset">Zurücksetzen</string>
     <string name="cr_cancel">Abbrechen</string>
     <string name="cr_preview_noreset">Vorschau — es wurden keine Daten zurückgesetzt</string>
+    <string name="cr_clear_storage">Lösche den Speicher von %1$s in den Android-Einstellungen und öffne die App dann erneut.</string>
     <string name="cr_copy">Kopieren</string>
     <string name="cr_save_file">Datei speichern</string>
     <string name="cr_email">E-Mail</string>

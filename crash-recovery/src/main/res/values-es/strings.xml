@@ -35,9 +35,14 @@
     <string name="cr_noid_bold">Ningún identificador de ningún tipo.</string>
     <string name="cr_noid_rest"> Sin cuenta, sin correo, sin ID de publicidad, sin ubicación, sin contactos, sin nombres de archivo, sin actividad de red. El informe es texto plano y lo estás viendo entero.</string>
     <string name="cr_still">¿Sigue pasando?</string>
+    <string name="cr_still_body">%1$s ya se ha cerrado más de una vez seguida, así que continuar podría topar con el mismo problema. Como último recurso puedes restablecer sus datos: esto borra todo lo que %1$s tiene guardado en este dispositivo y no se puede deshacer.</string>
+    <string name="cr_reset_btn">Restablecer los datos de %1$s</string>
+    <string name="cr_reset_title">¿Restablecer los datos de %1$s?</string>
+    <string name="cr_reset_msg">Esto borra todo lo que %1$s tiene guardado en este dispositivo y lo reinicia. No se puede deshacer.</string>
     <string name="cr_reset">Restablecer</string>
     <string name="cr_cancel">Cancelar</string>
     <string name="cr_preview_noreset">Vista previa: no se restableció ningún dato</string>
+    <string name="cr_clear_storage">Borra el almacenamiento de %1$s en los Ajustes de Android y vuelve a abrirla.</string>
     <string name="cr_copy">Copiar</string>
     <string name="cr_save_file">Guardar archivo</string>
     <string name="cr_email">Correo</string>

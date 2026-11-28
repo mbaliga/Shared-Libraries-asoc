@@ -35,9 +35,14 @@
     <string name="cr_noid_bold">किसी भी तरह की पहचान नहीं।</string>
     <string name="cr_noid_rest"> कोई खाता नहीं, कोई ईमेल नहीं, कोई विज्ञापन ID नहीं, कोई स्थान नहीं, कोई संपर्क नहीं, कोई फ़ाइल नाम नहीं, कोई नेटवर्क गतिविधि नहीं। रिपोर्ट सादा टेक्स्ट है और आप उसे पूरा देख रहे हैं।</string>
     <string name="cr_still">अब भी हो रहा है?</string>
+    <string name="cr_still_body">%1$s लगातार कई बार क्रैश हो चुका है, इसलिए जारी रखने पर वही समस्या फिर आ सकती है। आख़िरी उपाय के तौर पर आप इसका डेटा रीसेट कर सकते हैं — इससे इस डिवाइस पर %1$s का सारा संग्रहित डेटा मिट जाएगा और इसे पलटा नहीं जा सकता।</string>
+    <string name="cr_reset_btn">%1$s का डेटा रीसेट करें</string>
+    <string name="cr_reset_title">%1$s का डेटा रीसेट करें?</string>
+    <string name="cr_reset_msg">इससे इस डिवाइस पर %1$s का सारा संग्रहित डेटा मिट जाएगा और यह फिर से शुरू होगा। इसे पलटा नहीं जा सकता।</string>
     <string name="cr_reset">रीसेट</string>
     <string name="cr_cancel">रद्द करें</string>
     <string name="cr_preview_noreset">पूर्वावलोकन — कोई डेटा रीसेट नहीं हुआ</string>
+    <string name="cr_clear_storage">Android सेटिंग्स में %1$s का स्टोरेज साफ़ करें, फिर इसे दोबारा खोलें।</string>
     <string name="cr_copy">कॉपी</string>
     <string name="cr_save_file">फ़ाइल सहेजें</string>
     <string name="cr_email">ईमेल</string>

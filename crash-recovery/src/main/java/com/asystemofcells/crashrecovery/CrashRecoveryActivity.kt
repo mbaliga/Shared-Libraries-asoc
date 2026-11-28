@@ -76,6 +76,8 @@ open class CrashRecoveryActivity : Activity() {
 
     private var pendingSaveText: String? = null
     private var hasQuarantine = false
+    // True only when the host opted in to the non-destructive reset (CrashRecovery.setResetMode).
+    private val setAside: Boolean get() = CrashRecovery.resetMode() == CrashRecovery.ResetMode.SET_ASIDE
 
     @Suppress("DEPRECATION")
     private fun readStyle(): CrashRecoveryStyle =
@@ -148,7 +150,7 @@ open class CrashRecoveryActivity : Activity() {
     private fun recoverFromOwnFailure() {
         if (preview) {
             // Inert in preview, like every other action with real consequences on this screen
-            // (see continueToApp, performQuarantineReset): a broken PREVIEW build must never touch real
+            // (see continueToApp, performReset, performQuarantineReset): a broken PREVIEW build must never touch real
             // crash state or relaunch the host app.
             CrashRecovery.clearRecoveryEntryMarker(this)
             finish()
@@ -538,7 +540,7 @@ open class CrashRecoveryActivity : Activity() {
             addView(sectionHeader(getString(R.string.cr_still)))
             addView(
                 text(
-                    getString(R.string.cr_still_body_aside, appLabel),
+                    getString(if (setAside) R.string.cr_still_body_aside else R.string.cr_still_body, appLabel),
                     Look.Type.SECONDARY,
                     pal.inkSoft,
                 ).apply { setLineSpacing(0f, Look.Type.LEADING_BODY) },
@@ -559,13 +561,24 @@ open class CrashRecoveryActivity : Activity() {
                 )
             }
 
-            // 2) Reset by setting data aside (non-destructive).
-            addView(
-                // Non-destructive: the data is moved aside, not wiped, and can be restored below.
-                pillButton(getString(R.string.cr_reset_aside_btn), pal.accent, pal.onAccent, filled = true) {
-                    confirmQuarantineReset()
-                }.withTopMargin(Look.Space.M),
-            )
+            // 2) Reset. Default (1.7.0 behaviour, unchanged for every host): wipe the app's data via the
+            //    platform, after a confirm. Opt-in via CrashRecovery.setResetMode(SET_ASIDE): move the data
+            //    aside instead (restorable below).
+            if (setAside) {
+                addView(
+                    pillButton(getString(R.string.cr_reset_aside_btn), pal.accent, pal.onAccent, filled = true) {
+                        confirmQuarantineReset()
+                    }.withTopMargin(Look.Space.M),
+                )
+            } else {
+                // Danger-tinted outlined pill. The post-construction re-styling that used to
+                // live here was a workaround for pillButton painting outlined labels in the
+                // fill colour; the variant handles its own tint now.
+                addView(
+                    pillButton(getString(R.string.cr_reset_btn, appLabel), pal.danger, pal.paper, filled = false) { confirmReset() }
+                        .withTopMargin(Look.Space.M),
+                )
+            }
 
             // 3) Restore data set aside by an earlier reset (if any is waiting).
             if (hasQuarantine) {
@@ -583,6 +596,36 @@ open class CrashRecoveryActivity : Activity() {
                 }
             }
         }
+
+    private fun confirmReset() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.cr_reset_title, appLabel))
+            .setMessage(getString(R.string.cr_reset_msg, appLabel))
+            .setPositiveButton(getString(R.string.cr_reset)) { _, _ -> performReset() }
+            .setNegativeButton(getString(R.string.cr_cancel), null)
+            .show()
+    }
+
+    private fun performReset() {
+        // Inert in preview — previewing the screen must never be able to wipe app data.
+        if (preview) {
+            showToast(getString(R.string.cr_preview_noreset))
+            return
+        }
+        CrashRecovery.clear(this)
+        CrashRecovery.clearStreak(this)
+        CrashRecovery.clearRecoveryEntryMarker(this)
+        // The zero-arg self-clear is API 29+ only; several consumers have a lower minSdk
+        // (Animalcules 24, Horizkeeb 28), so guiding to Settings is the honest fallback.
+        if (Build.VERSION.SDK_INT >= 29) {
+            runCatching {
+                (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
+                    .clearApplicationUserData()
+            }
+        } else {
+            showToast(getString(R.string.cr_clear_storage, appLabel))
+        }
+    }
 
     private fun confirmQuarantineReset() {
         android.app.AlertDialog.Builder(this)

@@ -67,11 +67,13 @@ val crashRecoveryArtifact = "crash-recovery"
 // crash loop where the OS showed "keeps stopping" and our recovery screen never could.
 // (1.2.0 was the first release from this home: hyle-design-system@c586f8f + previewIntent
 // merged forward from the never-merged 33b0faa. See MIGRATION.md.)
-// 1.8.0 — merges the two lines that had diverged: 1.7.0's hardening/history/localisation with the
-// non-destructive reset from 1.5.0. "Reset" now MOVES the app's data aside (quarantineAndReset)
-// instead of wiping it, and the screen offers restore / save-a-copy / import (CrashSalvager).
-// 1.7.0's destructive clearApplicationUserData() reset is gone. The new reset strings are English-only
-// for now (es/de/hi fall back to English); the older salvage/restore toasts are still hard-coded.
+// 1.8.0 — merges the two lines that had diverged: 1.7.0's hardening/history/localisation and 1.5.0's
+// non-destructive reset (quarantine + salvager). Nothing changes for an existing host: Reset still
+// wipes the app's data via the platform, exactly as in 1.7.0. A host opts in to the other behaviour
+// with CrashRecovery.setResetMode(ResetMode.SET_ASIDE): Reset then MOVES the data aside
+// (quarantineAndReset), and the screen offers restore, and — if the host registered a CrashSalvager —
+// save-a-copy / import. The set-aside strings are English-only for now (es/de/hi fall back), and the
+// older salvage buttons/toasts are still hard-coded English.
 val crashRecoveryVersion = "1.8.0"
 
 // Project coordinate — required for Gradle composite-build (`includeBuild`) dependency
